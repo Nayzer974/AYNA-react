@@ -1,0 +1,73 @@
+═══════════════════════════════════════════════════════════════
+  GUIDE RAPIDE : Configuration Supabase pour AYNA Mobile
+═══════════════════════════════════════════════════════════════
+
+📍 FICHIER À MODIFIER :
+   D:\ayna_final\application\.env
+
+═══════════════════════════════════════════════════════════════
+  ÉTAPE 1 : Obtenir vos clés Supabase
+═══════════════════════════════════════════════════════════════
+
+1. Allez sur https://supabase.com
+2. Connectez-vous ou créez un compte
+3. Créez un nouveau projet (ou utilisez un existant)
+4. Allez dans Settings (⚙️) > API
+5. Copiez ces deux valeurs :
+   
+   ✅ Project URL
+      → C'est votre EXPO_PUBLIC_SUPABASE_URL
+      → Format : https://xxxxxxxxxxxxx.supabase.co
+   
+   ✅ anon public (clé API)
+      → C'est votre EXPO_PUBLIC_SUPABASE_ANON_KEY
+      → Format : eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+      ⚠️ Utilisez la clé "anon public" (pas "service_role")
+
+═══════════════════════════════════════════════════════════════
+  ÉTAPE 2 : Modifier le fichier .env
+═══════════════════════════════════════════════════════════════
+
+Ouvrez le fichier : D:\ayna_final\application\.env
+
+Trouvez ces lignes et remplacez les valeurs vides :
+
+EXPO_PUBLIC_SUPABASE_URL=https://votre-projet.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+EXPO_PUBLIC_USE_SUPABASE=true
+
+⚠️ IMPORTANT :
+   - Remplacez par VOS vraies valeurs
+   - Pas d'espaces autour du =
+   - Pas de guillemets
+   - La clé est très longue, copiez-la en entier
+
+═══════════════════════════════════════════════════════════════
+  ÉTAPE 3 : Redémarrer Expo
+═══════════════════════════════════════════════════════════════
+
+Dans le terminal, tapez :
+   npx expo start --clear
+
+═══════════════════════════════════════════════════════════════
+  VÉRIFICATION
+═══════════════════════════════════════════════════════════════
+
+1. L'application se charge
+2. Allez sur la page Login
+3. Essayez de vous connecter
+4. Si ça fonctionne → ✅ C'est bon !
+
+═══════════════════════════════════════════════════════════════
+  PROBLÈME ?
+═══════════════════════════════════════════════════════════════
+
+Si vous voyez toujours "Supabase n'est pas configuré" :
+
+✓ Vérifiez que les variables commencent par EXPO_PUBLIC_
+✓ Vérifiez qu'il n'y a pas d'espaces
+✓ Vérifiez que les valeurs sont complètes
+✓ Redémarrez avec --clear
+
+═══════════════════════════════════════════════════════════════
+

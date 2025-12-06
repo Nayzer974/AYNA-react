@@ -1,0 +1,18 @@
+# Configuration Supabase pour le projet AYNA
+# Copiez ce fichier en config.toml et remplissez les valeurs
+
+[project]
+# Votre project-ref Supabase (la partie entre https:// et .supabase.co)
+# Exemple: https://ctupecolapegiogvmwxz.supabase.co -> project_ref = "ctupecolapegiogvmwxz"
+project_ref = "ctupecolapegiogvmwxz"
+
+# Votre URL Supabase complète
+supabase_url = "https://ctupecolapegiogvmwxz.supabase.co"
+
+# Votre clé service_role (trouvable dans Dashboard > Settings > API)
+# ⚠️ NE COMMITEZ JAMAIS CE FICHIER AVEC LA CLÉ RÉELLE !
+service_role_key = "YOUR_SERVICE_ROLE_KEY_HERE"
+
+# URL de redirection OAuth
+oauth_redirect_url = "http://nurayna.com/oauth/consent"
+
