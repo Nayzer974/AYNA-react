@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, Pressable, Alert, ActivityIndicator, Modal } from 'react-native';
+import React, { useState, useMemo, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, ActivityIndicator, Modal, TextInput } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, FadeIn, SlideInRight } from 'react-native-reanimated';
+import { Image } from 'expo-image';
 import { useNavigation } from '@react-navigation/native';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { User, Camera, LogOut, Save, Settings, X } from 'lucide-react-native';
+import { User, Camera, LogOut, Save, Settings, X, Clock, Globe, Info, Ban, MessageSquare, Bug, Image as ImageIcon, Send } from 'lucide-react-native';
+import { SubscriptionBadge } from '@/components/SubscriptionBadge';
+import { isCurrentUserAdmin } from '@/services/supabase';
 import { Input, Button, Card, CardHeader, CardTitle, CardContent } from '@/components/ui';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -15,7 +19,57 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { GalaxyBackground } from '@/components/GalaxyBackground';
 import { getAvatarById, getAvatarsByGender, type Avatar } from '@/data/avatars';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/i18n';
 import { trackPageView, trackEvent } from '@/services/analytics';
+import { sendFeedback, type FeedbackType } from '@/services/feedback';
+import { SPRING_CONFIGS } from '@/utils/animations';
+import {
+  getAdvancedProfile,
+  saveAdvancedProfile,
+  uploadBanner,
+  pickBannerImage,
+  type AdvancedProfile,
+} from '@/services/profileAdvanced';
+
+// Composant pour compteur animé avec comptage progressif
+const AnimatedCounterText = ({ value, style }: { value: number; style: any }) => {
+  const [displayValue, setDisplayValue] = React.useState(0);
+  const animatedValue = useSharedValue(0);
+
+  useEffect(() => {
+    animatedValue.value = withSpring(value, SPRING_CONFIGS.GENTLE);
+  }, [value, animatedValue]);
+
+  // Animation de comptage progressif
+  useEffect(() => {
+    const startValue = displayValue;
+    const endValue = value;
+    const difference = endValue - startValue;
+    const duration = 800; // ms
+    const steps = 30;
+    const increment = difference / steps;
+    let currentStep = 0;
+
+    const timer = setInterval(() => {
+      currentStep++;
+      const newValue = startValue + increment * currentStep;
+      setDisplayValue(Math.floor(newValue));
+      
+      if (currentStep >= steps) {
+        setDisplayValue(endValue);
+        clearInterval(timer);
+      }
+    }, duration / steps);
+
+    return () => clearInterval(timer);
+  }, [value]);
+
+  return (
+    <Text style={style}>
+      {Math.floor(displayValue).toLocaleString()}
+    </Text>
+  );
+};
 
 /**
  * Page Profile
@@ -37,11 +91,72 @@ export function Profile() {
     trackPageView('Profile');
   }, []);
 
+  // Charger le profil avancé
+  useEffect(() => {
+    const loadAdvancedProfile = async () => {
+      if (!user?.id) return;
+      try {
+        const profile = await getAdvancedProfile(user.id);
+        setAdvancedProfile(profile);
+      } catch (error) {
+        console.error('Erreur chargement profil avancé:', error);
+      } finally {
+        setIsLoadingAdvanced(false);
+      }
+    };
+    loadAdvancedProfile();
+  }, [user?.id]);
+
+  // État pour vérifier le statut admin
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Vérifier le statut admin
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      if (!user?.id) {
+        setIsAdmin(false);
+        return;
+      }
+      try {
+        // Utiliser isAdmin du contexte si disponible, sinon vérifier via RPC
+        if (user.isAdmin !== undefined) {
+          setIsAdmin(user.isAdmin);
+        } else {
+          const adminStatus = await isCurrentUserAdmin();
+          setIsAdmin(adminStatus);
+        }
+      } catch (error) {
+        console.error('Erreur vérification statut admin:', error);
+        setIsAdmin(false);
+      }
+    };
+    checkAdminStatus();
+  }, [user?.id, user?.isAdmin]);
+
   const [name, setName] = useState(user?.name || '');
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [advancedProfile, setAdvancedProfile] = useState<AdvancedProfile | null>(null);
+  const [isLoadingAdvanced, setIsLoadingAdvanced] = useState(true);
+  
+  // États pour le feedback
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackType, setFeedbackType] = useState<FeedbackType>('feedback');
+  const [feedbackSubject, setFeedbackSubject] = useState('');
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackImages, setFeedbackImages] = useState<string[]>([]);
+  const [sendingFeedback, setSendingFeedback] = useState(false);
+
+  // États pour la biographie
+  const [showBioModal, setShowBioModal] = useState(false);
+  const [bioText, setBioText] = useState('');
+  const [savingBio, setSavingBio] = useState(false);
+
+  // Mémoriser les styles basés sur le thème pour éviter les re-renders
+  const cardStyle = useMemo(() => ({ backgroundColor: theme.colors.backgroundSecondary }), [theme.colors.backgroundSecondary]);
+  const cardTitleStyle = useMemo(() => ({ color: theme.colors.text }), [theme.colors.text]);
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -56,7 +171,7 @@ export function Profile() {
       Alert.alert(t('common.success'), t('profile.success.profileUpdated'));
       trackEvent('profile_updated', { field: 'name' });
     } catch (error) {
-      console.error('Erreur lors de la sauvegarde:', error);
+      // Erreur silencieuse en production
       Alert.alert(t('common.error'), t('profile.error.saveFailed'));
       trackEvent('profile_update_failed', { error: 'save_error' });
     } finally {
@@ -71,13 +186,15 @@ export function Profile() {
       // Supprimer l'ancienne photo de profil si elle existe (URL Supabase)
       if (user?.avatar && user.avatar.includes('/storage/v1/object/public/avatars/')) {
         try {
-          const urlParts = user.avatar.split('/avatars/');
-          if (urlParts.length > 1) {
-            const oldFileName = urlParts[1].split('?')[0];
-            await supabase.storage.from('avatars').remove([oldFileName]);
+          if (supabase) {
+            const urlParts = user.avatar.split('/avatars/');
+            if (urlParts.length > 1) {
+              const oldFileName = urlParts[1].split('?')[0];
+              await supabase.storage.from('avatars').remove([oldFileName]);
+            }
           }
         } catch (err) {
-          console.warn('Erreur lors de la suppression de l\'ancienne photo:', err);
+          // Erreur silencieuse en production
         }
       }
 
@@ -93,7 +210,7 @@ export function Profile() {
       Alert.alert(t('common.success'), t('profile.success.avatarUpdated'));
       trackEvent('avatar_changed', { type: 'predefined', avatarId: avatar.id });
     } catch (error: any) {
-      console.error('Erreur sélection avatar:', error);
+      // Erreur silencieuse en production
       Alert.alert(t('common.error'), error.message || t('profile.error.avatarSelectFailed'));
       trackEvent('avatar_change_failed', { error: error.message });
     } finally {
@@ -117,13 +234,15 @@ export function Profile() {
               // Supprimer la photo de Supabase Storage si elle existe
               if (user?.avatar && user.avatar.includes('/storage/v1/object/public/avatars/')) {
                 try {
-                  const urlParts = user.avatar.split('/avatars/');
-                  if (urlParts.length > 1) {
-                    const oldFileName = urlParts[1].split('?')[0];
-                    await supabase.storage.from('avatars').remove([oldFileName]);
+                  if (supabase) {
+                    const urlParts = user.avatar.split('/avatars/');
+                    if (urlParts.length > 1) {
+                      const oldFileName = urlParts[1].split('?')[0];
+                      await supabase.storage.from('avatars').remove([oldFileName]);
+                    }
                   }
                 } catch (err) {
-                  console.warn('Erreur lors de la suppression de la photo:', err);
+                  // Erreur silencieuse en production
                 }
               }
 
@@ -138,7 +257,7 @@ export function Profile() {
               Alert.alert(t('common.success'), t('profile.success.photoRemoved'));
               trackEvent('avatar_removed');
             } catch (error: any) {
-              console.error('Erreur suppression photo:', error);
+              // Erreur silencieuse en production
               Alert.alert(t('common.error'), error.message || t('profile.error.photoRemoveFailed'));
               trackEvent('avatar_remove_failed', { error: error.message });
             } finally {
@@ -160,20 +279,12 @@ export function Profile() {
       }
 
       // Ouvrir le sélecteur d'image
-      // Note: Dans expo-image-picker v17, MediaTypeOptions est déprécié
-      // On peut utiliser soit MediaTypeOptions (si disponible) soit omettre mediaTypes (par défaut: images)
-      const pickerOptions: ImagePicker.ImagePickerOptions = {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
-      };
-      
-      // Ajouter mediaTypes seulement si MediaTypeOptions est disponible
-      if ((ImagePicker as any).MediaTypeOptions) {
-        pickerOptions.mediaTypes = (ImagePicker as any).MediaTypeOptions.Images;
-      }
-      
-      const result = await ImagePicker.launchImageLibraryAsync(pickerOptions);
+      });
 
       if (result.canceled) return;
 
@@ -190,30 +301,20 @@ export function Profile() {
       // Upload vers Supabase Storage si configuré
       if (APP_CONFIG.useSupabase && supabase && user?.id) {
         try {
-          // Essayer d'obtenir l'utilisateur Supabase, mais utiliser user.id du contexte si échec
-          let userId = user.id;
+          // CRITIQUE : Récupérer l'ID utilisateur directement depuis Supabase auth
+          // Cela garantit que l'ID correspond bien à auth.uid() utilisé dans les politiques RLS
+          const { data: { user: supabaseUser }, error: userError } = await supabase.auth.getUser();
           
-          try {
-            const { data: { user: supabaseUser }, error: userError } = await supabase.auth.getUser();
-            if (!userError && supabaseUser) {
-              userId = supabaseUser.id;
-              console.log('Upload avatar - Utilisation de l\'ID Supabase:', userId);
-            } else {
-              console.warn('Impossible d\'obtenir l\'utilisateur Supabase, utilisation de user.id du contexte:', userId);
-            }
-          } catch (err) {
-            console.warn('Erreur lors de la récupération de l\'utilisateur Supabase, utilisation de user.id:', userId);
+          if (userError || !supabaseUser?.id) {
+            throw new Error('Utilisateur non authentifié dans Supabase');
           }
           
-          if (!userId) {
-            throw new Error('ID utilisateur manquant');
-          }
-          
-          console.log('Upload avatar - User ID utilisé:', userId);
-          console.log('Upload avatar - File path will be:', `${userId}-${Date.now()}.jpg`);
+          // Utiliser l'ID Supabase authentifié (qui correspond à auth.uid())
+          const authenticatedUserId = supabaseUser.id;
           
           // Le nom du fichier doit commencer par l'UUID pour correspondre aux politiques RLS
-          const fileName = `${userId}-${Date.now()}.jpg`;
+          // Format: {auth.uid()}-{timestamp}.jpg
+          const fileName = `${authenticatedUserId}-${Date.now()}.jpg`;
           // Ne pas inclure 'avatars/' dans le chemin - Supabase l'ajoute automatiquement
           const filePath = fileName;
 
@@ -225,18 +326,19 @@ export function Profile() {
                 const urlParts = user.avatar.split('/avatars/');
                 if (urlParts.length > 1) {
                   const oldFileName = urlParts[1].split('?')[0];
-                  await supabase.storage.from('avatars').remove([oldFileName]);
+                  // Vérifier que l'ancien fichier appartient bien à l'utilisateur avant de le supprimer
+                  if (oldFileName.startsWith(authenticatedUserId + '-')) {
+                    await supabase.storage.from('avatars').remove([oldFileName]);
+                  }
                 }
               } catch (err) {
-                console.warn('Erreur lors de la suppression de l\'ancien avatar:', err);
+                // Erreur silencieuse en production
               }
             }
             // Supprimer aussi l'avatar_id dans user_metadata si présent
-            if (APP_CONFIG.useSupabase && supabase && user?.id) {
-              await supabase.auth.updateUser({
-                data: { avatar_id: null }
-              }).catch(console.warn);
-            }
+            await supabase.auth.updateUser({
+              data: { avatar_id: null }
+            }).catch(() => { /* Erreur silencieuse en production */ });
           }
 
           // En React Native, lire le fichier directement en ArrayBuffer
@@ -246,26 +348,21 @@ export function Profile() {
           const uint8Array = new Uint8Array(arrayBuffer);
 
           // Upload vers Supabase Storage avec Uint8Array
-          console.log('Tentative d\'upload vers:', filePath);
-          console.log('User ID utilisé:', userId);
+          // Le nom de fichier commence par authenticatedUserId pour correspondre aux politiques RLS
           const { data, error } = await supabase.storage
             .from('avatars')
             .upload(filePath, uint8Array, {
               contentType: 'image/jpeg',
-              upsert: true,
+              upsert: false, // Ne pas utiliser upsert pour éviter les conflits
             });
 
           if (error) {
-            console.error('Erreur upload Supabase:', error);
-            console.error('Détails:', {
-              message: error.message,
-              statusCode: error.statusCode,
-              error: error.error,
-            });
-            throw error;
+            // Afficher l'erreur complète pour le débogage
+            console.error('Erreur upload avatar:', error);
+            throw new Error(error.message || 'Erreur lors de l\'upload de l\'avatar');
           }
           
-          console.log('Upload réussi:', data);
+          // Upload réussi
 
           // Obtenir l'URL publique
           const { data: urlData } = supabase.storage
@@ -281,9 +378,11 @@ export function Profile() {
             updateUser({ avatar: urlData.publicUrl });
             Alert.alert(t('common.success'), t('profile.success.photoUpdated'));
             trackEvent('avatar_changed', { type: 'custom_upload' });
+          } else {
+            throw new Error('Impossible d\'obtenir l\'URL publique de l\'avatar');
           }
         } catch (error: any) {
-          console.error('Erreur upload avatar:', error);
+          // Erreur silencieuse en production
           Alert.alert(t('common.error'), error.message || t('profile.error.uploadFailed'));
           trackEvent('avatar_upload_failed', { error: error.message });
         } finally {
@@ -297,7 +396,7 @@ export function Profile() {
         setUploadingAvatar(false);
       }
     } catch (error: any) {
-      console.error('Erreur sélection image:', error);
+      // Erreur silencieuse en production
       Alert.alert(t('common.error'), error.message || t('profile.error.imageSelectFailed'));
       trackEvent('image_select_failed', { error: error.message });
       setUploadingAvatar(false);
@@ -338,8 +437,67 @@ export function Profile() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header avec avatar */}
+        {/* Header avec bannière */}
         <View style={styles.header}>
+          {/* Bannière */}
+          {advancedProfile?.bannerUrl && (
+            <View style={styles.bannerContainer}>
+              <Image
+                source={{ uri: advancedProfile.bannerUrl }}
+                style={styles.banner}
+                contentFit="cover"
+              />
+              <Pressable
+                onPress={async () => {
+                  const imageUri = await pickBannerImage();
+                  if (imageUri) {
+                    // ✅ Permettre l'accès anonyme - Utiliser un ID par défaut si user.id n'existe pas
+                    const userId = user?.id || `anonymous-${Date.now()}`;
+                    const bannerUrl = await uploadBanner(userId, imageUri);
+                    if (bannerUrl && user?.id) {
+                      await saveAdvancedProfile({ userId: user.id, bannerUrl });
+                      const updated = await getAdvancedProfile(user.id);
+                      setAdvancedProfile(updated);
+                    } else if (bannerUrl) {
+                      // Utilisateur anonyme - sauvegarder localement uniquement
+                      setAdvancedProfile(prev => ({ ...prev, bannerUrl }));
+                    }
+                  }
+                }}
+                style={styles.bannerEditButton}
+              >
+                <Camera size={16} color="#FFFFFF" />
+              </Pressable>
+            </View>
+          )}
+          {!advancedProfile?.bannerUrl && (
+              <Pressable
+                onPress={async () => {
+                  const imageUri = await pickBannerImage();
+                  if (imageUri) {
+                    // ✅ Permettre l'accès anonyme - Utiliser un ID par défaut si user.id n'existe pas
+                    const userId = user?.id || `anonymous-${Date.now()}`;
+                    const bannerUrl = await uploadBanner(userId, imageUri);
+                    if (bannerUrl && user?.id) {
+                      await saveAdvancedProfile({ userId: user.id, bannerUrl });
+                      const updated = await getAdvancedProfile(user.id);
+                      setAdvancedProfile(updated);
+                    } else if (bannerUrl) {
+                      // Utilisateur anonyme - sauvegarder localement uniquement
+                      setAdvancedProfile(prev => ({ ...prev, bannerUrl }));
+                    }
+                  }
+                }}
+              style={[styles.addBannerButton, { backgroundColor: theme.colors.backgroundSecondary }]}
+            >
+              <Camera size={20} color={theme.colors.accent} />
+              <Text style={[styles.addBannerText, { color: theme.colors.textSecondary }]}>
+                Ajouter une bannière
+              </Text>
+            </Pressable>
+          )}
+          
+          {/* Avatar */}
           <Pressable
             onPress={() => {
               Alert.alert(
@@ -371,6 +529,11 @@ export function Profile() {
                     <Image
                       source={avatar.image}
                       style={styles.avatar}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      transition={200}
+                      priority="high"
+                      recyclingKey={`user-avatar-${user?.id}`}
                     />
                   );
                 }
@@ -380,6 +543,11 @@ export function Profile() {
                     <Image
                       source={{ uri: user.avatar }}
                       style={styles.avatar}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      transition={200}
+                      priority="high"
+                      recyclingKey={`user-avatar-${user?.id}`}
                     />
                   );
                 }
@@ -429,9 +597,43 @@ export function Profile() {
             </View>
           ) : (
             <View style={styles.nameSection}>
-              <Text style={[styles.name, { color: theme.colors.text }]}>
-                {user?.name || t('profile.defaultUser')}
-              </Text>
+              <View style={styles.nameRow}>
+                <Text style={[styles.name, { color: theme.colors.text }]}>
+                  {user?.name || t('profile.defaultUser')}
+                </Text>
+              </View>
+              
+              {/* Badge d'abonnement */}
+              <SubscriptionBadge />
+              
+              {/* Bio */}
+              {advancedProfile?.bio ? (
+                <Pressable
+                  onPress={() => {
+                    setBioText(advancedProfile.bio || '');
+                    setShowBioModal(true);
+                  }}
+                >
+                  <Text style={[styles.bio, { color: theme.colors.textSecondary }]}>
+                    {advancedProfile.bio}
+                  </Text>
+                  <Text style={[styles.bioEditHint, { color: theme.colors.accent }]}>
+                    {t('profile.bio.editHint') || 'Appuyez pour modifier'}
+                  </Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={() => {
+                    setBioText('');
+                    setShowBioModal(true);
+                  }}
+                >
+                  <Text style={[styles.bioPlaceholder, { color: theme.colors.accent }]}>
+                    + {t('profile.bio.add') || 'Ajouter une biographie'}
+                  </Text>
+                </Pressable>
+              )}
+              
               <Pressable
                 onPress={() => setIsEditing(true)}
                 style={styles.editButton}
@@ -450,72 +652,27 @@ export function Profile() {
           )}
         </View>
 
-        {/* Statistiques */}
-        <Card style={{ backgroundColor: theme.colors.backgroundSecondary }}>
-          <CardHeader>
-            <CardTitle style={{ color: theme.colors.text }}>
-              {t('profile.statistics')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: theme.colors.accent }]}>
-                  {user?.analytics?.totalDhikr || 0}
-                </Text>
-                <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-                  {t('profile.dhikr')}
-                </Text>
-              </View>
-
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: theme.colors.accent }]}>
-                  {user?.analytics?.totalNotes || 0}
-                </Text>
-                <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-                  {t('profile.notes')}
-                </Text>
-              </View>
-
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: theme.colors.accent }]}>
-                  {user?.analytics?.streak || 0}
-                </Text>
-                <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-                  {t('profile.days')}
-                </Text>
-              </View>
-            </View>
-          </CardContent>
-        </Card>
-
-        {/* Thème */}
-        <Card style={{ backgroundColor: theme.colors.backgroundSecondary }}>
-          <CardHeader>
-            <CardTitle style={{ color: theme.colors.text }}>
-              {t('settings.theme')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Text style={[styles.themeName, { color: theme.colors.textSecondary }]}>
-              {theme.name}
-            </Text>
-          </CardContent>
-        </Card>
-
-        {/* Bouton Paramètres */}
-        <Button
-          variant="outline"
-          onPress={() => {
-            trackEvent('settings_opened', { from: 'profile' });
-            navigation.navigate('Settings' as never);
-          }}
-          icon={Settings}
-          iconPosition="left"
-          style={styles.settingsButton}
-        >
-          {t('settings.title')}
-        </Button>
+        {/* Bouton Admin (visible uniquement pour les admins) */}
+        {isAdmin && user?.id && (
+          <Animated.View
+            entering={FadeIn.delay(100).duration(600)}
+          >
+            <Button
+              variant="outline"
+              onPress={() => {
+                trackEvent('admin_bans_opened', { from: 'profile' });
+                navigation.navigate('AdminBans' as never);
+              }}
+              icon={Ban}
+              iconPosition="left"
+              style={[styles.adminButton, { borderColor: '#ef4444' }]}
+            >
+              <Text style={[styles.adminButtonText, { color: '#ef4444' }]}>
+                Gestion des bannissements
+              </Text>
+            </Button>
+          </Animated.View>
+        )}
 
         {/* Bouton de déconnexion */}
         {user?.id && (
@@ -525,12 +682,451 @@ export function Profile() {
             icon={LogOut}
             iconPosition="left"
             style={styles.logoutButton}
+            textStyle={styles.logoutButtonText}
           >
             {t('auth.logout')}
           </Button>
         )}
+
+        {/* Statistiques */}
+        <Animated.View
+          entering={FadeIn.delay(200).duration(600)}
+        >
+          <Card style={StyleSheet.flatten([cardStyle, styles.cardSpacing])}>
+            <CardHeader>
+              <CardTitle style={cardTitleStyle}>
+                {t('profile.statistics')}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <View style={styles.statsRow}>
+                <Animated.View 
+                  style={styles.statItem}
+                  entering={SlideInRight.delay(300).duration(500)}
+                >
+                  <AnimatedCounterText
+                    value={user?.analytics?.totalDhikr || 0}
+                    style={[styles.statValue, { color: theme.colors.accent }]}
+                  />
+                  <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
+                    {t('profile.dhikr') || 'Dhikr'}
+                  </Text>
+                </Animated.View>
+
+                <Animated.View 
+                  style={styles.statItem}
+                  entering={SlideInRight.delay(400).duration(500)}
+                >
+                  <AnimatedCounterText
+                    value={user?.analytics?.totalPrayers || 0}
+                    style={[styles.statValue, { color: theme.colors.accent }]}
+                  />
+                  <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
+                    {t('profile.prayers')}
+                  </Text>
+                </Animated.View>
+
+                <Animated.View 
+                  style={styles.statItem}
+                  entering={SlideInRight.delay(500).duration(500)}
+                >
+                  <AnimatedCounterText
+                    value={user?.analytics?.totalNotes || 0}
+                    style={[styles.statValue, { color: theme.colors.accent }]}
+                  />
+                  <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
+                    {t('profile.notes')}
+                  </Text>
+                </Animated.View>
+
+                <Animated.View 
+                  style={styles.statItem}
+                  entering={SlideInRight.delay(700).duration(500)}
+                >
+                  <AnimatedCounterText
+                    value={user?.analytics?.totalDays || 0}
+                    style={[styles.statValue, { color: theme.colors.accent }]}
+                  />
+                  <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
+                    {t('profile.days') || 'Jours'}
+                  </Text>
+                </Animated.View>
+              </View>
+            </CardContent>
+          </Card>
+        </Animated.View>
+
+        {/* Thème */}
+        <Animated.View
+          entering={FadeIn.delay(600).duration(600)}
+        >
+          <Card style={StyleSheet.flatten([cardStyle, styles.cardSpacing])}>
+          <CardHeader>
+            <CardTitle style={cardTitleStyle}>
+              {t('settings.theme')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <View style={styles.themeRow}>
+              <Text style={[styles.themeName, { color: theme.colors.textSecondary }]}>
+                {theme.name}
+              </Text>
+              <Pressable
+                onPress={() => navigation.navigate('Settings' as never)}
+                style={({ pressed }) => [
+                  styles.themeSettingsButton,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={[styles.themeSettingsText, { color: theme.colors.accent }]}>
+                  Modifier
+                </Text>
+              </Pressable>
+            </View>
+            {/* Bouton Paramètres */}
+            <Button
+              variant="outline"
+              onPress={() => {
+                trackEvent('settings_opened', { from: 'profile' });
+                navigation.navigate('Settings' as never);
+              }}
+              icon={Settings}
+              iconPosition="left"
+              style={styles.settingsButtonInCard}
+            >
+              {t('settings.title')}
+            </Button>
+          </CardContent>
+        </Card>
+        </Animated.View>
+
+        {/* Informations du compte */}
+        <Card style={StyleSheet.flatten([cardStyle, styles.cardSpacing])}>
+          <CardHeader>
+            <CardTitle style={cardTitleStyle}>
+              {t('profile.accountInfo') || 'Informations du compte'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {user?.analytics?.lastActive && (
+              <View style={styles.infoRow}>
+                <Clock size={16} color={theme.colors.textSecondary} />
+                <Text style={[styles.infoText, { color: theme.colors.textSecondary }]}>
+                  {t('profile.lastActive') || 'Dernière activité'}: {new Date(user.analytics.lastActive).toLocaleDateString('fr-FR', { 
+                    day: 'numeric', 
+                    month: 'long', 
+                    year: 'numeric' 
+                  })}
+                </Text>
+              </View>
+            )}
+            <View style={styles.infoRow}>
+              <Globe size={16} color={theme.colors.textSecondary} />
+              <Text style={[styles.infoText, { color: theme.colors.textSecondary }]}>
+                {t('profile.language') || 'Langue'}: {i18n.language === 'fr' ? 'Français' : i18n.language === 'ar' ? 'العربية' : 'English'}
+              </Text>
+            </View>
+            {user?.emailVerified !== undefined && (
+              <View style={styles.infoRow}>
+                <User size={16} color={theme.colors.textSecondary} />
+                <Text style={[styles.infoText, { color: theme.colors.textSecondary }]}>
+                  {user.emailVerified ? t('common.verified') || 'Vérifié' : t('common.notVerified') || 'Non vérifié'}
+                </Text>
+              </View>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* À propos */}
+        <Card style={StyleSheet.flatten([cardStyle, styles.cardSpacing])}>
+          <CardHeader>
+            <CardTitle style={cardTitleStyle}>
+              {t('profile.about') || 'À propos'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <View style={styles.infoRow}>
+              <Info size={16} color={theme.colors.textSecondary} />
+              <Text style={[styles.infoText, { color: theme.colors.textSecondary }]}>
+                {t('profile.appVersion') || 'Version de l\'application'}: 1.0.0
+              </Text>
+            </View>
+            <Button
+              variant="outline"
+              onPress={() => setShowFeedbackModal(true)}
+              icon={MessageSquare}
+              iconPosition="left"
+              style={styles.feedbackButton}
+            >
+              {t('profile.sendFeedback') || 'Envoyer un avis / Signaler un bug'}
+            </Button>
+          </CardContent>
+        </Card>
+
       </ScrollView>
     </SafeAreaView>
+
+    {/* Modal de feedback */}
+    <Modal
+      visible={showFeedbackModal}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setShowFeedbackModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={[styles.feedbackModalContent, { backgroundColor: theme.colors.backgroundSecondary }]}>
+          <View style={styles.feedbackModalHeader}>
+            <Text style={[styles.feedbackModalTitle, { color: theme.colors.text }]}>
+              {t('profile.feedback.title') || 'Envoyer un avis / Signaler un bug'}
+            </Text>
+            <Pressable
+              onPress={() => {
+                setShowFeedbackModal(false);
+                setFeedbackSubject('');
+                setFeedbackMessage('');
+                setFeedbackImages([]);
+                setFeedbackType('feedback');
+              }}
+              style={({ pressed }) => [
+                styles.closeButton,
+                pressed && { opacity: 0.7 }
+              ]}
+            >
+              <X size={24} color={theme.colors.text} />
+            </Pressable>
+          </View>
+
+          <ScrollView 
+            style={styles.feedbackScrollView} 
+            contentContainerStyle={styles.feedbackScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Type de feedback */}
+            <View style={styles.feedbackSection}>
+              <Text style={[styles.feedbackLabel, { color: theme.colors.text }]}>
+                {t('profile.feedback.type') || 'Type'}
+              </Text>
+              <View style={styles.feedbackTypeButtons}>
+                <Pressable
+                  onPress={() => setFeedbackType('feedback')}
+                  style={({ pressed }) => [
+                    styles.feedbackTypeButton,
+                    feedbackType === 'feedback' && { backgroundColor: theme.colors.accent + '33', borderColor: theme.colors.accent },
+                    pressed && { opacity: 0.7 }
+                  ]}
+                >
+                  <MessageSquare size={20} color={feedbackType === 'feedback' ? theme.colors.accent : theme.colors.textSecondary} />
+                  <Text style={[
+                    styles.feedbackTypeButtonText,
+                    { color: feedbackType === 'feedback' ? theme.colors.accent : theme.colors.textSecondary }
+                  ]}>
+                    {t('profile.feedback.avis') || 'Avis'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setFeedbackType('bug')}
+                  style={({ pressed }) => [
+                    styles.feedbackTypeButton,
+                    feedbackType === 'bug' && { backgroundColor: '#ef444433', borderColor: '#ef4444' },
+                    pressed && { opacity: 0.7 }
+                  ]}
+                >
+                  <Bug size={20} color={feedbackType === 'bug' ? '#ef4444' : theme.colors.textSecondary} />
+                  <Text style={[
+                    styles.feedbackTypeButtonText,
+                    { color: feedbackType === 'bug' ? '#ef4444' : theme.colors.textSecondary }
+                  ]}>
+                    {t('profile.feedback.bug') || 'Bug'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Sujet */}
+            <View style={styles.feedbackSection}>
+              <Text style={[styles.feedbackLabel, { color: theme.colors.text }]}>
+                {t('profile.feedback.subject') || 'Sujet'} *
+              </Text>
+              <Input
+                value={feedbackSubject}
+                onChangeText={setFeedbackSubject}
+                placeholder={t('profile.feedback.subjectPlaceholder') || 'Ex: Problème de connexion'}
+                placeholderTextColor={theme.colors.textSecondary + '80'}
+                style={[
+                  styles.feedbackInput,
+                  {
+                    backgroundColor: theme.colors.background,
+                    color: theme.colors.text,
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                  }
+                ]}
+              />
+            </View>
+
+            {/* Message */}
+            <View style={styles.feedbackSection}>
+              <Text style={[styles.feedbackLabel, { color: theme.colors.text }]}>
+                {t('profile.feedback.message') || 'Message'} *
+              </Text>
+              <Input
+                value={feedbackMessage}
+                onChangeText={setFeedbackMessage}
+                placeholder={t('profile.feedback.messagePlaceholder') || 'Décrivez votre avis ou le bug rencontré...'}
+                placeholderTextColor={theme.colors.textSecondary + '80'}
+                multiline
+                numberOfLines={6}
+                style={[
+                  styles.feedbackInput,
+                  styles.feedbackTextArea,
+                  {
+                    backgroundColor: theme.colors.background,
+                    color: theme.colors.text,
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                  }
+                ]}
+              />
+            </View>
+
+            {/* Images */}
+            <View style={styles.feedbackSection}>
+              <Text style={[styles.feedbackLabel, { color: theme.colors.text }]}>
+                {t('profile.feedback.images') || 'Images (optionnel)'}
+              </Text>
+              <Pressable
+                onPress={async () => {
+                  try {
+                    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                    if (status !== 'granted') {
+                      Alert.alert(t('profile.permissionRequired'), t('profile.permissionMessage'));
+                      return;
+                    }
+
+                    const result = await ImagePicker.launchImageLibraryAsync({
+                      mediaTypes: ['images'],
+                      allowsEditing: true,
+                      quality: 0.8,
+                      allowsMultipleSelection: true,
+                    });
+
+                    if (!result.canceled && result.assets) {
+                      const newImages = result.assets.map(asset => asset.uri);
+                      setFeedbackImages([...feedbackImages, ...newImages].slice(0, 5)); // Max 5 images
+                    }
+                  } catch (error: any) {
+                    Alert.alert(t('common.error'), error.message || t('profile.error.imageSelectFailed'));
+                  }
+                }}
+                style={({ pressed }) => [
+                  styles.addImageButton,
+                  {
+                    backgroundColor: theme.colors.background,
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                  },
+                  pressed && { opacity: 0.7 }
+                ]}
+              >
+                <ImageIcon size={20} color={theme.colors.accent} />
+                <Text style={[styles.addImageButtonText, { color: theme.colors.accent }]}>
+                  {t('profile.feedback.addImage') || 'Ajouter une image'}
+                </Text>
+              </Pressable>
+
+              {feedbackImages.length > 0 && (
+                <View style={styles.feedbackImagesContainer}>
+                  {feedbackImages.map((uri, index) => (
+                    <View key={index} style={styles.feedbackImageItem}>
+                      <Image
+                        source={{ uri }}
+                        style={styles.feedbackImagePreview}
+                        contentFit="cover"
+                      />
+                      <Pressable
+                        onPress={() => {
+                          const newImages = [...feedbackImages];
+                          newImages.splice(index, 1);
+                          setFeedbackImages(newImages);
+                        }}
+                        style={styles.removeImageButton}
+                      >
+                        <X size={16} color="#fff" />
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          </ScrollView>
+
+          {/* Boutons */}
+          <View style={styles.feedbackModalFooter}>
+            <Button
+              variant="outline"
+              onPress={() => {
+                setShowFeedbackModal(false);
+                setFeedbackSubject('');
+                setFeedbackMessage('');
+                setFeedbackImages([]);
+                setFeedbackType('feedback');
+              }}
+              disabled={sendingFeedback}
+              style={styles.feedbackCancelButton}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="default"
+              onPress={async () => {
+                if (!feedbackSubject.trim() || !feedbackMessage.trim()) {
+                  Alert.alert(t('common.error'), t('profile.feedback.error.required') || 'Veuillez remplir tous les champs obligatoires');
+                  return;
+                }
+
+                try {
+                  setSendingFeedback(true);
+                  trackEvent('feedback_sent', { type: feedbackType });
+
+                  const result = await sendFeedback(
+                    {
+                      type: feedbackType,
+                      subject: feedbackSubject.trim(),
+                      message: feedbackMessage.trim(),
+                      imageUris: feedbackImages.length > 0 ? feedbackImages : undefined,
+                    },
+                    user?.email,
+                    user?.name,
+                    user?.id
+                  );
+
+                  if (result.success) {
+                    Alert.alert(
+                      t('common.success'),
+                      t('profile.feedback.success') || 'Votre feedback a été envoyé avec succès ! Merci pour votre contribution.'
+                    );
+                    setShowFeedbackModal(false);
+                    setFeedbackSubject('');
+                    setFeedbackMessage('');
+                    setFeedbackImages([]);
+                    setFeedbackType('feedback');
+                  } else {
+                    Alert.alert(t('common.error'), result.error || t('profile.feedback.error.sendFailed'));
+                  }
+                } catch (error: any) {
+                  Alert.alert(t('common.error'), error.message || t('profile.feedback.error.sendFailed'));
+                } finally {
+                  setSendingFeedback(false);
+                }
+              }}
+              disabled={sendingFeedback || !feedbackSubject.trim() || !feedbackMessage.trim()}
+              icon={Send}
+              iconPosition="left"
+              style={styles.feedbackSendButton}
+            >
+              {sendingFeedback ? (t('common.loading') || 'Envoi...') : (t('profile.feedback.send') || 'Envoyer')}
+            </Button>
+          </View>
+        </View>
+      </View>
+    </Modal>
 
     {/* Modal de sélection d'avatar */}
     <Modal
@@ -577,7 +1173,9 @@ export function Profile() {
                   <Image 
                     source={avatar.image} 
                     style={styles.avatarImageModal}
-                    resizeMode="cover"
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    transition={200}
                   />
                   {user?.avatar === avatar.id && (
                     <View style={[styles.avatarCheckModal, { backgroundColor: theme.colors.accent }]}>
@@ -597,6 +1195,100 @@ export function Profile() {
         </View>
       </View>
     </Modal>
+
+    {/* Modal de biographie */}
+    <Modal
+      visible={showBioModal}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={() => setShowBioModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={[styles.bioModalContent, { backgroundColor: theme.colors.backgroundSecondary }]}>
+          <View style={styles.bioModalHeader}>
+            <Text style={[styles.bioModalTitle, { color: theme.colors.text }]}>
+              {t('profile.bio.title') || 'Biographie'}
+            </Text>
+            <Pressable
+              onPress={() => setShowBioModal(false)}
+              style={styles.bioModalCloseButton}
+            >
+              <X size={24} color={theme.colors.text} />
+            </Pressable>
+          </View>
+
+          <ScrollView 
+            style={styles.bioModalScrollView} 
+            contentContainerStyle={styles.bioModalScrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Text style={[styles.bioModalLabel, { color: theme.colors.textSecondary }]}>
+              {t('profile.bio.description') || 'Parlez-nous de vous...'}
+            </Text>
+            <View style={[styles.bioInputContainer, { backgroundColor: theme.colors.background, borderColor: theme.colors.accent }]}>
+              <TextInput
+                value={bioText}
+                onChangeText={setBioText}
+                placeholder={t('profile.bio.placeholder') || 'Écrivez votre biographie ici...'}
+                placeholderTextColor={theme.colors.textSecondary + '80'}
+                style={[styles.bioTextInput, { color: theme.colors.text }]}
+                multiline
+                numberOfLines={8}
+                textAlignVertical="top"
+                maxLength={500}
+                autoFocus
+              />
+              <Text style={[styles.bioCharCount, { color: theme.colors.textSecondary }]}>
+                {bioText.length}/500
+              </Text>
+            </View>
+          </ScrollView>
+
+          <View style={styles.bioModalFooter}>
+            <Button
+              variant="outline"
+              onPress={() => setShowBioModal(false)}
+              style={styles.bioCancelButton}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="default"
+              onPress={async () => {
+                if (!user?.id) return;
+                
+                setSavingBio(true);
+                try {
+                  await saveAdvancedProfile({ userId: user.id, bio: bioText.trim() || undefined });
+                  const updated = await getAdvancedProfile(user.id);
+                  setAdvancedProfile(updated);
+                  setShowBioModal(false);
+                  Alert.alert(
+                    t('common.success'),
+                    t('profile.bio.saved') || 'Biographie enregistrée avec succès'
+                  );
+                  trackEvent('bio_updated');
+                } catch (error: any) {
+                  Alert.alert(
+                    t('common.error'),
+                    error.message || t('profile.bio.error.saveFailed') || 'Erreur lors de l\'enregistrement'
+                  );
+                } finally {
+                  setSavingBio(false);
+                }
+              }}
+              loading={savingBio}
+              disabled={savingBio}
+              style={styles.bioSaveButton}
+            >
+              {t('common.save')}
+            </Button>
+          </View>
+        </View>
+      </View>
+    </Modal>
+
     </View>
   );
 }
@@ -610,6 +1302,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+    paddingBottom: 32,
   },
   header: {
     alignItems: 'center',
@@ -648,6 +1341,12 @@ const styles = StyleSheet.create({
   nameSection: {
     alignItems: 'center',
     marginBottom: 8,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   name: {
     fontSize: 28,
@@ -706,17 +1405,57 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'System',
   },
+  themeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   themeName: {
     fontSize: 16,
     fontFamily: 'System',
+    flex: 1,
+  },
+  themeSettingsButton: {
+    padding: 8,
+  },
+  themeSettingsText: {
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: 'System',
   },
   settingsButton: {
-    marginTop: 24,
+    marginTop: 16,
     width: '100%',
+  },
+  settingsButtonInCard: {
+    marginTop: 12,
+    width: '100%',
+  },
+  adminButton: {
+    marginTop: 12,
+    marginBottom: 8,
+    alignSelf: 'center',
+    width: '80%',
+    borderRadius: 12,
+    borderWidth: 2,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+  },
+  adminButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: 'System',
   },
   logoutButton: {
     marginTop: 12,
-    width: '100%',
+    marginBottom: 8,
+    alignSelf: 'center',
+    minWidth: 140,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 0,
+  },
+  logoutButtonText: {
+    flexShrink: 0,
   },
   modalOverlay: {
     flex: 1,
@@ -790,5 +1529,289 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'System',
     textAlign: 'center',
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  infoText: {
+    fontSize: 14,
+    fontFamily: 'System',
+    flex: 1,
+  },
+  cardSpacing: {
+    marginBottom: 16,
+  },
+  feedbackButton: {
+    marginTop: 12,
+    width: '100%',
+  },
+  feedbackModalContent: {
+    width: '100%',
+    height: '90%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    justifyContent: 'space-between',
+  },
+  feedbackModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  feedbackModalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    fontFamily: 'System',
+    flex: 1,
+  },
+  closeButton: {
+    padding: 8,
+  },
+  feedbackScrollView: {
+    flex: 1,
+  },
+  feedbackScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 20,
+  },
+  feedbackSection: {
+    marginBottom: 20,
+  },
+  feedbackLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: 'System',
+    marginBottom: 8,
+  },
+  feedbackTypeButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  feedbackTypeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  feedbackTypeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: 'System',
+  },
+  feedbackInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontFamily: 'System',
+  },
+  feedbackTextArea: {
+    minHeight: 120,
+    textAlignVertical: 'top',
+  },
+  addImageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  addImageButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: 'System',
+  },
+  feedbackImagesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 12,
+  },
+  feedbackImageItem: {
+    position: 'relative',
+    width: 100,
+    height: 100,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  feedbackImagePreview: {
+    width: '100%',
+    height: '100%',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feedbackModalFooter: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  feedbackCancelButton: {
+    flex: 1,
+  },
+  feedbackSendButton: {
+    flex: 1,
+  },
+  bannerContainer: {
+    width: '100%',
+    height: 150,
+    marginBottom: -60, // Chevauchement avec l'avatar
+    position: 'relative',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  banner: {
+    width: '100%',
+    height: '100%',
+  },
+  bannerEditButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 20,
+    padding: 8,
+  },
+  addBannerButton: {
+    width: '100%',
+    height: 100,
+    borderRadius: 12,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderStyle: 'dashed',
+  },
+  addBannerText: {
+    fontSize: 14,
+    fontFamily: 'System',
+  },
+  bio: {
+    fontSize: 14,
+    fontFamily: 'System',
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 4,
+    lineHeight: 20,
+  },
+  bioPlaceholder: {
+    fontSize: 14,
+    fontFamily: 'System',
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 4,
+    fontStyle: 'italic',
+  },
+  bioEditHint: {
+    fontSize: 11,
+    fontFamily: 'System',
+    textAlign: 'center',
+    marginTop: 4,
+    fontStyle: 'italic',
+    opacity: 0.7,
+  },
+  bioModalContent: {
+    width: '90%',
+    maxWidth: 500,
+    height: '80%',
+    borderRadius: 20,
+    padding: 0,
+    alignSelf: 'center',
+    marginTop: 'auto',
+    marginBottom: 'auto',
+    flexDirection: 'column',
+  },
+  bioModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  bioModalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    fontFamily: 'System',
+  },
+  bioModalCloseButton: {
+    padding: 4,
+  },
+  bioModalScrollView: {
+    flex: 1,
+    minHeight: 0,
+  },
+  bioModalScrollContent: {
+    flexGrow: 1,
+    padding: 20,
+    paddingBottom: 10,
+  },
+  bioModalLabel: {
+    fontSize: 14,
+    fontFamily: 'System',
+    marginBottom: 12,
+  },
+  bioInputContainer: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    minHeight: 200,
+    maxHeight: 400,
+  },
+  bioTextInput: {
+    fontSize: 15,
+    fontFamily: 'System',
+    minHeight: 180,
+    maxHeight: 380,
+    textAlignVertical: 'top',
+  },
+  bioCharCount: {
+    fontSize: 12,
+    fontFamily: 'System',
+    textAlign: 'right',
+    marginTop: 8,
+    opacity: 0.7,
+  },
+  bioModalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  bioCancelButton: {
+    minWidth: 100,
+  },
+  bioSaveButton: {
+    minWidth: 100,
   },
 });

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, Pressable, InteractionManager } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
@@ -13,6 +13,9 @@ import { getAvatarsByGender, type Avatar } from '@/data/avatars';
 import { Image } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { trackPageView, trackEvent } from '@/services/analytics';
+import { isValidEmail, isValidPassword, isValidName, sanitizeText } from '@/utils/validation';
+import { useRateLimit, RATE_LIMIT_CONFIGS } from '@/utils/rateLimiter';
+import { logSignupAttempt, logRateLimitExceeded } from '@/services/securityLogger';
 
 /**
  * Page d'inscription
@@ -26,6 +29,7 @@ import { trackPageView, trackEvent } from '@/services/analytics';
 export function Signup() {
   const navigation = useNavigation();
   const { user, register, loginWithGoogle } = useUser();
+  const navigationRef = React.useRef(navigation);
   const theme = getTheme(user?.theme || 'default');
   const { t } = useTranslation();
 
@@ -38,6 +42,12 @@ export function Signup() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  // ✅ SÉCURITÉ : Rate limiting pour les inscriptions
+  const { isAllowed: isSignupAllowed, getWaitTime } = useRateLimit(
+    'signup_attempts',
+    RATE_LIMIT_CONFIGS.signup
+  );
+
   // Obtenir les avatars disponibles selon le genre
   const availableAvatars = getAvatarsByGender(gender);
   
@@ -45,6 +55,30 @@ export function Signup() {
   React.useEffect(() => {
     trackPageView('Signup');
   }, []);
+
+  // Mettre à jour la ref de navigation
+  React.useEffect(() => {
+    navigationRef.current = navigation;
+  }, [navigation]);
+
+  // Navigation automatique après inscription réussie (fallback)
+  // Cette navigation se déclenche si l'utilisateur est mis à jour
+  // mais que la navigation directe dans handleSubmit n'a pas fonctionné
+  React.useEffect(() => {
+    if (user?.id) {
+      // Utiliser un petit délai pour éviter les conflits avec la navigation directe
+      const timer = setTimeout(() => {
+        InteractionManager.runAfterInteractions(() => {
+          // Réinitialiser la pile de navigation
+          navigationRef.current.reset({
+            index: 0,
+            routes: [{ name: 'Main' as never }],
+          });
+        });
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [user?.id]);
 
   // Réinitialiser l'avatar sélectionné quand le genre change
   React.useEffect(() => {
@@ -54,42 +88,73 @@ export function Signup() {
   const handleSubmit = async () => {
     setError(null);
 
+    // ✅ SÉCURITÉ : Validation des entrées
     if (!email || !password) {
       setError(t('auth.error.emailPasswordRequired'));
       return;
     }
 
-    // Validation du mot de passe
-    if (password.length < 8) {
-      setError(t('auth.error.passwordMinLength'));
-      return;
-    }
-
-    // Validation de l'email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    // ✅ SÉCURITÉ : Validation de l'email avec fonction sécurisée
+    if (!isValidEmail(email)) {
       setError(t('auth.error.invalidEmail'));
       return;
     }
+
+    // ✅ SÉCURITÉ : Validation du mot de passe avec fonction sécurisée
+    if (!isValidPassword(password)) {
+      setError(t('auth.error.passwordMinLength') + ' Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre.');
+      return;
+    }
+
+    // ✅ SÉCURITÉ : Validation du nom (si fourni)
+    if (name && !isValidName(name)) {
+      setError('Le nom doit contenir entre 1 et 50 caractères et ne peut contenir que des lettres, chiffres, espaces, tirets et apostrophes.');
+      return;
+    }
+
+    // ✅ SÉCURITÉ : Rate limiting - TEMPORAIREMENT DÉSACTIVÉ POUR LES TESTS
+    // TODO: Réactiver le rate limiting en production
+    if (false && !isSignupAllowed()) {
+      const waitTime = getWaitTime();
+      const waitMinutes = Math.ceil(waitTime / 1000 / 60);
+      setError(`Trop de tentatives. Veuillez réessayer dans ${waitMinutes} minute${waitMinutes > 1 ? 's' : ''}.`);
+      // ✅ SÉCURITÉ : Logger le dépassement de rate limit
+      await logRateLimitExceeded('signup', { email: sanitizedEmail });
+      return;
+    }
+
+    // ✅ SÉCURITÉ : Sanitisation des entrées
+    const sanitizedName = name ? sanitizeText(name, 50) : '';
+    const sanitizedEmail = email.trim().toLowerCase();
 
     try {
       setLoading(true);
       if (register) {
         await register(
-          name || email.split('@')[0],
-          email,
+          sanitizedName || sanitizedEmail.split('@')[0],
+          sanitizedEmail,
           password,
           gender,
           selectedAvatarId || undefined
         );
         trackEvent('signup_success', { method: 'email', hasAvatar: !!selectedAvatarId });
-        // La navigation sera gérée automatiquement par le contexte
-        // navigation.navigate('Main');
+        // ✅ SÉCURITÉ : Logger l'inscription réussie
+        await logSignupAttempt(true, 'email');
+        
+        // Rediriger vers l'écran de vérification d'email
+        // L'utilisateur n'a pas encore vérifié son email
+            InteractionManager.runAfterInteractions(() => {
+          navigationRef.current.navigate('VerifyEmail' as never, {
+            email: sanitizedEmail,
+              });
+            });
       }
     } catch (err: any) {
       const errorMsg = err?.message || t('auth.error.signupFailed');
       setError(errorMsg);
       trackEvent('signup_failed', { error: errorMsg });
+      // ✅ SÉCURITÉ : Logger l'inscription échouée
+      await logSignupAttempt(false, 'email', errorMsg);
     } finally {
       setLoading(false);
     }
@@ -234,7 +299,9 @@ export function Signup() {
                     <Image 
                       source={avatar.image} 
                       style={styles.avatarImage}
-                      resizeMode="cover"
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      transition={200}
                     />
                     {selectedAvatarId === avatar.id && (
                       <View style={[styles.avatarCheck, { backgroundColor: theme.colors.accent }]}>

@@ -9,7 +9,7 @@ const puterBaseUrl = Constants.expoConfig?.extra?.puterBaseUrl || "https://js.pu
  */
 export async function ttsSpeak(text: string, voice = 'default'): Promise<void> {
   // TODO: Implémenter avec expo-speech ou une API TTS
-  console.log('TTS not yet implemented in React Native');
+  // TTS not yet implemented
 }
 
 /**
@@ -51,7 +51,7 @@ export async function sttTranscribe(audioUri: string): Promise<string> {
     const data = await res.json();
     return data.text ?? '';
   } catch (error: any) {
-    console.error('STT transcription error:', error);
+    // Erreur silencieuse en production
     throw new Error(`Erreur de transcription: ${error.message || 'Service indisponible'}`);
   }
 }

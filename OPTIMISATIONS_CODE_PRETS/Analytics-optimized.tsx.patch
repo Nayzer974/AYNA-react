@@ -1,0 +1,109 @@
+// ============================================
+// OPTIMISATION ANALYTICS.TSX - Mémorisation des calculs
+// ============================================
+// 
+// Instructions :
+// 1. Mémoriser les calculs d'overview
+// 2. Mémoriser eventHistory
+// 3. Optimiser les re-renders
+//
+// Gain estimé : ~200-300ms par interaction
+
+// ========== DANS LE COMPOSANT ANALYTICS ==========
+
+export function Analytics() {
+  // ... existing code ...
+
+  // ✅ OPTIMISÉ : Charger overview de manière asynchrone et mémorisée
+  useEffect(() => {
+    if (!user?.id) {
+      setOverview(null);
+      setLoading(false);
+      return;
+    }
+    
+    let mounted = true;
+    setLoading(true);
+    
+    calculatePersonalOverview(user.id, overviewPeriod)
+      .then(data => {
+        if (mounted) {
+          setOverview(data);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setOverview(null);
+          setLoading(false);
+        }
+      });
+    
+    return () => { mounted = false; };
+  }, [user?.id, overviewPeriod]);
+
+  // ✅ OPTIMISÉ : Charger eventHistory de manière asynchrone et mémorisée
+  useEffect(() => {
+    if (!user?.id) {
+      setEventHistory([]);
+      return;
+    }
+    
+    let mounted = true;
+    
+    loadEventHistory(user.id, historyFilter)
+      .then(data => {
+        if (mounted) {
+          setEventHistory(data);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setEventHistory([]);
+        }
+      });
+    
+    return () => { mounted = false; };
+  }, [user?.id, historyFilter]);
+
+  // ✅ OPTIMISÉ : Mémoriser les calculs de stats
+  const stats = useMemo(() => {
+    if (!overview) return null;
+    
+    return {
+      totalDhikr: overview.totalDhikr || 0,
+      totalNotes: overview.totalNotes || 0,
+      totalPrayers: overview.totalPrayers || 0,
+      streak: overview.streak || 0,
+      // ... autres stats
+    };
+  }, [overview]);
+
+  // ✅ OPTIMISÉ : Mémoriser les graphiques
+  const chartData = useMemo(() => {
+    if (!overview || !overview.dailyStats) return [];
+    
+    return overview.dailyStats.map((day, index) => ({
+      day: index + 1,
+      dhikr: day.totalDhikr || 0,
+      notes: day.totalNotes || 0,
+      prayers: day.totalPrayers || 0,
+    }));
+  }, [overview]);
+
+  // ✅ OPTIMISÉ : Mémoriser maxChartValue
+  const maxChartValue = useMemo(() => {
+    if (!chartData.length) return 100;
+    return Math.max(
+      ...chartData.map(d => Math.max(d.dhikr, d.notes, d.prayers)),
+      100
+    );
+  }, [chartData]);
+
+  // ... rest of the code ...
+}
+
+
+
+
+

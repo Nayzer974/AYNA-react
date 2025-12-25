@@ -1,17 +1,10 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet, Animated, Dimensions } from 'react-native';
+import { View, StyleSheet, Dimensions } from 'react-native';
+import { useUser } from '@/contexts/UserContext';
+import { usePreferences } from '@/contexts/PreferencesContext';
+import Svg, { Circle } from 'react-native-svg';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-interface Star {
-  id: number;
-  x: number;
-  y: number;
-  size: number;
-  opacity: number;
-  duration: number;
-  delay: number;
-}
 
 interface GalaxyBackgroundProps {
   starCount?: number;
@@ -19,85 +12,55 @@ interface GalaxyBackgroundProps {
   maxSize?: number;
 }
 
-function StarComponent({ star }: { star: Star }) {
-  const opacityAnim = React.useRef(new Animated.Value(star.opacity * 0.2)).current;
-  const scaleAnim = React.useRef(new Animated.Value(1)).current;
-
-  React.useEffect(() => {
-    const animate = () => {
-      Animated.sequence([
-        Animated.parallel([
-          Animated.timing(opacityAnim, {
-            toValue: star.opacity * 0.8,
-            duration: star.duration / 2,
-            useNativeDriver: true,
-          }),
-          Animated.timing(scaleAnim, {
-            toValue: 1.2,
-            duration: star.duration / 2,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.parallel([
-          Animated.timing(opacityAnim, {
-            toValue: star.opacity * 0.2,
-            duration: star.duration / 2,
-            useNativeDriver: true,
-          }),
-          Animated.timing(scaleAnim, {
-            toValue: 1,
-            duration: star.duration / 2,
-            useNativeDriver: true,
-          }),
-        ]),
-      ]).start(() => animate());
-    };
-
-    const timeout = setTimeout(() => animate(), star.delay);
-    return () => clearTimeout(timeout);
-  }, []);
-
-  return (
-    <Animated.View
-      style={[
-        styles.star,
-        {
-          left: (star.x / 100) * SCREEN_WIDTH,
-          top: (star.y / 100) * SCREEN_HEIGHT,
-          width: star.size,
-          height: star.size,
-          borderRadius: star.size / 2,
-          opacity: opacityAnim,
-          transform: [{ scale: scaleAnim }],
-        },
-      ]}
-    />
-  );
-}
-
 export function GalaxyBackground({ 
-  starCount = 100,
+  starCount = 50, // Réduit de 100 à 50 pour améliorer les performances
   minSize = 1,
-  maxSize = 2
-}: GalaxyBackgroundProps) {
-  // Générer les étoiles de manière déterministe
-  const stars = useMemo<Star[]>(() => {
+  maxSize = 2,
+  themeId: propThemeId
+}: GalaxyBackgroundProps & { themeId?: string }) {
+  // Tous les hooks doivent être appelés avant tout retour conditionnel
+  const { user } = useUser();
+  const { starsEnabled } = usePreferences();
+  const themeId = propThemeId || user?.theme || 'default';
+  
+  // Générer les étoiles éparpillées sur tout l'écran (même si on ne les affiche pas)
+  const stars = useMemo(() => {
     return Array.from({ length: starCount }, (_, i) => ({
       id: i,
-      x: Math.random() * 100,
-      y: Math.random() * 100,
+      x: Math.random() * SCREEN_WIDTH,
+      y: Math.random() * SCREEN_HEIGHT,
       size: minSize + Math.random() * (maxSize - minSize),
       opacity: 0.3 + Math.random() * 0.7,
-      duration: 3000 + Math.random() * 4000,
-      delay: Math.random() * 2000
     }));
   }, [starCount, minSize, maxSize]);
-
+  
+  // Retours conditionnels APRÈS tous les hooks
+  // Si le thème est "galaxy", utiliser juste le background de couleur (sans étoiles)
+  if (themeId === 'galaxy') {
+    return (
+      <View style={[styles.container, styles.galaxyBackground]} pointerEvents="none" />
+    );
+  }
+  
+  // Si les étoiles sont désactivées, ne rien afficher
+  if (!starsEnabled) {
+    return null;
+  }
+  
   return (
     <View style={styles.container} pointerEvents="none">
-      {stars.map((star) => (
-        <StarComponent key={star.id} star={star} />
-      ))}
+      <Svg width={SCREEN_WIDTH} height={SCREEN_HEIGHT} style={styles.svg}>
+        {stars.map((star) => (
+          <Circle
+            key={star.id}
+            cx={star.x}
+            cy={star.y}
+            r={star.size}
+            fill="white"
+            opacity={star.opacity}
+          />
+        ))}
+      </Svg>
     </View>
   );
 }
@@ -111,13 +74,13 @@ const styles = StyleSheet.create({
     bottom: 0,
     overflow: 'hidden',
   },
-  star: {
-    position: 'absolute',
-    backgroundColor: 'white',
-    shadowColor: 'white',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 2,
+  galaxyBackground: {
+    backgroundColor: '#0A0F2C', // Background de base pour le thème galaxy
+  },
+  svg: {
+    flex: 1,
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
   },
 });
 

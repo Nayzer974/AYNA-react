@@ -12,6 +12,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { GalaxyBackground } from '@/components/GalaxyBackground';
 import { useTranslation } from 'react-i18next';
 import { trackPageView, trackEvent } from '@/services/analytics';
+import { isValidPassword } from '@/utils/validation';
+import { useRateLimit, RATE_LIMIT_CONFIGS } from '@/utils/rateLimiter';
+import { logPasswordResetSuccess, logRateLimitExceeded } from '@/services/securityLogger';
 
 /**
  * Page ResetPassword
@@ -46,7 +49,7 @@ export function ResetPassword() {
 
     // Écouter les changements d'état d'authentification pour détecter PASSWORD_RECOVERY
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state change:', event, session ? 'has session' : 'no session');
+      // Auth state change
       
       if (event === 'PASSWORD_RECOVERY') {
         setIsValidToken(true);
@@ -90,20 +93,37 @@ export function ResetPassword() {
     };
   }, []);
 
+  // ✅ SÉCURITÉ : Rate limiting pour la réinitialisation de mot de passe
+  const { isAllowed: isResetAllowed, getWaitTime } = useRateLimit(
+    'password_reset_attempts',
+    RATE_LIMIT_CONFIGS.passwordReset
+  );
+
   const handleSubmit = async () => {
     setError(null);
 
-    // Validations
+    // ✅ SÉCURITÉ : Validations avec fonctions sécurisées
     if (!password) {
       return setError(t('resetPassword.error.passwordRequired'));
     }
 
-    if (password.length < 6) {
-      return setError(t('resetPassword.error.passwordMinLength'));
+    // ✅ SÉCURITÉ : Validation du mot de passe avec fonction sécurisée
+    if (!isValidPassword(password)) {
+      return setError('Le mot de passe doit contenir au moins 8 caractères, une majuscule, une minuscule et un chiffre.');
     }
 
     if (password !== confirmPassword) {
       return setError(t('resetPassword.error.passwordsDontMatch'));
+    }
+
+    // ✅ SÉCURITÉ : Rate limiting
+    if (!isResetAllowed()) {
+      const waitTime = getWaitTime();
+      const waitMinutes = Math.ceil(waitTime / 1000 / 60);
+      setError(`Trop de tentatives. Veuillez réessayer dans ${waitMinutes} minute${waitMinutes > 1 ? 's' : ''}.`);
+      // ✅ SÉCURITÉ : Logger le dépassement de rate limit
+      await logRateLimitExceeded('password_reset');
+      return;
     }
 
     if (!APP_CONFIG.useSupabase || !supabase) {
@@ -123,6 +143,9 @@ export function ResetPassword() {
       // Déconnecter l'utilisateur après la mise à jour du mot de passe
       await supabase.auth.signOut();
 
+      // ✅ SÉCURITÉ : Logger la réinitialisation réussie
+      await logPasswordResetSuccess();
+      
       Alert.alert(
         t('common.success'),
         t('resetPassword.success.passwordReset'),
@@ -137,7 +160,7 @@ export function ResetPassword() {
         ]
       );
     } catch (err: any) {
-      console.error('Erreur lors de la réinitialisation du mot de passe:', err);
+      // Erreur silencieuse en production
       const errorMsg = err?.message || t('resetPassword.error.resetFailed');
       setError(errorMsg);
       trackEvent('password_reset_failed', { error: errorMsg });

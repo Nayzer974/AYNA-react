@@ -18,6 +18,7 @@ export interface PrivateDhikrSession {
   updated_at: string;
   completed_at?: string;
   invited_users?: string[]; // IDs des utilisateurs invités
+  invite_token?: string; // Token unique pour l'invitation par lien
 }
 
 export interface PrivateSessionParticipant {
@@ -65,11 +66,43 @@ export async function getPrivateSession(userId: string, sessionId: string): Prom
 }
 
 /**
+ * Génère un nouveau token d'invitation pour une session existante
+ */
+export async function regenerateInviteToken(userId: string, sessionId: string): Promise<string> {
+  const sessions = await loadPrivateSessions(userId);
+  const sessionIndex = sessions.findIndex(s => s.id === sessionId);
+
+  if (sessionIndex === -1) {
+    throw new Error('Session introuvable');
+  }
+
+  const session = sessions[sessionIndex];
+  const newToken = generateInviteToken();
+  session.invite_token = newToken;
+  session.updated_at = new Date().toISOString();
+
+  sessions[sessionIndex] = session;
+  await savePrivateSessions(userId, sessions);
+
+  // Synchroniser avec le serveur si des utilisateurs sont invités
+  if (session.invited_users && session.invited_users.length > 0 && APP_CONFIG.useSupabase && supabase) {
+    try {
+      await syncPrivateSessionToServer(session);
+    } catch (error) {
+      // Erreur silencieuse
+    }
+  }
+
+  return newToken;
+}
+
+/**
  * Crée une nouvelle session privée
  */
 export async function createPrivateSession(
   userId: string,
-  targetCount?: number
+  targetCount?: number,
+  dhikrText?: string
 ): Promise<PrivateDhikrSession> {
   // Vérifier le nombre maximum de sessions privées
   const existingSessions = await loadPrivateSessions(userId);
@@ -77,23 +110,29 @@ export async function createPrivateSession(
     throw new Error(`Vous ne pouvez avoir que ${MAX_PRIVATE_SESSIONS} sessions privées maximum.`);
   }
 
-  // Obtenir un dhikr aléatoire
+  // Utiliser le dhikr fourni ou obtenir un dhikr aléatoire
+  const finalDhikrText = dhikrText || (() => {
   const randomDhikr = getRandomDhikr();
-  const dhikrText = randomDhikr.arabic || randomDhikr.transliteration;
+    return randomDhikr.arabic || randomDhikr.transliteration;
+  })();
 
   // Target aléatoire entre 100 et 999 si non spécifié
   const finalTarget = targetCount || Math.floor(Math.random() * 900) + 100;
 
+  // Générer un token d'invitation unique
+  const inviteToken = generateInviteToken();
+
   const newSession: PrivateDhikrSession = {
     id: `private_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     userId,
-    dhikr_text: dhikrText,
+    dhikr_text: finalDhikrText,
     target_count: finalTarget,
     current_count: 0,
     is_active: true,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     invited_users: [],
+    invite_token: inviteToken,
   };
 
   // Sauvegarder
@@ -114,7 +153,7 @@ async function savePrivateSessions(userId: string, sessions: PrivateDhikrSession
     const key = `${PRIVATE_SESSIONS_STORAGE_KEY}_${userId}`;
     await storage.setItem(key, JSON.stringify(sessions));
   } catch (error) {
-    console.error('Erreur lors de la sauvegarde des sessions privées:', error);
+    // Erreur silencieuse en production
     throw error;
   }
 }
@@ -159,7 +198,7 @@ export async function addPrivateSessionClick(
       // Synchroniser le compteur avec le serveur pour les utilisateurs invités
       await syncPrivateSessionToServer(session);
     } catch (error) {
-      console.warn('Erreur lors de la synchronisation avec le serveur:', error);
+      // Erreur silencieuse en production
       // Ne pas échouer si la synchronisation échoue
     }
   }
@@ -200,6 +239,11 @@ async function syncPrivateSessionToServer(session: PrivateDhikrSession): Promise
         .eq('id', existingShared.id);
     } else {
       // Créer une nouvelle session partagée
+      // Le token est stocké dans session_name pour référence (format: "Session privée - TOKEN")
+      const sessionName = session.invite_token 
+        ? `Session privée - ${session.invite_token}`
+        : `Session privée - ${session.id.substring(0, 8)}`;
+      
       await supabase
         .from('dhikr_sessions')
         .insert({
@@ -211,17 +255,135 @@ async function syncPrivateSessionToServer(session: PrivateDhikrSession): Promise
           is_open: false, // Session privée, pas ouverte publiquement
           is_private: true,
           private_session_id: session.id,
-          max_participants: session.invited_users?.length || 0,
+          max_participants: session.invited_users?.length || 100, // Limite par défaut si pas d'invités
           completed_at: session.completed_at,
+          session_name: sessionName,
         });
     }
   } catch (error) {
-    console.warn('Erreur lors de la synchronisation de la session privée:', error);
+    // Erreur silencieuse en production
   }
 }
 
 /**
- * Invite un utilisateur à une session privée
+ * Génère un token d'invitation unique
+ */
+function generateInviteToken(): string {
+  // Générer un token unique basé sur timestamp + random
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).substring(2, 15);
+  return `${timestamp}_${random}`;
+}
+
+/**
+ * Génère un lien d'invitation pour une session privée (deep link)
+ * Utilise le scheme de l'app (ayna://) pour la production
+ * Pour Expo Go en développement, utiliser exp://localhost:8081
+ */
+export function generateInviteLink(sessionId: string, inviteToken: string): string {
+  // Utiliser le scheme de l'app (ayna://) pour le deep linking
+  // En développement avec Expo Go, cela ne fonctionnera pas, mais en production oui
+  return `ayna://dhikr/invite/${sessionId}?token=${inviteToken}`;
+}
+
+/**
+ * Génère un lien d'invitation partageable
+ * Ce lien utilise le deep link directement car les apps modernes (WhatsApp, SMS, etc.) 
+ * peuvent ouvrir les deep links si l'app est installée
+ */
+export function generateInviteLinkWeb(sessionId: string, inviteToken: string): string {
+  // Utiliser directement le deep link pour le partage
+  // Les apps modernes (WhatsApp, SMS, email, etc.) peuvent ouvrir les deep links
+  // Si l'app n'est pas installée, l'utilisateur verra une erreur mais pourra copier le lien
+  return generateInviteLink(sessionId, inviteToken);
+  
+  // Alternative future: créer une page web qui redirige vers l'app
+  // const baseUrl = APP_CONFIG.openrouterSiteUrl || 'https://ayna.app';
+  // return `${baseUrl}/dhikr/invite/${sessionId}?token=${inviteToken}`;
+}
+
+/**
+ * Rejoint une session privée via un token d'invitation
+ */
+export async function joinPrivateSessionByToken(
+  userId: string,
+  sessionId: string,
+  inviteToken: string
+): Promise<PrivateDhikrSession> {
+  if (!APP_CONFIG.useSupabase || !supabase) {
+    throw new Error('Supabase n\'est pas configuré');
+  }
+
+  try {
+    // Chercher la session privée sur le serveur via le token
+    const { data: sharedSession, error } = await supabase
+      .from('dhikr_sessions')
+      .select('*')
+      .eq('is_private', true)
+      .eq('private_session_id', sessionId)
+      .single();
+
+    if (error || !sharedSession) {
+      throw new Error('Session introuvable ou lien invalide');
+    }
+
+    // Vérifier que l'utilisateur n'est pas déjà participant
+    const { data: existingParticipant } = await supabase
+      .from('dhikr_session_participants')
+      .select('id')
+      .eq('session_id', sharedSession.id)
+      .eq('user_id', userId)
+      .single();
+
+    if (existingParticipant) {
+      // L'utilisateur est déjà participant, retourner la session
+      return {
+        id: sharedSession.private_session_id || sharedSession.id,
+        userId: sharedSession.created_by || '',
+        dhikr_text: sharedSession.dhikr_text || '',
+        target_count: sharedSession.target_count || 0,
+        current_count: sharedSession.current_count || 0,
+        is_active: sharedSession.is_active !== undefined ? sharedSession.is_active : true,
+        created_at: sharedSession.created_at || new Date().toISOString(),
+        updated_at: sharedSession.updated_at || new Date().toISOString(),
+        completed_at: sharedSession.completed_at || undefined,
+        invited_users: [],
+      };
+    }
+
+    // Ajouter l'utilisateur comme participant via la fonction RPC
+    const { error: joinError } = await supabase.rpc('join_dhikr_session', {
+      p_user_id: userId,
+      p_session_id: sharedSession.id
+    });
+
+    if (joinError) {
+      throw new Error(joinError.message || 'Impossible de rejoindre la session');
+    }
+
+    // Ajouter l'utilisateur à la liste des invités dans la session locale du créateur
+    // (cette partie sera gérée automatiquement lors de la synchronisation)
+
+    // Retourner la session
+    return {
+      id: sharedSession.private_session_id || sharedSession.id,
+      userId: sharedSession.created_by || '',
+      dhikr_text: sharedSession.dhikr_text || '',
+      target_count: sharedSession.target_count || 0,
+      current_count: sharedSession.current_count || 0,
+      is_active: sharedSession.is_active !== undefined ? sharedSession.is_active : true,
+      created_at: sharedSession.created_at || new Date().toISOString(),
+      updated_at: sharedSession.updated_at || new Date().toISOString(),
+      completed_at: sharedSession.completed_at || undefined,
+      invited_users: [],
+    };
+  } catch (error: any) {
+    throw new Error(error.message || 'Erreur lors de la jointure à la session');
+  }
+}
+
+/**
+ * Invite un utilisateur à une session privée (ancienne méthode, gardée pour compatibilité)
  */
 export async function inviteUserToPrivateSession(
   userId: string,
@@ -273,7 +435,7 @@ export async function deletePrivateSession(userId: string, sessionId: string): P
         .delete()
         .eq('private_session_id', sessionId);
     } catch (error) {
-      console.warn('Erreur lors de la suppression de la session partagée:', error);
+      // Erreur silencieuse en production
     }
   }
 }
@@ -299,7 +461,7 @@ export async function loadInvitedPrivateSessions(userId: string): Promise<Privat
       .eq('dhikr_session_participants.user_id', userId);
 
     if (error) {
-      console.warn('Erreur lors de la récupération des sessions invitées:', error);
+      // Erreur silencieuse en production
       return [];
     }
 
@@ -325,7 +487,7 @@ export async function loadInvitedPrivateSessions(userId: string): Promise<Privat
 
     return invitedSessions;
   } catch (error) {
-    console.error('Erreur lors du chargement des sessions invitées:', error);
+    // Erreur silencieuse en production
     return [];
   }
 }

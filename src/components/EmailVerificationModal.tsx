@@ -19,23 +19,27 @@ export function EmailVerificationModal({ visible, onClose }: EmailVerificationMo
   const [sending, setSending] = useState(false);
 
   const handleResendEmail = async () => {
-    if (!user?.email || !supabase) return;
+    if (!user?.email) return;
 
     try {
       setSending(true);
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email: user.email,
-        options: {
-          emailRedirectTo: 'https://www.nurayna.com/oauth/consent',
-        }
-      });
+      
+      // Utiliser le service dédié pour la vérification d'email
+      const { sendVerificationEmail } = await import('@/services/emailVerification');
+      const result = await sendVerificationEmail(user.email, 'signup');
 
-      if (error) throw error;
+      if (!result.success) {
+        Alert.alert(
+          t('common.error'),
+          result.error || t('emailVerification.sendFailed')
+        );
+        return;
+      }
 
       Alert.alert(
-        t('emailVerification.emailSent'),
-        t('emailVerification.emailSentMessage')
+        t('emailVerification.emailSent') || 'Email envoyé',
+        t('emailVerification.emailSentMessage') || 
+        'Un email de vérification a été envoyé. Veuillez vérifier votre boîte mail.'
       );
     } catch (error: any) {
       console.error('Erreur envoi email:', error);

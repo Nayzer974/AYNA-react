@@ -1,21 +1,20 @@
-// Service API pour AlQuran Cloud
-// Documentation: https://alquran.cloud/api
+// Minimal Quran API service using Quran.com API
+// Source: https://api.quran.com/api/v4
+// No cache, no AsyncStorage, no side effects
+// Guarantees: Arabic and translations are strictly separated
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
-
-const BASE_URL = Constants.expoConfig?.extra?.alquranCloudBaseUrl || "https://api.alquran.cloud/v1";
+const BASE_URL = 'https://api.quran.com/api/v4';
 
 export interface Ayah {
   number: number;
   text: string;
   numberInSurah: number;
-  juz: number;
-  manzil: number;
-  page: number;
-  ruku: number;
-  hizbQuarter: number;
-  sajda: boolean;
+  juz?: number;
+  manzil?: number;
+  page?: number;
+  ruku?: number;
+  hizbQuarter?: number;
+  sajda?: boolean;
 }
 
 export interface SurahData {
@@ -28,130 +27,333 @@ export interface SurahData {
   ayahs: Ayah[];
 }
 
-export interface SurahResponse {
-  code: number;
-  status: string;
-  data: SurahData;
+// Quran.com API response structure for Arabic verses
+interface QuranComVerse {
+  id: number;
+  verse_number: number;
+  chapter_id: number;
+  text_uthmani: string;
+  translations?: Array<{
+    id: number;
+    text: string;
+    resource_name: string;
+    resource_id: number;
+  }>;
 }
 
-const CACHE_KEY_PREFIX = 'quran_alquran_cloud_';
-const CACHE_TTL = 1000 * 60 * 60 * 24 * 7; // 7 jours
-
-interface CacheEntry {
-  data: SurahResponse;
-  timestamp: number;
+// Quran.com API response structure for translations
+interface QuranComTranslationVerse {
+  id: number;
+  verse_number: number;
+  chapter_id: number;
+  text: string; // Translation text is directly in 'text' field
+  resource_id?: number;
+  resource_name?: string;
 }
 
-// Fonction pour obtenir une sourate depuis le cache ou l'API
-async function getCachedOrFetch<T>(
-  cacheKey: string,
-  fetchFn: () => Promise<T>
-): Promise<T> {
-  try {
-    const cached = await AsyncStorage.getItem(cacheKey);
-    if (cached) {
-      const entry: CacheEntry = JSON.parse(cached);
-      if (Date.now() - entry.timestamp < CACHE_TTL) {
-        return entry.data as T;
-      }
-    }
-  } catch (e) {
-    // Ignore cache errors
+interface QuranComResponse {
+  verses: QuranComVerse[];
+  pagination?: {
+    per_page: number;
+    current_page: number;
+    next_page: number | null;
+    total_pages: number;
+    total_records: number;
+  };
+}
+
+interface QuranComTranslationResponse {
+  translations: QuranComTranslationVerse[];
+  pagination?: {
+    per_page: number;
+    current_page: number;
+    next_page: number | null;
+    total_pages: number;
+    total_records: number;
+  };
+}
+
+interface QuranComChapter {
+  id: number;
+  revelation_place: string;
+  revelation_order: number;
+  bismillah_pre: boolean;
+  name_simple: string;
+  name_complex: string;
+  name_arabic: string;
+  verses_count: number;
+  pages: number[];
+  translated_name: {
+    name: string;
+    language_name: string;
+  };
+}
+
+interface QuranComChapterResponse {
+  chapter: QuranComChapter;
+}
+
+// Translation IDs for Quran.com API
+const TRANSLATION_IDS = {
+  fr: 31, // fr.hamidullah
+  en: 131, // en.sahih
+} as const;
+
+/**
+ * Safe fetch helper with manual JSON parsing
+ */
+async function fetchJson<T>(url: string): Promise<T> {
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      'Accept-Encoding': 'identity',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
   }
 
-  const data = await fetchFn();
+  const text = await response.text();
   
-  try {
-    const cacheEntry: CacheEntry = {
-      data: data as any,
-      timestamp: Date.now()
-    };
-    await AsyncStorage.setItem(cacheKey, JSON.stringify(cacheEntry));
-  } catch (e) {
-    // Ignore cache errors
+  if (!text || text.trim().length === 0) {
+    throw new Error(`Empty response from ${url}`);
   }
 
-  return data;
+  try {
+    return JSON.parse(text) as T;
+  } catch (e: any) {
+    throw new Error(`JSON parse error for ${url}: ${e.message}`);
+  }
 }
 
 /**
- * Récupère une sourate en arabe (quran-uthmani)
+ * Quran.com translations may contain HTML + footnote tags.
+ * We render translations as plain text in RN, so we strip those tags.
+ * Example to remove: <supfoot_note=211798>1</sup>
+ */
+function sanitizeTranslationText(input: string): string {
+  if (!input) return '';
+
+  let t = input;
+
+  // Preserve line breaks
+  t = t.replace(/<br\s*\/?>/gi, '\n');
+
+  // Remove Quran.com footnotes
+  t = t.replace(/<supfoot_note=\d+>\s*\d+\s*<\/sup>/gi, '');
+  t = t.replace(/<sup[^>]*foot_note[^>]*>[\s\S]*?<\/sup>/gi, '');
+
+  // Remove other <sup>...</sup> (often used for notes)
+  t = t.replace(/<sup[^>]*>[\s\S]*?<\/sup>/gi, '');
+
+  // Strip remaining HTML tags
+  t = t.replace(/<\/?[^>]+>/g, '');
+
+  // Decode a few common HTML entities
+  t = t
+    .replace(/\u00A0/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+
+  // Normalize whitespace
+  t = t.replace(/[ \t]+\n/g, '\n').replace(/\n[ \t]+/g, '\n');
+  t = t.replace(/\n{3,}/g, '\n\n');
+
+  return t.trim();
+}
+
+/**
+ * Fetch chapter metadata
+ */
+async function getChapterInfo(surahNumber: number): Promise<QuranComChapter> {
+  const url = `${BASE_URL}/chapters/${surahNumber}`;
+  const json = await fetchJson<QuranComChapterResponse>(url);
+  
+  if (!json?.chapter) {
+    throw new Error(`Invalid chapter info for surah ${surahNumber}`);
+  }
+  
+  return json.chapter;
+}
+
+/**
+ * Fetch Arabic surah (Uthmani edition)
  */
 export async function getSurahArabic(surahNumber: number): Promise<SurahData> {
-  const cacheKey = `${CACHE_KEY_PREFIX}arabic_${surahNumber}`;
-  
-  return getCachedOrFetch(cacheKey, async () => {
-    const response = await fetch(`${BASE_URL}/surah/${surahNumber}/quran-uthmani`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch surah ${surahNumber}: ${response.statusText}`);
-    }
-    const data: SurahResponse = await response.json();
-    return data.data;
-  });
-}
+  const url = `${BASE_URL}/quran/verses/uthmani?chapter_number=${surahNumber}`;
+  const json = await fetchJson<QuranComResponse>(url);
+  const chapter = await getChapterInfo(surahNumber);
 
-/**
- * Récupère une sourate en traduction selon la langue (fr, en, ar)
- */
-export async function getSurahTranslation(surahNumber: number, lang: 'fr' | 'en' | 'ar' = 'fr'): Promise<SurahData> {
-  // Mapper les langues aux codes de traduction de l'API
-  const translationMap: Record<'fr' | 'en' | 'ar', string> = {
-    fr: 'fr.hamidullah',
-    en: 'en.ahmedali',
-    ar: 'ar.alafasy' // Pour l'arabe, on utilise le texte arabe (pas de traduction)
+  if (!json?.verses || !Array.isArray(json.verses) || json.verses.length === 0) {
+    throw new Error(`Invalid Arabic surah ${surahNumber} response structure`);
+  }
+
+  const ayahs: Ayah[] = json.verses.map((verse) => ({
+    number: verse.id,
+    text: verse.text_uthmani,
+    numberInSurah: verse.verse_number,
+    // Note: Quran.com API doesn't provide juz, manzil, page, etc. in this endpoint
+    // These would need to be fetched separately if needed
+  }));
+
+  return {
+    number: surahNumber,
+    name: chapter.name_arabic,
+    englishName: chapter.name_simple,
+    englishNameTranslation: chapter.translated_name?.name || chapter.name_simple,
+    numberOfAyahs: chapter.verses_count,
+    revelationType: chapter.revelation_place === 'makkah' ? 'Meccan' : 'Medinan',
+    ayahs,
   };
-  
-  const translationCode = translationMap[lang];
-  const cacheKey = `${CACHE_KEY_PREFIX}${lang}_${surahNumber}`;
-  
-  return getCachedOrFetch(cacheKey, async () => {
-    // Pour l'arabe, on retourne le texte arabe (quran-uthmani)
-    if (lang === 'ar') {
-      return getSurahArabic(surahNumber);
-    }
-    
-    const response = await fetch(`${BASE_URL}/surah/${surahNumber}/${translationCode}`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch ${lang} translation for surah ${surahNumber}: ${response.statusText}`);
-    }
-    const data: SurahResponse = await response.json();
-    return data.data;
-  });
 }
 
 /**
- * Récupère une sourate en traduction française (Hamidullah) - DEPRECATED, utiliser getSurahTranslation
+ * Fetch translation (FR / EN only)
+ * Translations are strictly separated from Arabic text
  */
-export async function getSurahFrench(surahNumber: number): Promise<SurahData> {
-  return getSurahTranslation(surahNumber, 'fr');
+export async function getSurahTranslation(
+  surahNumber: number,
+  lang: 'fr' | 'en' = 'fr'
+): Promise<SurahData> {
+  const translationId = TRANSLATION_IDS[lang];
+  const url = `${BASE_URL}/quran/translations/${translationId}?chapter_number=${surahNumber}`;
+  
+  try {
+    // Try both possible response structures
+    const json = await fetchJson<any>(url);
+    const chapter = await getChapterInfo(surahNumber);
+
+    // Check if it's the translations array structure
+    if (json?.translations && Array.isArray(json.translations)) {
+      if (json.translations.length === 0) {
+        throw new Error(`No translations found for surah ${surahNumber}`);
+      }
+
+      const ayahs: Ayah[] = json.translations.map((verse: QuranComTranslationVerse) => {
+        const cleaned = sanitizeTranslationText(verse.text || '');
+        if (!cleaned) {
+          throw new Error(
+            `Missing translation text for surah ${surahNumber}, ayah ${verse.verse_number}`
+          );
+        }
+
+        return {
+          number: verse.id,
+          text: cleaned,
+          numberInSurah: verse.verse_number,
+        };
+      });
+
+      return {
+        number: surahNumber,
+        name: chapter.name_arabic,
+        englishName: chapter.name_simple,
+        englishNameTranslation: chapter.translated_name?.name || chapter.name_simple,
+        numberOfAyahs: chapter.verses_count,
+        revelationType: chapter.revelation_place === 'makkah' ? 'Meccan' : 'Medinan',
+        ayahs,
+      };
+    }
+
+    // Check if it's the verses array structure (with translations nested)
+    if (json?.verses && Array.isArray(json.verses)) {
+      if (json.verses.length === 0) {
+        throw new Error(`No verses found in ${lang} translation for surah ${surahNumber}`);
+      }
+
+      const ayahs: Ayah[] = json.verses.map((verse: any) => {
+        // Try to get translation from nested translations array
+        const raw = verse.translations?.[0]?.text || verse.text || '';
+        const cleaned = sanitizeTranslationText(raw);
+        
+        if (!cleaned) {
+          throw new Error(
+            `Missing translation text for surah ${surahNumber}, ayah ${verse.verse_number}. ` +
+            `Verse structure: ${JSON.stringify(Object.keys(verse)).substring(0, 200)}`
+          );
+        }
+
+        return {
+          number: verse.id,
+          text: cleaned,
+          numberInSurah: verse.verse_number,
+        };
+      });
+
+      return {
+        number: surahNumber,
+        name: chapter.name_arabic,
+        englishName: chapter.name_simple,
+        englishNameTranslation: chapter.translated_name?.name || chapter.name_simple,
+        numberOfAyahs: chapter.verses_count,
+        revelationType: chapter.revelation_place === 'makkah' ? 'Meccan' : 'Medinan',
+        ayahs,
+      };
+    }
+
+    // Unknown structure
+    throw new Error(
+      `Invalid ${lang} translation response structure for surah ${surahNumber}. ` +
+      `Expected 'translations' or 'verses' array. Got: ${JSON.stringify(Object.keys(json || {})).substring(0, 200)}`
+    );
+  } catch (error: any) {
+    // Re-throw with more context
+    if (error.message && (error.message.includes('Invalid') || error.message.includes('Missing'))) {
+      throw error;
+    }
+    throw new Error(
+      `Failed to fetch ${lang} translation for surah ${surahNumber}: ${error.message || error}`
+    );
+  }
 }
 
 /**
- * Récupère une sourate avec texte arabe et traduction selon la langue de l'utilisateur
+ * Fetch Arabic + Translation together
+ * For Arabic (lang='ar'), returns Arabic text only (no translation needed)
+ * For French/English, returns Arabic + translation (strictly separated)
  */
-export async function getSurahWithTranslation(surahNumber: number, userLang: 'fr' | 'en' | 'ar' = 'fr'): Promise<{
+export async function getSurahWithTranslation(
+  surahNumber: number,
+  lang: 'fr' | 'en' | 'ar' = 'fr'
+): Promise<{
   arabic: SurahData;
   translation: SurahData;
 }> {
+  // For Arabic, no translation needed - return Arabic twice for compatibility
+  if (lang === 'ar') {
+    const arabic = await getSurahArabic(surahNumber);
+    return { arabic, translation: arabic };
+  }
+
+  // For French and English, load Arabic + translation (strictly separated)
   const [arabic, translation] = await Promise.all([
     getSurahArabic(surahNumber),
-    getSurahTranslation(surahNumber, userLang)
+    getSurahTranslation(surahNumber, lang),
   ]);
 
   return { arabic, translation };
 }
 
 /**
- * Récupère un verset spécifique
+ * Get specific ayah (verse)
  */
-export async function getAyah(surahNumber: number, ayahNumber: number): Promise<{
+export async function getAyah(
+  surahNumber: number,
+  ayahNumber: number
+): Promise<{
   arabic: Ayah;
   french: Ayah;
 }> {
-  const { arabic, french } = await getSurahWithTranslation(surahNumber);
+  const { arabic, translation } = await getSurahWithTranslation(surahNumber);
   
-  const arabicAyah = arabic.ayahs.find(a => a.numberInSurah === ayahNumber);
-  const frenchAyah = french.ayahs.find(a => a.numberInSurah === ayahNumber);
+  const arabicAyah = arabic.ayahs.find((a: Ayah) => a.numberInSurah === ayahNumber);
+  const frenchAyah = translation.ayahs.find((a: Ayah) => a.numberInSurah === ayahNumber);
 
   if (!arabicAyah || !frenchAyah) {
     throw new Error(`Ayah ${ayahNumber} not found in surah ${surahNumber}`);
@@ -159,21 +361,13 @@ export async function getAyah(surahNumber: number, ayahNumber: number): Promise<
 
   return {
     arabic: arabicAyah,
-    french: frenchAyah
+    french: frenchAyah,
   };
 }
 
 /**
- * Nettoie le cache (optionnel, pour libérer de l'espace)
+ * Legacy alias for compatibility
  */
-export async function clearQuranCache(): Promise<void> {
-  try {
-    const keys = await AsyncStorage.getAllKeys();
-    const quranKeys = keys.filter(key => key.startsWith(CACHE_KEY_PREFIX));
-    await AsyncStorage.multiRemove(quranKeys);
-  } catch (e) {
-    console.error('Error clearing Quran cache:', e);
-  }
+export async function getSurahFrench(surahNumber: number): Promise<SurahData> {
+  return getSurahTranslation(surahNumber, 'fr');
 }
-
-

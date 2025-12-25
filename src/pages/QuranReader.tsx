@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { ArrowLeft, Languages } from 'lucide-react-native';
 import { surahs } from '@/data/quranData';
@@ -46,7 +46,8 @@ export function QuranReader() {
     }
   }, [surahNumber, loadSurah]);
 
-  const handleReadVerse = async (verse: any) => {
+  // ✅ OPTIMISÉ : Mémoriser handleReadVerse
+  const handleReadVerse = useCallback(async (verse: any) => {
     if (isSpeaking()) {
       stopSpeaking();
       setReadingVerse(null);
@@ -54,19 +55,20 @@ export function QuranReader() {
     }
     
     try {
-      setReadingVerse(verse.number);
+      const verseNumber = (typeof verse?.numberInSurah === 'number' ? verse.numberInSurah : verse.number);
+      setReadingVerse(verseNumber);
       // En arabe, lire seulement le texte arabe
       const textToRead = (currentLang === 'ar' || !showTranslation)
         ? verse.arabic
-        : `${verse.arabic}\n${verse.translation}`;
+        : `${verse.arabic}\n${verse.french}`;
       const langToUse = currentLang === 'ar' ? 'ar' : (showTranslation ? currentLang : 'ar');
       await speak(textToRead, langToUse);
-      trackEvent('verse_read', { surahNumber, verseNumber: verse.number });
+      trackEvent('verse_read', { surahNumber, verseNumber });
     } catch (error) {
-      console.error('Erreur lecture vocale:', error);
+      // Erreur silencieuse en production
       setReadingVerse(null);
     }
-  };
+  }, [currentLang, showTranslation, surahNumber]);
 
   if (!surah) {
     return (
@@ -78,8 +80,180 @@ export function QuranReader() {
     );
   }
 
-  const displayedVerses = state.verses.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-  const totalPages = Math.ceil(state.verses.length / PAGE_SIZE);
+  const displayedVerses = useMemo(() => 
+    state.verses.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
+    [state.verses, page]
+  );
+  const totalPages = useMemo(() => 
+    Math.ceil(state.verses.length / PAGE_SIZE),
+    [state.verses.length]
+  );
+
+  // ✅ OPTIMISÉ : Mémoriser renderVerse avec toutes les dépendances
+  const renderVerse = useCallback(({ item: verse, index }: { item: any; index: number }) => {
+    const verseNumber = (typeof verse?.numberInSurah === 'number' ? verse.numberInSurah : index + 1);
+    return (
+    <View
+      style={[styles.verseCard, { backgroundColor: theme.colors.backgroundSecondary }]}
+    >
+      <View style={styles.verseContent}>
+        {/* Traduction - masquée si langue arabe */}
+        {currentLang !== 'ar' && (
+          <View style={styles.frenchSection}>
+            {showTranslation ? (
+              <View style={[styles.translationBox, { backgroundColor: 'rgba(255, 255, 255, 0.05)' }]}>
+                <Text style={[styles.translationText, { color: theme.colors.text }]}>
+                  {verse.french || '—'}
+                </Text>
+              </View>
+            ) : (
+              <Text style={[styles.hiddenText, { color: theme.colors.textSecondary }]}>
+                {t('quran.translationHidden')}
+              </Text>
+            )}
+          </View>
+        )}
+
+        {/* Texte arabe */}
+        <View style={styles.arabicSection}>
+          <View style={styles.verseHeader}>
+            <View style={[styles.verseNumberBadge, { backgroundColor: theme.colors.accent }]}>
+              <Text style={[styles.verseNumberText, { color: theme.colors.background }]}>
+                {verseNumber}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => handleReadVerse(verse)}
+              style={({ pressed }) => [
+                styles.readButton,
+                { backgroundColor: readingVerse === verseNumber ? theme.colors.accent : 'rgba(255, 255, 255, 0.1)' },
+                pressed && styles.readButtonPressed
+              ]}
+            >
+              <Volume2 size={16} color={readingVerse === verseNumber ? theme.colors.background : theme.colors.text} />
+              <Text style={[
+                styles.readButtonText,
+                { color: readingVerse === verseNumber ? theme.colors.background : theme.colors.text }
+              ]}>
+                {readingVerse === verseNumber ? t('quran.stopReading') : t('quran.readVerse')}
+              </Text>
+            </Pressable>
+          </View>
+          <View style={styles.arabicTextContainer}>
+            <Text style={[styles.arabicText, { color: theme.colors.text }]}>
+              {verse.arabic}
+            </Text>
+          </View>
+        </View>
+      </View>
+    </View>
+    );
+  }, [theme, currentLang, showTranslation, readingVerse, t, handleReadVerse]);
+
+  // ✅ OPTIMISÉ : keyExtractor
+  const keyExtractor = useCallback((item: any) => `${item.number}-${item.numberInSurah}`, []);
+
+  // ✅ OPTIMISÉ : getItemLayout
+  const getItemLayout = useCallback((data: ArrayLike<any> | null | undefined, index: number) => ({
+    length: 250, // Hauteur approximative d'un verset
+    offset: 250 * index,
+    index,
+  }), []);
+
+  // ✅ OPTIMISÉ : ListHeaderComponent mémorisé
+  const ListHeaderComponent = useMemo(() => (
+    <>
+      {/* Informations de la sourate */}
+      {state.arabicData && (
+        <View style={[styles.surahInfoCard, { backgroundColor: theme.colors.backgroundSecondary }]}>
+          <Text style={[styles.surahArabicName, { color: theme.colors.text }]}>
+            {state.arabicData.name}
+          </Text>
+          {surah && i18n.language !== 'ar' && (
+            <Text style={[styles.surahFrenchName, { color: theme.colors.accent }]}>
+              {surah.frenchName}
+            </Text>
+          )}
+          {i18n.language !== 'ar' && (
+            <Text style={[styles.surahEnglishName, { color: theme.colors.textSecondary }]}>
+              {surah?.name}
+            </Text>
+          )}
+          <Text style={[styles.surahMeta, { color: theme.colors.textSecondary }]}>
+            {t('quran.verses', { count: state.arabicData.numberOfAyahs })} •{' '}
+            {state.arabicData.revelationType === 'Meccan' ? t('quran.meccan') : t('quran.medinan')}
+          </Text>
+        </View>
+      )}
+
+      {/* Bismillah pour les sourates (sauf Al-Fatihah et At-Tawbah) */}
+      {surahNumber !== 1 && surahNumber !== 9 && state.arabicData && (
+        <View style={[styles.basmalaCard, { backgroundColor: theme.colors.backgroundSecondary }]}>
+          <Text style={[styles.basmalaArabic, { color: theme.colors.text }]}>
+            بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
+          </Text>
+          {showTranslation && currentLang !== 'ar' && (
+            <Text style={[styles.basmalaFrench, { color: theme.colors.accent }]}>
+              {t('quran.basmala')}
+            </Text>
+          )}
+        </View>
+      )}
+    </>
+  ), [state.arabicData, surahNumber, theme, showTranslation, currentLang, t, i18n.language, surah]);
+
+  // ✅ OPTIMISÉ : ListFooterComponent mémorisé
+  const ListFooterComponent = useMemo(() => {
+    if (state.verses.length <= PAGE_SIZE) return null;
+    
+    return (
+      <View style={styles.pagination}>
+        <Pressable
+          onPress={() => {
+            setPage(p => Math.max(0, p - 1));
+            trackEvent('quran_page_changed', { page: Math.max(0, page - 1) });
+          }}
+          disabled={page === 0}
+          style={({ pressed }) => [
+            styles.paginationButton,
+            { backgroundColor: theme.colors.backgroundSecondary },
+            (page === 0 || pressed) && styles.paginationButtonDisabled
+          ]}
+        >
+          <Text style={[
+            styles.paginationButtonText,
+            { color: page === 0 ? theme.colors.textSecondary : theme.colors.text }
+          ]}>
+            {t('common.previous')}
+          </Text>
+        </Pressable>
+        
+        <Text style={[styles.paginationInfo, { color: theme.colors.text }]}>
+          {t('quran.page', { current: page + 1, total: totalPages })}
+        </Text>
+        
+        <Pressable
+          onPress={() => {
+            setPage(p => Math.min(totalPages - 1, p + 1));
+            trackEvent('quran_page_changed', { page: Math.min(totalPages - 1, page + 1) });
+          }}
+          disabled={page >= totalPages - 1}
+          style={({ pressed }) => [
+            styles.paginationButton,
+            { backgroundColor: theme.colors.backgroundSecondary },
+            (page >= totalPages - 1 || pressed) && styles.paginationButtonDisabled
+          ]}
+        >
+          <Text style={[
+            styles.paginationButtonText,
+            { color: page >= totalPages - 1 ? theme.colors.textSecondary : theme.colors.text }
+          ]}>
+            {t('common.next')}
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }, [state.verses.length, page, totalPages, theme, t]);
 
   return (
     <View style={styles.wrapper}>
@@ -136,175 +310,37 @@ export function QuranReader() {
           )}
         </View>
 
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Chargement */}
-          {state.loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.colors.accent} />
-              <Text style={[styles.loadingText, { color: theme.colors.text }]}>
-                {t('quran.loadingVerses')}
-              </Text>
-            </View>
-          ) : state.error ? (
-            <View style={[styles.errorContainer, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}>
-              <Text style={[styles.errorText, { color: '#ef4444' }]}>
-                {state.error}
-              </Text>
-            </View>
-          ) : (
-            <>
-              {/* Informations de la sourate */}
-              {state.arabicData && (
-                <View style={[styles.surahInfoCard, { backgroundColor: theme.colors.backgroundSecondary }]}>
-                  <Text style={[styles.surahArabicName, { color: theme.colors.text }]}>
-                    {state.arabicData.name}
-                  </Text>
-                  {surah && i18n.language !== 'ar' && (
-                    <Text style={[styles.surahFrenchName, { color: theme.colors.accent }]}>
-                      {surah.frenchName}
-                    </Text>
-                  )}
-                  {i18n.language !== 'ar' && (
-                    <Text style={[styles.surahEnglishName, { color: theme.colors.textSecondary }]}>
-                      {surah?.name}
-                    </Text>
-                  )}
-                  <Text style={[styles.surahMeta, { color: theme.colors.textSecondary }]}>
-                    {t('quran.verses', { count: state.arabicData.numberOfAyahs })} •{' '}
-                    {state.arabicData.revelationType === 'Meccan' ? t('quran.meccan') : t('quran.medinan')}
-                  </Text>
-                </View>
-              )}
-
-              {/* Bismillah pour les sourates (sauf Al-Fatihah et At-Tawbah) */}
-              {surahNumber !== 1 && surahNumber !== 9 && state.arabicData && (
-                <View style={[styles.basmalaCard, { backgroundColor: theme.colors.backgroundSecondary }]}>
-                  <Text style={[styles.basmalaArabic, { color: theme.colors.text }]}>
-                    بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
-                  </Text>
-                  {showTranslation && currentLang !== 'ar' && (
-                    <Text style={[styles.basmalaFrench, { color: theme.colors.accent }]}>
-                      {t('quran.basmala')}
-                    </Text>
-                  )}
-                </View>
-              )}
-
-              {/* Versets */}
-              <View style={styles.versesContainer}>
-                {displayedVerses.map((verse) => (
-                  <View
-                    key={`${verse.number}-${verse.numberInSurah}`}
-                    style={[styles.verseCard, { backgroundColor: theme.colors.backgroundSecondary }]}
-                  >
-                    <View style={styles.verseContent}>
-                      {/* Traduction - masquée si langue arabe */}
-                      {currentLang !== 'ar' && (
-                        <View style={styles.frenchSection}>
-                          {showTranslation ? (
-                            <View style={[styles.translationBox, { backgroundColor: 'rgba(255, 255, 255, 0.05)' }]}>
-                              <Text style={[styles.translationText, { color: theme.colors.text }]}>
-                                {verse.french || '—'}
-                              </Text>
-                            </View>
-                          ) : (
-                            <Text style={[styles.hiddenText, { color: theme.colors.textSecondary }]}>
-                              {t('quran.translationHidden')}
-                            </Text>
-                          )}
-                        </View>
-                      )}
-
-                      {/* Texte arabe */}
-                      <View style={styles.arabicSection}>
-                        <View style={styles.verseHeader}>
-                          <View style={[styles.verseNumberBadge, { backgroundColor: theme.colors.accent }]}>
-                            <Text style={[styles.verseNumberText, { color: theme.colors.background }]}>
-                              {verse.numberInSurah}
-                            </Text>
-                          </View>
-                          <Pressable
-                            onPress={() => handleReadVerse(verse)}
-                            style={({ pressed }) => [
-                              styles.readButton,
-                              { backgroundColor: readingVerse === verse.numberInSurah ? theme.colors.accent : 'rgba(255, 255, 255, 0.1)' },
-                              pressed && styles.readButtonPressed
-                            ]}
-                          >
-                            <Volume2 size={16} color={readingVerse === verse.numberInSurah ? theme.colors.background : theme.colors.text} />
-                            <Text style={[
-                              styles.readButtonText,
-                              { color: readingVerse === verse.numberInSurah ? theme.colors.background : theme.colors.text }
-                            ]}>
-                              {readingVerse === verse.numberInSurah ? t('quran.stopReading') : t('quran.readVerse')}
-                            </Text>
-                          </Pressable>
-                        </View>
-                        <View style={styles.arabicTextContainer}>
-                          <Text style={[styles.arabicText, { color: theme.colors.text }]}>
-                            {verse.arabic}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-                ))}
-              </View>
-
-              {/* Pagination */}
-              {state.verses.length > PAGE_SIZE && (
-                <View style={styles.pagination}>
-                  <Pressable
-                    onPress={() => {
-                      setPage(p => Math.max(0, p - 1));
-                      trackEvent('quran_page_changed', { page: Math.max(0, page - 1) });
-                    }}
-                    disabled={page === 0}
-                    style={({ pressed }) => [
-                      styles.paginationButton,
-                      { backgroundColor: theme.colors.backgroundSecondary },
-                      (page === 0 || pressed) && styles.paginationButtonDisabled
-                    ]}
-                  >
-                    <Text style={[
-                      styles.paginationButtonText,
-                      { color: page === 0 ? theme.colors.textSecondary : theme.colors.text }
-                    ]}>
-                      {t('common.previous')}
-                    </Text>
-                  </Pressable>
-                  
-                  <Text style={[styles.paginationInfo, { color: theme.colors.text }]}>
-                    {t('quran.page', { current: page + 1, total: totalPages })}
-                  </Text>
-                  
-                  <Pressable
-                    onPress={() => {
-                      setPage(p => Math.min(totalPages - 1, p + 1));
-                      trackEvent('quran_page_changed', { page: Math.min(totalPages - 1, page + 1) });
-                    }}
-                    disabled={page >= totalPages - 1}
-                    style={({ pressed }) => [
-                      styles.paginationButton,
-                      { backgroundColor: theme.colors.backgroundSecondary },
-                      (page >= totalPages - 1 || pressed) && styles.paginationButtonDisabled
-                    ]}
-                  >
-                    <Text style={[
-                      styles.paginationButtonText,
-                      { color: page >= totalPages - 1 ? theme.colors.textSecondary : theme.colors.text }
-                    ]}>
-                      {t('common.next')}
-                    </Text>
-                  </Pressable>
-                </View>
-              )}
-            </>
-          )}
-        </ScrollView>
+        {/* Chargement */}
+        {state.loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.colors.accent} />
+            <Text style={[styles.loadingText, { color: theme.colors.text }]}>
+              {t('quran.loadingVerses')}
+            </Text>
+          </View>
+        ) : state.error ? (
+          <View style={[styles.errorContainer, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}>
+            <Text style={[styles.errorText, { color: '#ef4444' }]}>
+              {state.error}
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={displayedVerses}
+            renderItem={renderVerse}
+            keyExtractor={keyExtractor}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            removeClippedSubviews={true}
+            initialNumToRender={10}
+            maxToRenderPerBatch={5}
+            windowSize={10}
+            updateCellsBatchingPeriod={50}
+            getItemLayout={getItemLayout}
+            ListHeaderComponent={ListHeaderComponent}
+            ListFooterComponent={ListFooterComponent}
+          />
+        )}
       </SafeAreaView>
     </View>
   );

@@ -18,7 +18,7 @@ export async function isAppleAuthAvailable(): Promise<boolean> {
   try {
     return await AppleAuthentication.isAvailableAsync();
   } catch (error) {
-    console.error('Erreur lors de la vérification de disponibilité Apple Auth:', error);
+    // Erreur silencieuse en production
     return false;
   }
 }
@@ -26,7 +26,7 @@ export async function isAppleAuthAvailable(): Promise<boolean> {
 /**
  * Connexion avec Apple
  */
-export async function signInWithApple(): Promise<{ user: any; session: any } | null> {
+export async function signInWithApple(): Promise<{ user: User; session: Session } | null> {
   try {
     // Vérifier la disponibilité
     const available = await isAppleAuthAvailable();
@@ -47,6 +47,7 @@ export async function signInWithApple(): Promise<{ user: any; session: any } | n
     }
 
     // Connexion avec Supabase
+    if (!supabase) throw new Error('Supabase n\'est pas configuré');
     const { data, error } = await supabase.auth.signInWithIdToken({
       provider: 'apple',
       token: credential.identityToken,
@@ -57,12 +58,12 @@ export async function signInWithApple(): Promise<{ user: any; session: any } | n
     }
 
     return data;
-  } catch (error: any) {
-    if (error.code === 'ERR_REQUEST_CANCELED') {
+  } catch (error: unknown) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ERR_REQUEST_CANCELED') {
       // L'utilisateur a annulé
       return null;
     }
-    console.error('Erreur lors de la connexion avec Apple:', error);
+    // Erreur silencieuse en production
     throw error;
   }
 }
@@ -70,7 +71,7 @@ export async function signInWithApple(): Promise<{ user: any; session: any } | n
 /**
  * Inscription avec Apple
  */
-export async function signUpWithApple(): Promise<{ user: any; session: any } | null> {
+export async function signUpWithApple(): Promise<{ user: User; session: Session } | null> {
   // L'inscription et la connexion utilisent la même méthode avec Apple
   return signInWithApple();
 }

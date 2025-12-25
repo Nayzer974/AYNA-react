@@ -1,0 +1,169 @@
+// ============================================
+// OPTIMISATION JOURNAL.TSX - FlatList au lieu de ScrollView
+// ============================================
+// 
+// Instructions :
+// 1. Remplacer ScrollView par FlatList pour les entrées
+// 2. Mémoriser formatDate avec useCallback
+// 3. Mémoriser renderEntry avec useCallback
+//
+// Gain estimé : ~200-300ms au scroll
+
+// ========== IMPORTS ==========
+import { FlatList } from 'react-native'; // ✅ Ajouter
+
+// ========== DANS LE COMPOSANT JOURNAL ==========
+
+export function Journal() {
+  // ... existing code ...
+
+  // ✅ OPTIMISÉ : Mémoriser formatDate
+  const formatDate = useCallback((dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - date.getTime());
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) {
+      return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    } else if (diffDays === 1) {
+      return `Hier à ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+    } else if (diffDays < 7) {
+      return `Il y a ${diffDays} jours`;
+    } else {
+      return date.toLocaleDateString('fr-FR', {
+        day: 'numeric',
+        month: 'short',
+        year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+      });
+    }
+  }, []);
+
+  // ✅ OPTIMISÉ : renderEntry mémorisé
+  const renderEntry = useCallback(({ item, index }: { item: any; index: number }) => {
+    const handleDelete = async () => {
+      try {
+        const updatedEntries = entries.filter(e => e.createdAt !== item.createdAt);
+        setEntries(updatedEntries);
+        await saveJournalNotes(updatedEntries.map(e => ({
+          text: e.text,
+          createdAt: new Date(e.createdAt),
+        })));
+        trackEvent('journal_entry_deleted');
+      } catch (error) {
+        Alert.alert(t('common.error'), t('journal.error.deleteFailed'));
+      }
+    };
+
+    const renderRightActions = () => (
+      <View style={styles.swipeDeleteContainer}>
+        <Pressable
+          onPress={handleDelete}
+          style={[styles.swipeDeleteButton, { backgroundColor: '#EF4444' }]}
+        >
+          <Text style={styles.swipeDeleteText}>Supprimer</Text>
+        </Pressable>
+      </View>
+    );
+
+    return (
+      <Swipeable renderRightActions={renderRightActions}>
+        <GlassCard 
+          intensity={adaptiveValue(15, 20, 25, 30)}
+          blurType="dark"
+          style={styles.entryCard}
+        >
+          <View style={styles.entryHeader}>
+            <Text style={[styles.entryDate, { color: theme.colors.textSecondary }]}>
+              {formatDate(item.createdAt)}
+            </Text>
+          </View>
+          <Text style={[styles.entryText, { color: theme.colors.text }]}>
+            {item.text}
+          </Text>
+          {item.analysis && (
+            <View style={[styles.analysisBox, { backgroundColor: 'rgba(255, 255, 255, 0.05)' }]}>
+              <Text style={[styles.analysisLabel, { color: theme.colors.accent }]}>
+                {t('journal.analysis')}
+              </Text>
+              <Text style={[styles.analysisText, { color: theme.colors.textSecondary }]}>
+                {item.analysis}
+              </Text>
+            </View>
+          )}
+        </GlassCard>
+      </Swipeable>
+    );
+  }, [entries, t, theme, formatDate]);
+
+  // ✅ OPTIMISÉ : keyExtractor
+  const keyExtractor = useCallback((item: any) => item.createdAt, []);
+
+  // ✅ OPTIMISÉ : getItemLayout
+  const getItemLayout = useCallback((data: any[] | null | undefined, index: number) => ({
+    length: 150, // Hauteur approximative d'une entrée
+    offset: 150 * index,
+    index,
+  }), []);
+
+  // ✅ REMPLACER ScrollView PAR FlatList pour les entrées
+  return (
+    <View style={styles.wrapper}>
+      {/* ... existing background ... */}
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.content}>
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={[styles.title, { color: theme.colors.text }]}>
+              {t('journal.title')}
+            </Text>
+          </View>
+
+          {/* Note Editor */}
+          <GlassCard 
+            intensity={adaptiveValue(15, 20, 25, 30)}
+            blurType="dark"
+            style={styles.card}
+          >
+            {/* ... existing editor code ... */}
+          </GlassCard>
+
+          {/* Entries List */}
+          {isLoading ? (
+            <ActivityIndicator size="large" color={theme.colors.accent} />
+          ) : entries.length > 0 ? (
+            <View style={styles.entriesSection}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+                {t('journal.myNotes')}
+              </Text>
+              <FlatList
+                data={entries}
+                renderItem={renderEntry}
+                keyExtractor={keyExtractor}
+                contentContainerStyle={styles.entriesList}
+                showsVerticalScrollIndicator={false}
+                removeClippedSubviews={true}
+                initialNumToRender={10}
+                maxToRenderPerBatch={5}
+                windowSize={10}
+                updateCellsBatchingPeriod={50}
+                getItemLayout={getItemLayout}
+              />
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={[styles.emptyStateText, { color: theme.colors.textSecondary }]}>
+                {t('journal.noEntries')}
+              </Text>
+            </View>
+          )}
+        </View>
+      </SafeAreaView>
+    </View>
+  );
+}
+
+
+
+
+

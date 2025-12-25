@@ -78,11 +78,11 @@ export async function logModuleVisit(moduleName: TrackedModule): Promise<void> {
         }
       } catch (queueError) {
         // Ignorer les erreurs de queue
-        console.warn('Erreur lors de l\'ajout à la queue de synchronisation:', queueError);
+        // Erreur silencieuse en production
       }
     }
   } catch (error) {
-    console.error('Erreur lors de l\'enregistrement de la visite:', error);
+    // Erreur silencieuse en production
     // Ne pas throw pour éviter de casser l'application
   }
 }
@@ -100,7 +100,7 @@ async function saveModuleVisitLocal(visit: ModuleVisit): Promise<void> {
     
     await storage.setItem(MODULE_TRACKING_KEY, JSON.stringify(limitedVisits));
   } catch (error) {
-    console.error('Erreur lors de la sauvegarde locale:', error);
+    // Erreur silencieuse en production
     throw error;
   }
 }
@@ -118,7 +118,7 @@ export async function loadModuleVisitsLocal(): Promise<ModuleVisit[]> {
     
     return visits;
   } catch (error) {
-    console.error('Erreur lors du chargement des visites:', error);
+    // Erreur silencieuse en production
     return [];
   }
 }
@@ -145,14 +145,14 @@ async function saveModuleVisitRemote(userId: string, visit: ModuleVisit): Promis
     if (error) {
       // Si la table n'existe pas, sauvegarder dans user_metadata comme fallback
       if (error.code === '42P01' || error.message?.includes('does not exist')) {
-        console.warn('Table module_visits n\'existe pas, utilisation du fallback user_metadata');
+        // Table non disponible, utilisation du fallback
         await saveModuleVisitToUserMetadata(userId, visit);
       } else {
         throw error;
       }
     }
   } catch (error) {
-    console.warn('Erreur lors de la sauvegarde distante, utilisation du fallback:', error);
+    // Erreur silencieuse en production
     // Fallback : sauvegarder dans user_metadata
     await saveModuleVisitToUserMetadata(userId, visit);
   }
@@ -186,7 +186,7 @@ async function saveModuleVisitToUserMetadata(userId: string, visit: ModuleVisit)
       }
     });
   } catch (error) {
-    console.warn('Erreur lors de la sauvegarde dans user_metadata:', error);
+    // Erreur silencieuse en production
   }
 }
 
@@ -255,7 +255,7 @@ export async function loadModuleVisitsRemote(userId: string): Promise<ModuleVisi
       timestamp: new Date(row.timestamp).getTime()
     }));
   } catch (error) {
-    console.warn('Erreur lors du chargement depuis le serveur, utilisation du fallback:', error);
+    // Erreur silencieuse en production
     return await loadModuleVisitsFromUserMetadata();
   }
 }
@@ -277,7 +277,7 @@ async function loadModuleVisitsFromUserMetadata(): Promise<ModuleVisit[]> {
       timestamp: visit.timestamp
     }));
   } catch (error) {
-    console.warn('Erreur lors du chargement depuis user_metadata:', error);
+    // Erreur silencieuse en production
     return [];
   }
 }
@@ -312,7 +312,7 @@ export async function loadAllModuleVisits(userId?: string): Promise<ModuleVisit[
       // Convertir en tableau et trier par timestamp (plus récent en premier)
       return Array.from(visitMap.values()).sort((a, b) => b.timestamp - a.timestamp);
     } catch (error) {
-      console.warn('Erreur lors du chargement des visites distantes, utilisation locale uniquement:', error);
+      // Erreur silencieuse en production
     }
   }
   

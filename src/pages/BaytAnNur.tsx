@@ -8,9 +8,9 @@ import {
   Pressable,
   Alert,
   Modal,
-  Dimensions,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useDimensions } from '@/hooks/useDimensions';
 import { useAudioPlayer } from 'expo-audio';
 import { Asset } from 'expo-asset';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -86,6 +86,7 @@ const ambianceIconMap: Record<string, typeof Trees> = {
   pluie: CloudRain,
   'feu-de-bois': Flame,
   desert: Sun,
+  'neige-faina': CloudRain, // Utiliser CloudRain pour la neige (icône similaire)
   silence: VolumeX,
 };
 
@@ -141,9 +142,12 @@ export function BaytAnNur() {
       const baseDivineName = divineNames.find((n) => n.id === divineNameId);
       if (baseDivineName && khalwaName) {
         // Si on a un nom original de khalwa, créer une copie avec la transliteration du nom original
+        // S'assurer que toutes les propriétés sont copiées, y compris meaning et meaningEn
         return {
           ...baseDivineName,
           transliteration: khalwaName, // Utiliser le nom original pour l'affichage
+          meaning: baseDivineName.meaning, // Conserver la traduction française
+          meaningEn: baseDivineName.meaningEn, // Conserver la traduction anglaise
         };
       }
       return baseDivineName;
@@ -152,8 +156,13 @@ export function BaytAnNur() {
   };
 
   const [currentScreen, setCurrentScreen] = useState<Screen>(getInitialScreen());
+  const initialDivineName = getInitialDivineName();
   const [session, setSession] = useState<Partial<KhalwaSession>>({
-    divineName: getInitialDivineName(),
+    divineName: initialDivineName ? {
+      ...initialDivineName,
+      meaning: initialDivineName.meaning || '',
+      meaningEn: initialDivineName.meaningEn || '',
+    } : undefined,
   });
   const [timeRemaining, setTimeRemaining] = useState<number>(0); // en secondes
   const [isPaused, setIsPaused] = useState(false);
@@ -173,13 +182,13 @@ export function BaytAnNur() {
   // On utilise une source vide initialement, puis on la met à jour via setAudioSource
   const audioPlayer = useAudioPlayer(audioSource || '');
 
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const audioRef = useRef<ReturnType<typeof useAudioPlayer> | null>(null);
-  const guidanceIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const guidanceIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastGuidanceTimeRef = useRef<number>(0);
   const sessionStartedRef = useRef<boolean>(false);
   const isPausedRef = useRef<boolean>(false);
   const { currentMessage, showMessage, closeMessage } = useKhalwaToast();
+  const [showStopModal, setShowStopModal] = useState(false);
 
   // Nettoyer les timers et l'audio au démontage
   useEffect(() => {
@@ -193,10 +202,8 @@ export function BaytAnNur() {
       // Mettre à jour les refs pour empêcher le gestionnaire ended de relancer l'audio
       sessionStartedRef.current = false;
       isPausedRef.current = false;
-      if (audioRef.current) {
-        audioRef.current.remove();
-        audioRef.current = null;
-      }
+      // Libérer l'audio en mettant la source à null
+      // useAudioPlayer gère automatiquement la libération du player
       setAudioSource(null);
     };
   }, []);
@@ -204,20 +211,22 @@ export function BaytAnNur() {
   // Gérer le player audio quand la source change
   useEffect(() => {
     if (audioPlayer && audioSource) {
-      audioRef.current = audioPlayer;
-      audioPlayer.loop = true;
-      audioPlayer.volume = 0.5;
-      if (sessionStarted && !isPaused) {
-        audioPlayer.play();
+      try {
+        audioPlayer.loop = true;
+        audioPlayer.volume = 0.5;
+        if (sessionStarted && !isPaused) {
+          audioPlayer.play();
+        }
+      } catch (error) {
+        // Erreur silencieuse en production
+        // Le player peut être invalide si la source a changé
       }
-    } else {
-      audioRef.current = null;
     }
   }, [audioSource, audioPlayer, sessionStarted, isPaused]);
 
   const saveSession = React.useCallback(async () => {
     if (!user?.id || !session?.divineName || !session?.duration) {
-      console.warn('Session incomplète, impossible de sauvegarder');
+      // Session incomplète, impossible de sauvegarder
       return;
     }
 
@@ -242,7 +251,7 @@ export function BaytAnNur() {
       });
 
       if (sessionId) {
-        console.log('Session sauvegardée avec succès:', sessionId);
+        // Session sauvegardée avec succès
       }
 
       // Si on vient d'un défi, marquer la tâche comme complétée
@@ -265,7 +274,7 @@ export function BaytAnNur() {
         }
       }
     } catch (error) {
-      console.error('Erreur lors de la sauvegarde:', error);
+      // Erreur silencieuse en production
     }
   }, [user, session, feeling, timeRemaining, fromChallenge, challengeId, dayParam, taskIndexParam, saveCompletedTasks]);
 
@@ -274,10 +283,9 @@ export function BaytAnNur() {
     sessionStartedRef.current = false;
     setIsPaused(false);
     isPausedRef.current = false;
-    if (audioRef.current) {
-      audioRef.current?.remove();
-      audioRef.current = null;
-    }
+    // Arrêter l'audio en mettant la source à null
+    // useAudioPlayer gère automatiquement la libération du player
+    setAudioSource(null);
     setCurrentScreen('completion');
 
     // Sauvegarder la session
@@ -350,8 +358,18 @@ export function BaytAnNur() {
           showGuidanceMessage(message);
           lastGuidanceTimeRef.current = elapsed;
         } else if (
-          timeRemaining <= 60 &&
+          timeRemaining <= 30 &&
           timeRemaining > 0 &&
+          lastGuidanceTimeRef.current < totalSeconds - 30
+        ) {
+          // 30 secondes avant la fin - une seule fois
+          showGuidanceMessage(
+            'Ta session se termine dans quelques instants. Remercie Allah pour ce moment de paix et de connexion.'
+          );
+          lastGuidanceTimeRef.current = totalSeconds - 30;
+        } else if (
+          timeRemaining <= 60 &&
+          timeRemaining > 30 &&
           lastGuidanceTimeRef.current < totalSeconds - 60
         ) {
           // 1 minute avant la fin - une seule fois
@@ -411,6 +429,7 @@ export function BaytAnNur() {
         'forest': require('../../assets/sounds/forêt.mp4'),
         'desert': require('../../assets/sounds/desert.mp4'),
         'feu-de-bois': require('../../assets/sounds/feu de bois.mp4'),
+        'neige-faina': require('../../assets/sounds/faina.mp3'),
       };
 
       const audioModule = audioMap[ambianceId];
@@ -421,7 +440,7 @@ export function BaytAnNur() {
       await asset.downloadAsync();
       return asset.localUri || audioModule;
     } catch (error) {
-      console.error('Erreur lors du chargement du fichier audio:', error);
+      // Erreur silencieuse en production
       return null;
     }
   };
@@ -442,17 +461,18 @@ export function BaytAnNur() {
       const audioUri = await getAudioUri(session.soundAmbiance);
       if (audioUri) {
         try {
-          // Nettoyer l'ancien player si nécessaire
-          if (audioRef.current) {
-            audioRef.current.remove();
-            audioRef.current = null;
-          }
+          // Libérer l'ancien player en mettant la source à null
+          // useAudioPlayer gère automatiquement la libération
+          setAudioSource(null);
+          
+          // Attendre un peu pour que le player soit libéré
+          await new Promise(resolve => setTimeout(resolve, 100));
 
           // Mettre à jour la source audio (le hook useAudioPlayer se mettra à jour automatiquement)
           const source = typeof audioUri === 'number' ? audioUri : audioUri;
           setAudioSource(source);
         } catch (err) {
-          console.error('Erreur lors de la lecture de l\'audio:', err);
+          // Erreur silencieuse en production
           // Continuer même si l'audio ne peut pas être chargé
         }
       }
@@ -463,41 +483,40 @@ export function BaytAnNur() {
     const newPausedState = !isPaused;
     setIsPaused(newPausedState);
     isPausedRef.current = newPausedState;
-    if (audioRef.current) {
+    if (audioPlayer && audioSource) {
       try {
         if (newPausedState) {
           // Mettre en pause
-          audioRef.current.pause();
+          audioPlayer.pause();
         } else {
           // Reprendre la lecture
-          audioRef.current.play();
+          audioPlayer.play();
         }
       } catch (err) {
-        console.error('Erreur lors de la pause/reprise de l\'audio:', err);
+        // Erreur silencieuse en production
       }
     }
   };
 
   const handleStop = () => {
-    Alert.alert('Arrêter la session', 'Voulez-vous vraiment arrêter la session ?', [
-      { text: 'Annuler', style: 'cancel' },
-      {
-        text: 'Arrêter',
-        style: 'destructive',
-        onPress: () => {
-          setSessionStarted(false);
-          sessionStartedRef.current = false;
-          setIsPaused(false);
-          isPausedRef.current = false;
-          setTimeRemaining(0);
-          if (audioRef.current) {
-            audioRef.current.remove();
-            audioRef.current = null;
-          }
-          setCurrentScreen('completion');
-        },
-      },
-    ]);
+    setShowStopModal(true);
+  };
+
+  const confirmStop = () => {
+    setShowStopModal(false);
+    setSessionStarted(false);
+    sessionStartedRef.current = false;
+    setIsPaused(false);
+    isPausedRef.current = false;
+    setTimeRemaining(0);
+    // Libérer l'audio en mettant la source à null
+    // useAudioPlayer gère automatiquement la libération du player
+    setAudioSource(null);
+    setCurrentScreen('completion');
+  };
+
+  const cancelStop = () => {
+    setShowStopModal(false);
   };
 
   const formatTime = (seconds: number): string => {
@@ -515,7 +534,14 @@ export function BaytAnNur() {
   };
 
   const handleDivineNameConfirm = (name: DivineName) => {
-    setSession((prev) => ({ ...prev, divineName: name }));
+    // Trouver le nom divin complet dans la liste pour s'assurer d'avoir toutes les propriétés
+    const completeNameFromList = divineNames.find(n => n.id === name.id);
+    const completeName: DivineName = completeNameFromList || {
+      ...name,
+      meaning: name.meaning || '',
+      meaningEn: name.meaningEn || '',
+    };
+    setSession((prev) => ({ ...prev, divineName: completeName }));
     setCurrentScreen('sound');
   };
 
@@ -682,6 +708,79 @@ export function BaytAnNur() {
         {(currentScreen as Screen) !== 'session' && (
           <KhalwaToast message={currentMessage} onClose={closeMessage} />
         )}
+        
+        {/* Modal personnalisé pour arrêter la session - doit être rendu même en session */}
+        <Modal
+          visible={showStopModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={cancelStop}
+          statusBarTranslucent={true}
+        >
+          <Pressable 
+            style={styles.modalOverlay}
+            onPress={cancelStop}
+            activeOpacity={1}
+          >
+            <Pressable 
+              activeOpacity={1}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <Animated.View
+                entering={FadeIn}
+                exiting={FadeOut}
+                style={[
+                  styles.modalContainer,
+                  {
+                    backgroundColor: currentAmbianceTheme.cardBackground,
+                    borderColor: currentAmbianceTheme.cardBorderColor,
+                  },
+                ]}
+              >
+                <Text style={[styles.modalTitle, { color: currentAmbianceTheme.textColor }]}>
+                  Arrêter la session
+                </Text>
+                <Text style={[styles.modalMessage, { color: currentAmbianceTheme.textSecondaryColor }]}>
+                  Voulez-vous vraiment arrêter la session ?
+                </Text>
+                <View style={styles.modalButtons}>
+                  <Pressable
+                    onPress={cancelStop}
+                    style={({ pressed }) => [
+                      styles.modalButton,
+                      styles.modalButtonCancel,
+                      {
+                        backgroundColor: currentAmbianceTheme.buttonBackground,
+                        borderColor: currentAmbianceTheme.cardBorderColor,
+                      },
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={[styles.modalButtonText, { color: currentAmbianceTheme.buttonTextColor }]}>
+                      Annuler
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={confirmStop}
+                    style={({ pressed }) => [
+                      styles.modalButton,
+                      styles.modalButtonConfirm,
+                      {
+                        backgroundColor: 'rgba(220, 38, 38, 0.2)',
+                        borderColor: 'rgba(220, 38, 38, 0.4)',
+                      },
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={[styles.modalButtonText, { color: '#fca5a5' }]}>
+                      Arrêter
+                    </Text>
+                  </Pressable>
+                </View>
+              </Animated.View>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </>
     );
   }
@@ -726,6 +825,79 @@ export function BaytAnNur() {
       {(currentScreen as Screen) !== 'session' && (
         <KhalwaToast message={currentMessage} onClose={closeMessage} />
       )}
+
+      {/* Modal personnalisé pour arrêter la session */}
+      <Modal
+        visible={showStopModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={cancelStop}
+        statusBarTranslucent={true}
+      >
+        <Pressable 
+          style={styles.modalOverlay}
+          onPress={cancelStop}
+          activeOpacity={1}
+        >
+          <Pressable 
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Animated.View
+              entering={FadeIn}
+              exiting={FadeOut}
+              style={[
+                styles.modalContainer,
+                {
+                  backgroundColor: currentAmbianceTheme.cardBackground,
+                  borderColor: currentAmbianceTheme.cardBorderColor,
+                },
+              ]}
+            >
+              <Text style={[styles.modalTitle, { color: currentAmbianceTheme.textColor }]}>
+                Arrêter la session
+              </Text>
+              <Text style={[styles.modalMessage, { color: currentAmbianceTheme.textSecondaryColor }]}>
+                Voulez-vous vraiment arrêter la session ?
+              </Text>
+              <View style={styles.modalButtons}>
+                <Pressable
+                  onPress={cancelStop}
+                  style={({ pressed }) => [
+                    styles.modalButton,
+                    styles.modalButtonCancel,
+                    {
+                      backgroundColor: currentAmbianceTheme.buttonBackground,
+                      borderColor: currentAmbianceTheme.cardBorderColor,
+                    },
+                    pressed && styles.buttonPressed,
+                  ]}
+                >
+                  <Text style={[styles.modalButtonText, { color: currentAmbianceTheme.buttonTextColor }]}>
+                    Annuler
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={confirmStop}
+                  style={({ pressed }) => [
+                    styles.modalButton,
+                    styles.modalButtonConfirm,
+                    {
+                      backgroundColor: 'rgba(220, 38, 38, 0.2)',
+                      borderColor: 'rgba(220, 38, 38, 0.4)',
+                    },
+                    pressed && styles.buttonPressed,
+                  ]}
+                >
+                  <Text style={[styles.modalButtonText, { color: '#fca5a5' }]}>
+                    Arrêter
+                  </Text>
+                </Pressable>
+              </View>
+            </Animated.View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -942,7 +1114,18 @@ function SoundScreen({
 }) {
   const { user } = useUser();
   const theme = getTheme(user?.theme || 'default');
-  const availableAmbiances = soundAmbiances.filter((a) => a.id !== 'silence');
+  
+  // Filtrer les ambiances selon le rôle utilisateur
+  // L'ambiance "Neige (ambiance Faïna)" est réservée aux admins et utilisateurs spéciaux
+  const availableAmbiances = soundAmbiances.filter((a) => {
+    // Ambiance secrète : seulement pour admins et utilisateurs spéciaux
+    if (a.id === 'neige-faina') {
+      return user?.isAdmin === true || user?.isSpecial === true;
+    }
+    
+    // Toutes les autres ambiances (y compris silence) : pour tous
+    return true;
+  });
   const opacity = useSharedValue(0);
   const translateX = useSharedValue(20);
 
@@ -1505,9 +1688,10 @@ function SessionScreen({
 }) {
   const { user } = useUser();
   const theme = getTheme(user?.theme || 'default');
+  const { width, height } = useDimensions();
   const [breathingPhase, setBreathingPhase] = useState<'inhale' | 'hold' | 'exhale' | null>(null);
   const [breathingCount, setBreathingCount] = useState(0);
-  const breathingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const breathingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Vérifier que session existe
   if (!session) {
@@ -1516,6 +1700,21 @@ function SessionScreen({
 
   // Obtenir le thème selon l'ambiance sélectionnée
   const ambianceTheme = getAmbianceTheme(session?.soundAmbiance || 'silence');
+
+  // S'assurer que le nom divin a toutes les propriétés en le récupérant depuis la liste complète
+  const completeDivineName = React.useMemo(() => {
+    if (!session?.divineName) return null;
+    // Toujours récupérer le nom divin complet depuis la liste pour garantir toutes les propriétés
+    const fullName = divineNames.find(n => n.id === session.divineName.id);
+    if (fullName) {
+      // Conserver la transliteration de la session si elle est différente (pour les noms personnalisés)
+      return {
+        ...fullName,
+        transliteration: session.divineName.transliteration || fullName.transliteration,
+      };
+    }
+    return session.divineName;
+  }, [session?.divineName]);
 
   // Convertir le gradient CSS en couleurs pour LinearGradient
   const getGradientColors = (gradientString: string): [string, string, ...string[]] => {
@@ -1677,8 +1876,6 @@ function SessionScreen({
     });
   }, []);
 
-  const { width, height } = Dimensions.get('window');
-
   return (
     <View style={styles.sessionWrapper}>
       <LinearGradient colors={gradientColors} style={StyleSheet.absoluteFill} />
@@ -1722,7 +1919,7 @@ function SessionScreen({
       <SafeAreaView style={styles.sessionContainer} edges={['top', 'bottom']}>
         <View style={styles.sessionContent}>
           {/* Nom divin - au-dessus du minuteur */}
-          {session?.divineName && (
+          {completeDivineName && (
             <View style={styles.divineNameSessionContainer}>
               <Text
             style={[
@@ -1732,20 +1929,35 @@ function SessionScreen({
               >
                 Avec :
               </Text>
-              {session.divineName.arabic &&
-                session.divineName.arabic !== session.divineName.transliteration && (
+              {completeDivineName.arabic &&
+                completeDivineName.arabic !== completeDivineName.transliteration && (
                   <Text
                     style={[
                       styles.divineNameSessionArabic,
                       { color: ambianceTheme.textColor },
                     ]}
                   >
-                    {session.divineName.arabic}
+                    {completeDivineName.arabic}
                   </Text>
                 )}
               <Text style={[styles.divineNameSessionTransliteration, { color: ambianceTheme.accentColor }]}>
-                {session.divineName.transliteration}
+                {completeDivineName.transliteration}
               </Text>
+              {/* Traductions FR et EN */}
+              {(completeDivineName.meaning || completeDivineName.meaningEn) && (
+                <View style={styles.divineNameTranslations}>
+                  {completeDivineName.meaning && (
+                    <Text style={[styles.divineNameTranslation, { color: ambianceTheme.textSecondaryColor }]}>
+                      {completeDivineName.meaning}
+                    </Text>
+                  )}
+                  {completeDivineName.meaningEn && (
+                    <Text style={[styles.divineNameTranslation, { color: ambianceTheme.textSecondaryColor }]}>
+                      {completeDivineName.meaningEn}
+                    </Text>
+                  )}
+                </View>
+              )}
             </View>
           )}
 
@@ -1755,6 +1967,34 @@ function SessionScreen({
               {formatTime(timeRemaining)}
             </Text>
           </View>
+
+          {/* Visualisation selon l'ambiance et le nom divin */}
+          {session?.divineName?.visualizations && session?.soundAmbiance && (
+            (() => {
+              const visualization = session.divineName.visualizations[session.soundAmbiance];
+              if (visualization) {
+                return (
+                  <Animated.View
+                    entering={FadeIn}
+                    exiting={FadeOut}
+                    style={[
+                      styles.guidanceMessageContainer,
+                      {
+                        backgroundColor: ambianceTheme.cardBackground,
+                        borderColor: ambianceTheme.cardBorderColor,
+                        marginBottom: guidanceMessage ? 12 : 0,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.guidanceMessageText, { color: ambianceTheme.textColor }]}>
+                      {visualization}
+                    </Text>
+                  </Animated.View>
+                );
+              }
+              return null;
+            })()
+          )}
 
           {/* Message de guidage de l'IA */}
           {guidanceMessage && (
@@ -1766,12 +2006,12 @@ function SessionScreen({
                 {
                   backgroundColor: ambianceTheme.cardBackground,
                   borderColor: ambianceTheme.cardBorderColor,
-              },
-            ]}
-          >
+                },
+              ]}
+            >
               <Text style={[styles.guidanceMessageText, { color: ambianceTheme.textColor }]}>
                 {guidanceMessage}
-            </Text>
+              </Text>
             </Animated.View>
           )}
 
@@ -1966,7 +2206,6 @@ const styles = StyleSheet.create({
   screenContainer: {
     flex: 1,
     padding: 20,
-    minHeight: Dimensions.get('window').height * 0.7,
   },
   welcomeContent: {
     flex: 1,
@@ -2346,6 +2585,21 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '600',
     fontFamily: 'System',
+    marginBottom: 8,
+  },
+  divineNameTranslations: {
+    alignItems: 'center',
+    marginTop: 12,
+    gap: 8,
+    width: '100%',
+    paddingHorizontal: 20,
+  },
+  divineNameTranslation: {
+    fontSize: 16,
+    fontFamily: 'System',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    lineHeight: 22,
   },
   timerContainer: {
     marginBottom: 20,
@@ -2433,6 +2687,64 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     fontSize: 16,
+    fontFamily: 'System',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    zIndex: 9999,
+  },
+  modalContainer: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+    zIndex: 10000,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '600',
+    fontFamily: 'System',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: 16,
+    fontFamily: 'System',
+    marginBottom: 24,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  modalButtonCancel: {
+    // Styles déjà définis dans modalButton
+  },
+  modalButtonConfirm: {
+    // Styles déjà définis dans modalButton
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
     fontFamily: 'System',
   },
 });

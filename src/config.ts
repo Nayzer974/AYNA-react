@@ -10,12 +10,12 @@ export const APP_CONFIG = {
   supabaseAnonKey: extra.supabaseAnonKey || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "",
   useSupabase: extra.useSupabase === true || process.env.EXPO_PUBLIC_USE_SUPABASE === 'true',
   mindstudioIframeUrl: extra.mindstudioIframeUrl || process.env.EXPO_PUBLIC_AYNA_IFRAME_URL || "",
-  mindstudioApiKeyProxy: extra.mindstudioApiKeyProxy || process.env.EXPO_PUBLIC_AYNA_API_PROXY || "",
-  openrouterApiKey: extra.openrouterApiKey || process.env.EXPO_PUBLIC_OPENROUTER_API_KEY || "",
-  openrouterSiteUrl: extra.openrouterSiteUrl || process.env.EXPO_PUBLIC_OPENROUTER_SITE_URL || "https://ayna.app",
+  // ⚠️ SÉCURITÉ : mindstudioApiKeyProxy supprimé - utiliser Supabase Edge Function
+  // ⚠️ SÉCURITÉ : openrouterApiKey supprimé - utiliser Supabase Edge Function
+  openrouterSiteUrl: extra.openrouterSiteUrl || process.env.EXPO_PUBLIC_OPENROUTER_SITE_URL || "https://nurayna.com",
   openrouterSiteName: extra.openrouterSiteName || process.env.EXPO_PUBLIC_OPENROUTER_SITE_NAME || "AYNA",
   openrouterModel: extra.openrouterModel || process.env.EXPO_PUBLIC_OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free",
-  ollamaApiKey: extra.ollamaApiKey || process.env.EXPO_PUBLIC_OLLAMA_API_KEY || "",
+  // ⚠️ SÉCURITÉ : ollamaApiKey supprimé - utiliser Supabase Edge Function
   ollamaUseCloud: true,
   aladhanBaseUrl: extra.aladhanBaseUrl || process.env.EXPO_PUBLIC_ALADHAN_BASE_URL || "https://api.aladhan.com/v1",
   puterBaseUrl: extra.puterBaseUrl || process.env.EXPO_PUBLIC_PUTER_BASE_URL || "https://js.puter.com/v2/",
@@ -24,9 +24,11 @@ export const APP_CONFIG = {
   quranApiBaseUrl: extra.quranApiBaseUrl || process.env.EXPO_PUBLIC_QURAN_API_BASE || "https://apis.quran.foundation/content/api/v4",
   quranOAuthUrl: extra.quranOAuthUrl || process.env.EXPO_PUBLIC_QURAN_OAUTH_URL || "https://oauth2.quran.foundation",
   quranClientId: extra.quranClientId || process.env.EXPO_PUBLIC_QURAN_CLIENT_ID || "fe9df116-3b96-4b89-92d9-53afd343c1ac",
-  quranClientSecret: extra.quranClientSecret || process.env.EXPO_PUBLIC_QURAN_CLIENT_SECRET || "ZvlBKxAmYkCr74eBhJVHzBjaqI",
+  // ⚠️ SÉCURITÉ : quranClientSecret supprimé - utiliser Supabase Edge Function pour OAuth
   duaDhikrBaseUrl: extra.duaDhikrBaseUrl || process.env.EXPO_PUBLIC_DUA_DHIKR_BASE || "https://dua-dhikr.onrender.com",
-  alquranCloudBaseUrl: extra.alquranCloudBaseUrl || process.env.EXPO_PUBLIC_ALQURAN_CLOUD_BASE || "http://api.alquran.cloud/v1",
+  // ⚠️ SÉCURITÉ : Forcer HTTPS - HTTP supprimé
+  alquranCloudBaseUrl: extra.alquranCloudBaseUrl || process.env.EXPO_PUBLIC_ALQURAN_CLOUD_BASE || "https://api.alquran.cloud/v1",
+  useBrevo: extra.useBrevo === true || process.env.EXPO_PUBLIC_USE_BREVO === 'true',
 };
 
 export function assertConfig(): void {

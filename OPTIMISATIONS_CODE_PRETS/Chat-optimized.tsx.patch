@@ -1,0 +1,83 @@
+// ============================================
+// OPTIMISATION CHAT.TSX - getItemLayout Amélioré
+// ============================================
+// 
+// Instructions :
+// 1. Remplacer getItemLayout par la version optimisée
+// 2. Améliorer la mémorisation de renderMessage
+//
+// Gain estimé : ~150ms au scroll
+
+// ========== DANS LE COMPOSANT CHAT ==========
+
+export function Chat() {
+  // ... existing code ...
+
+  // ✅ OPTIMISÉ : getItemLayout avec calcul dynamique
+  const getItemLayout = useCallback((data: Message[] | null | undefined, index: number) => {
+    // Estimer la hauteur basée sur la longueur du message
+    const message = data?.[index];
+    if (!message) {
+      return { length: 80, offset: 80 * index, index };
+    }
+    
+    // Estimation : ~50px de base + ~20px par ligne (max 5 lignes)
+    const estimatedLines = Math.ceil(message.text.length / 40);
+    const height = Math.min(50 + (estimatedLines * 20), 150);
+    
+    // Calculer l'offset en sommant les hauteurs précédentes
+    let offset = 0;
+    for (let i = 0; i < index; i++) {
+      const prevMessage = data?.[i];
+      if (prevMessage) {
+        const prevLines = Math.ceil(prevMessage.text.length / 40);
+        offset += Math.min(50 + (prevLines * 20), 150);
+      } else {
+        offset += 80;
+      }
+    }
+    
+    return { length: height, offset, index };
+  }, []);
+
+  // ✅ OPTIMISÉ : renderMessage avec meilleure mémorisation
+  const renderMessage = useCallback(({ item: message }: { item: Message }) => (
+    <MessageItem
+      message={message}
+      theme={theme}
+      formatTime={formatTime}
+    />
+  ), [theme, formatTime]);
+
+  // ✅ OPTIMISÉ : keyExtractor déjà mémorisé (garder tel quel)
+  const keyExtractor = useCallback((item: Message) => item.id, []);
+
+  // ✅ UTILISER dans FlatList
+  <FlatList
+    ref={flatListRef}
+    data={messages}
+    renderItem={renderMessage}
+    keyExtractor={keyExtractor}
+    style={styles.messagesContainer}
+    contentContainerStyle={styles.messagesContent}
+    showsVerticalScrollIndicator={false}
+    removeClippedSubviews={true}
+    initialNumToRender={10}
+    maxToRenderPerBatch={5}
+    windowSize={10}
+    updateCellsBatchingPeriod={50}
+    inverted={false}
+    ListFooterComponent={ListFooterComponent}
+    getItemLayout={getItemLayout} // ✅ NOUVEAU : Utiliser la version optimisée
+  />
+
+  // ... rest of the code ...
+}
+
+
+
+
+
+
+
+

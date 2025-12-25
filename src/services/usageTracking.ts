@@ -40,7 +40,7 @@ async function saveSessionLocal(session: UsageSession): Promise<string> {
     await AsyncStorage.setItem(USAGE_TRACKING_LOCAL_KEY, JSON.stringify(sessions));
     return sessionId;
   } catch (error) {
-    console.error('Erreur lors de la sauvegarde locale:', error);
+    // Erreur silencieuse en production
     throw error;
   }
 }
@@ -90,7 +90,7 @@ export async function startTrackingSession(userId: string, module: string): Prom
         .single();
 
       if (error) {
-        console.error('Erreur startTracking:', error);
+        // Erreur silencieuse en production
         // Ajouter à la queue pour synchronisation ultérieure
         await addToSyncQueue({
           type: 'usage_tracking',
@@ -101,7 +101,7 @@ export async function startTrackingSession(userId: string, module: string): Prom
       }
       return data?.id || localId;
     } catch (error) {
-      console.error('Erreur startTracking:', error);
+      // Erreur silencieuse en production
       // Ajouter à la queue pour synchronisation ultérieure
       await addToSyncQueue({
         type: 'usage_tracking',
@@ -111,7 +111,7 @@ export async function startTrackingSession(userId: string, module: string): Prom
       return localId;
     }
   } catch (error) {
-    console.error('Erreur startTracking:', error);
+    // Erreur silencieuse en production
     return null;
   }
 }
@@ -150,7 +150,7 @@ export async function endTrackingSession(sessionId: string): Promise<boolean> {
 
     // Limitation : Une session ne peut pas dépasser 24h
     if (durationSeconds > 86400) {
-      console.warn(`⚠️ Session ${sessionId} dépasse 24h. Limitation à 24h.`);
+      // Session dépasse 24h, limitation à 24h
       durationSeconds = 86400;
     }
 
@@ -171,29 +171,41 @@ export async function endTrackingSession(sessionId: string): Promise<boolean> {
 
     return !error;
   } catch (error) {
-    console.error('Erreur endTracking:', error);
+    // Erreur silencieuse en production
     return false;
   }
 }
 
 // Obtenir les statistiques d'utilisation
+// Si days = 0, récupère toutes les données depuis la création du compte
 export async function getUserUsageStats(userId: string, days: number = 30): Promise<UsageStats | null> {
   if (!supabase || !userId) return null;
 
   try {
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-    const startDateStr = startDate.toISOString().split('T')[0];
+    let startDateStr: string | undefined;
+    
+    if (days > 0) {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      startDateStr = startDate.toISOString().split('T')[0];
+    }
+    // Si days = 0, on ne met pas de limite de date (récupère tout)
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('user_usage_tracking')
       .select('date, duration_seconds, module, is_valid')
       .eq('user_id', userId)
-      .gte('date', startDateStr)
       .eq('is_valid', true);
+    
+    // Ajouter le filtre de date seulement si spécifié
+    if (startDateStr) {
+      query = query.gte('date', startDateStr);
+    }
+    
+    const { data, error } = await query;
 
     if (error) {
-      console.error('Erreur getUserUsageStats:', error);
+      // Erreur silencieuse en production
       return null;
     }
 
@@ -222,7 +234,7 @@ export async function getUserUsageStats(userId: string, days: number = 30): Prom
       moduleStats,
     };
   } catch (error) {
-    console.error('Erreur getUserUsageStats:', error);
+    // Erreur silencieuse en production
     return null;
   }
 }
@@ -247,7 +259,7 @@ export async function getDailyUsageFrequency(
       .eq('is_valid', true);
 
     if (error) {
-      console.error('Erreur getDailyUsageFrequency:', error);
+      // Erreur silencieuse en production
       return [];
     }
 
@@ -298,7 +310,7 @@ export async function getDailyUsageFrequency(
       return result;
     }
   } catch (error) {
-    console.error('Erreur getDailyUsageFrequency:', error);
+    // Erreur silencieuse en production
     return [];
   }
 }
@@ -323,7 +335,7 @@ export async function getModuleUsageTime(
       .eq('is_valid', true);
 
     if (error) {
-      console.error('Erreur getModuleUsageTime:', error);
+      // Erreur silencieuse en production
       return [];
     }
 
@@ -343,7 +355,7 @@ export async function getModuleUsageTime(
       .map(([module, data]) => ({ module, ...data }))
       .sort((a, b) => b.timeSeconds - a.timeSeconds);
   } catch (error) {
-    console.error('Erreur getModuleUsageTime:', error);
+    // Erreur silencieuse en production
     return [];
   }
 }

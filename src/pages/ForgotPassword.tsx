@@ -8,6 +8,7 @@ import { Input, Button } from '@/components/ui';
 import { Mail, ArrowLeft } from 'lucide-react-native';
 import { supabase } from '@/services/supabase';
 import { APP_CONFIG } from '@/config';
+import { requestPasswordChange } from '@/services/passwordChange';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GalaxyBackground } from '@/components/GalaxyBackground';
 import { useTranslation } from 'react-i18next';
@@ -53,12 +54,17 @@ export function ForgotPassword() {
     try {
       setLoading(true);
       
-      // Envoyer l'email de réinitialisation
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'https://www.nurayna.com/reset-password.html',
-      });
+      // Utiliser le service de changement de mot de passe avec Brevo
+      const result = await requestPasswordChange(
+        email.trim(),
+        undefined,
+        undefined,
+        'forgot'
+      );
 
-      if (error) throw error;
+      if (!result.success) {
+        throw new Error(result.error || t('forgotPassword.error.sendFailed'));
+      }
 
       setSent(true);
       Alert.alert(
@@ -67,7 +73,7 @@ export function ForgotPassword() {
       );
       trackEvent('password_reset_requested', { email });
     } catch (error: any) {
-      console.error('Erreur réinitialisation:', error);
+      // Erreur silencieuse en production
       Alert.alert(
         t('common.error'),
         error.message || t('forgotPassword.error.sendFailed')

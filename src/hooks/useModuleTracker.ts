@@ -32,7 +32,7 @@ export type TrackedModule =
  * ```
  */
 export function useModuleTracker(moduleName: TrackedModule) {
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasLoggedRef = useRef<boolean>(false);
 
   // Utiliser useFocusEffect pour détecter quand l'écran est réellement visible

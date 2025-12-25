@@ -15,6 +15,8 @@ export interface UserPreferences {
   notificationsEnabled?: boolean;
   prayerReminders?: boolean;
   challengeReminders?: boolean;
+  starsEnabled?: boolean; // Option pour activer/désactiver les étoiles
+  analyticsConsent?: boolean; // Consentement analytics (GDPR)
   customColors?: {
     primary?: string;
     secondary?: string;
@@ -29,6 +31,7 @@ export interface UserPreferences {
  */
 export async function loadUserPreferences(): Promise<UserPreferences> {
   try {
+    if (!supabase) return null;
     const { data: { user } } = await supabase.auth.getUser();
     
     if (!user) {
@@ -56,7 +59,7 @@ export async function loadUserPreferences(): Promise<UserPreferences> {
     
     return preferences;
   } catch (error) {
-    console.error('Erreur lors du chargement des préférences:', error);
+    // Erreur silencieuse en production
     // Retourner les préférences locales en fallback
     const stored = await AsyncStorage.getItem(PERSONALIZATION_KEY);
     return stored ? JSON.parse(stored) : {};
@@ -70,6 +73,7 @@ export async function saveUserPreferences(
   preferences: Partial<UserPreferences>
 ): Promise<void> {
   try {
+    if (!supabase) return null;
     const { data: { user } } = await supabase.auth.getUser();
     
     // Sauvegarder localement
@@ -90,7 +94,7 @@ export async function saveUserPreferences(
       if (error) throw error;
     }
   } catch (error) {
-    console.error('Erreur lors de la sauvegarde des préférences:', error);
+    // Erreur silencieuse en production
     throw error;
   }
 }
@@ -141,6 +145,7 @@ export async function toggleWidget(widgetId: string, enabled: boolean): Promise<
  */
 export async function uploadCustomAvatar(imageUri: string): Promise<string> {
   try {
+    if (!supabase) return null;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Utilisateur non connecté');
 
@@ -149,7 +154,8 @@ export async function uploadCustomAvatar(imageUri: string): Promise<string> {
     const blob = await response.blob();
 
     // Upload vers Supabase Storage
-    const fileName = `${user.id}/${Date.now()}.jpg`;
+    // Format: {userId}-{timestamp}.jpg pour correspondre aux politiques RLS
+    const fileName = `${user.id}-${Date.now()}.jpg`;
     const { data, error } = await supabase.storage
       .from('avatars')
       .upload(fileName, blob, {
@@ -169,7 +175,7 @@ export async function uploadCustomAvatar(imageUri: string): Promise<string> {
 
     return publicUrl;
   } catch (error) {
-    console.error('Erreur lors de l\'upload de l\'avatar:', error);
+    // Erreur silencieuse en production
     throw error;
   }
 }

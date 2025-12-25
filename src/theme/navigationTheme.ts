@@ -18,6 +18,36 @@ import { Theme } from '@/data/themes';
  * à partir de notre thème personnalisé
  */
 export function createNavigationTheme(customTheme: Theme): NavigationTheme {
+  // Configuration des fonts complète pour éviter l'erreur "Cannot read property 'material' of undefined"
+  const fontsConfig = {
+    regular: {
+      fontFamily: 'System',
+      fontWeight: '400' as const,
+      fontSize: 14,
+    },
+    medium: {
+      fontFamily: 'System',
+      fontWeight: '500' as const,
+      fontSize: 14,
+    },
+    bold: {
+      fontFamily: 'System',
+      fontWeight: '700' as const,
+      fontSize: 14,
+    },
+    heavy: {
+      fontFamily: 'System',
+      fontWeight: '800' as const,
+      fontSize: 14,
+    },
+    // Propriété material requise par certaines versions de React Navigation
+    material: {
+      fontFamily: 'System',
+      fontWeight: '400' as const,
+      fontSize: 14,
+    },
+  };
+
   return {
     dark: true,
     colors: {
@@ -28,28 +58,7 @@ export function createNavigationTheme(customTheme: Theme): NavigationTheme {
       border: 'rgba(255, 255, 255, 0.1)',
       notification: customTheme.colors.accent,
     },
-    fonts: {
-      regular: {
-        fontFamily: 'System',
-        fontWeight: '400' as const,
-        fontSize: 14,
-      },
-      medium: {
-        fontFamily: 'System',
-        fontWeight: '500' as const,
-        fontSize: 14,
-      },
-      bold: {
-        fontFamily: 'System',
-        fontWeight: '700' as const,
-        fontSize: 14,
-      },
-      heavy: {
-        fontFamily: 'System',
-        fontWeight: '800' as const,
-        fontSize: 14,
-      },
-    },
+    fonts: fontsConfig,
   };
 }
 

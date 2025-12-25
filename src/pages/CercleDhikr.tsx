@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, TextInput, Dimensions } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, TextInput, InteractionManager, Share, Clipboard } from 'react-native';
+import { useDimensions } from '@/hooks/useDimensions';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Users, Plus, LogOut, Trash2 } from 'lucide-react-native';
+import { ArrowLeft, Users, Plus, LogOut, Trash2, Share2 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GalaxyBackground } from '@/components/GalaxyBackground';
 import Counter from '@/components/Counter';
@@ -21,21 +22,58 @@ import {
   processDhikrSessionClicks,
   deleteAllActiveDhikrSessions,
   deleteDhikrSession,
+  isUserParticipant,
   type DhikrSession,
   type DhikrSessionParticipant,
 } from '@/services/dhikrSessions';
+import { checkAndUpdateAutoWorldSession, createOrUpdateAutoWorldSession } from '@/services/autoWorldSessionManager';
 import {
   createPrivateSession,
   loadPrivateSessions as loadPrivateSessionsFromService,
   addPrivateSessionClick,
   deletePrivateSession,
   loadInvitedPrivateSessions,
+  generateInviteLink,
+  generateInviteLinkWeb,
+  joinPrivateSessionByToken,
   type PrivateDhikrSession,
 } from '@/services/privateDhikrSessions';
 import { supabase } from '@/services/supabase';
 import { useTranslation } from 'react-i18next';
+import { APP_CONFIG } from '@/config';
+import { logger } from '@/utils/logger';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+/**
+ * Parse le texte du dhikr qui peut être en format JSON ou texte simple
+ */
+function parseDhikrText(dhikrText: string | null | undefined): {
+  arabic: string;
+  transliteration?: string;
+  translation?: string;
+  reference?: string;
+} {
+  if (!dhikrText) {
+    return { arabic: '' };
+  }
+  
+  try {
+    // Essayer de parser comme JSON
+    const parsed = JSON.parse(dhikrText);
+    if (parsed.arabic) {
+      return {
+        arabic: parsed.arabic,
+        transliteration: parsed.transliteration,
+        translation: parsed.translation,
+        reference: parsed.reference
+      };
+    }
+  } catch (e) {
+    // Ce n'est pas du JSON, c'est du texte simple
+  }
+  
+  // Retourner le texte tel quel si ce n'est pas du JSON
+  return { arabic: dhikrText };
+}
 
 /**
  * Page CercleDhikr (Da'Irat an-Nûr)
@@ -49,11 +87,13 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
  */
 export function CercleDhikr() {
   const navigation = useNavigation();
-  const { user, isAuthenticated } = useUser();
+  const route = useRoute();
+  const { user, isAuthenticated, incrementUserDhikr } = useUser();
   const theme = getTheme(user?.theme || 'default');
   const { t } = useTranslation();
+  const { width: SCREEN_WIDTH } = useDimensions();
 
-  const [activeView, setActiveView] = useState<'my-sessions' | 'sessions' | 'active'>('my-sessions');
+  const [activeView, setActiveView] = useState<'my-sessions' | 'sessions' | 'active'>('sessions');
   const [sessions, setSessions] = useState<DhikrSession[]>([]);
   const [privateSessions, setPrivateSessions] = useState<PrivateDhikrSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<DhikrSession | null>(null);
@@ -66,57 +106,207 @@ export function CercleDhikr() {
   const [counterFontSize, setCounterFontSize] = useState(80);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [sessionType, setSessionType] = useState<'private' | 'public'>('private');
+  const [userParticipantSessions, setUserParticipantSessions] = useState<Set<string>>(new Set());
+  const [participantsCountMap, setParticipantsCountMap] = useState<Record<string, number>>({});
 
   const channelRef = useRef<any>(null);
-  const processIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const processIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const selectedSessionRef = useRef<DhikrSession | null>(null);
+  const isReloadingSessionRef = useRef<boolean>(false);
 
-  // Charger les sessions actives et la session de l'utilisateur
+  // Charger les sessions actives et la session de l'utilisateur (différé après interactions)
   useEffect(() => {
-    async function init() {
-      // Charger d'abord les sessions privées pour pouvoir les filtrer dans loadSessions
-      await loadPrivateSessions();
-      await loadSessions();
-      
-      // Charger la session de l'utilisateur si connecté
-      if (user?.id) {
-        // Vérifier d'abord les sessions privées
-        try {
-          const privSessions = await loadPrivateSessionsFromService(user.id);
-          if (privSessions && Array.isArray(privSessions) && privSessions.length > 0) {
-            const activePrivate = privSessions.find(s => s.is_active);
-            if (activePrivate) {
-              setSelectedPrivateSession(activePrivate);
+    // Afficher immédiatement l'écran, puis charger les données
+    setLoading(false);
+    
+    InteractionManager.runAfterInteractions(() => {
+      async function init() {
+        // Vérifier si on doit créer une session automatiquement depuis la page d'accueil
+        const params = route.params as any;
+        if (params?.createSession && params?.dhikrText && user?.id) {
+          try {
+            // Créer automatiquement une session privée avec le dhikr sélectionné
+            const newPrivateSession = await createPrivateSession(
+              user.id,
+              params.targetCount || 99,
+              params.dhikrText
+            );
+            setSelectedPrivateSession(newPrivateSession);
+            setSelectedSession(null);
+            setActiveView('active');
+            // Recharger les sessions privées
+            await loadPrivateSessions();
+            // Note: On ne nettoie pas les paramètres avec setParams car cela peut causer des erreurs
+            // Les paramètres seront ignorés lors des prochains rendus grâce à la vérification ci-dessus
+            return;
+          } catch (error: any) {
+            logger.warn('[CercleDhikr] Erreur lors de la création automatique de la session:', error);
+            // Continuer avec le chargement normal
+          }
+        }
+
+        // Vérifier si on doit rejoindre une session via un lien d'invitation
+        if (params?.inviteSessionId && params?.inviteToken && user?.id) {
+          try {
+            // Rejoindre la session privée via le token
+            const joinedSession = await joinPrivateSessionByToken(
+              user.id,
+              params.inviteSessionId,
+              params.inviteToken
+            );
+            
+            // Charger la session depuis le serveur pour avoir les données à jour
+            const { data: sharedSession } = await supabase
+              .from('dhikr_sessions')
+              .select('*')
+              .eq('is_private', true)
+              .eq('private_session_id', params.inviteSessionId)
+              .single();
+
+            if (sharedSession) {
+              // Convertir en format DhikrSession pour l'affichage
+              const sessionAsPublic: DhikrSession = {
+                id: sharedSession.id,
+                created_by: sharedSession.created_by || '',
+                dhikr_text: sharedSession.dhikr_text || '',
+                target_count: sharedSession.target_count,
+                current_count: sharedSession.current_count || 0,
+                is_active: sharedSession.is_active !== undefined ? sharedSession.is_active : true,
+                is_open: false,
+                max_participants: sharedSession.max_participants || 100,
+                created_at: sharedSession.created_at || new Date().toISOString(),
+                updated_at: sharedSession.updated_at || new Date().toISOString(),
+                completed_at: sharedSession.completed_at || undefined,
+                session_name: sharedSession.session_name || undefined,
+                prayer_period: sharedSession.prayer_period || undefined,
+                is_auto: sharedSession.is_auto || false,
+                _isInvitedPrivate: true,
+                _privateSessionId: params.inviteSessionId,
+              };
+
+              setSelectedSession(sessionAsPublic);
+              setSelectedPrivateSession(null);
+              const sessionParticipants = await getDhikrSessionParticipants(sharedSession.id);
+              setParticipants(sessionParticipants);
               setActiveView('active');
+              
+              Alert.alert('Succès', 'Vous avez rejoint la session privée !');
+              
+              // Recharger les sessions pour mettre à jour la liste
+              await loadSessions();
               return;
             }
+          } catch (error: any) {
+            Alert.alert('Erreur', error.message || 'Impossible de rejoindre la session. Le lien peut être invalide ou expiré.');
+            // Continuer avec le chargement normal
           }
-        } catch (error) {
-          // Erreur silencieuse
+        }
+
+        // Charger d'abord les sessions privées pour pouvoir les filtrer dans loadSessions
+        await loadPrivateSessions();
+        
+        // Créer automatiquement la session mondiale si elle n'existe pas
+        // L'application crée automatiquement la session pour la période actuelle
+        if (user?.id) {
+          const userLocation = user.location
+            ? { latitude: user.location.latitude, longitude: user.location.longitude }
+            : undefined;
+          
+          // Vérifier d'abord si une session automatique existe déjà pour la période actuelle
+          try {
+            const { data: existingAutoSessions } = await supabase
+              .from('dhikr_sessions')
+              .select('id, prayer_period, is_active')
+              .eq('is_auto', true)
+              .eq('is_active', true)
+              .limit(1);
+            
+            // Si aucune session automatique n'existe, en créer une automatiquement
+            // L'application crée la session automatiquement, peu importe qui charge la page
+            if (!existingAutoSessions || existingAutoSessions.length === 0) {
+              try {
+                await createOrUpdateAutoWorldSession(user.id, userLocation);
+              } catch (error) {
+                // Si la création échoue (par exemple permissions), essayer avec checkAndUpdateAutoWorldSession pour les admins
+                if (user?.isAdmin) {
+                  try {
+                    await checkAndUpdateAutoWorldSession(user.id, userLocation);
+                  } catch (adminError) {
+                    logger.warn('[CercleDhikr] Erreur lors de la création automatique de la session:', adminError);
+                  }
+                } else {
+                  logger.warn('[CercleDhikr] Impossible de créer la session automatique:', error);
+                }
+              }
+            } else if (user?.isAdmin) {
+              // Si l'utilisateur est admin et qu'une session existe, vérifier et mettre à jour si nécessaire
+              // (pour s'assurer que la session correspond à la période actuelle)
+              await checkAndUpdateAutoWorldSession(user.id, userLocation);
+            }
+          } catch (error) {
+            // Erreur silencieuse
+            logger.warn('[CercleDhikr] Erreur lors de la vérification des sessions automatiques:', error);
+          }
         }
         
-        // Sinon vérifier les sessions publiques
-        try {
-          const userSession = await getUserActiveSession(user.id);
-          if (userSession) {
-            setSelectedSession(userSession);
-            const sessionParticipants = await getDhikrSessionParticipants(userSession.id);
-            setParticipants(Array.isArray(sessionParticipants) ? sessionParticipants : []);
-            setActiveView('active');
+        await loadSessions();
+        
+        // Vérifier si l'utilisateur était déjà dans une session et la recharger
+        if (user?.id) {
+          try {
+            isReloadingSessionRef.current = true;
+            const activeSession = await getUserActiveSession(user.id);
+            if (activeSession) {
+              // Recharger la session avec les données à jour depuis le serveur
+              // Utiliser directement activeSession qui vient de getUserActiveSession
+              // car elle contient déjà les données à jour
+              const updatedSession = await getDhikrSession(activeSession.id);
+              if (updatedSession) {
+                // S'assurer que current_count est bien défini
+                if (updatedSession.current_count === undefined || updatedSession.current_count === null) {
+                  updatedSession.current_count = 0;
+                }
+                
+                setSelectedSession(updatedSession);
+                selectedSessionRef.current = updatedSession;
+                setSelectedPrivateSession(null);
+                const sessionParticipants = await getDhikrSessionParticipants(updatedSession.id);
+                setParticipants(sessionParticipants);
+                setActiveView('active');
+              } else if (activeSession) {
+                // Si getDhikrSession échoue, utiliser activeSession directement
+                if (activeSession.current_count === undefined || activeSession.current_count === null) {
+                  activeSession.current_count = 0;
+                }
+                setSelectedSession(activeSession);
+                selectedSessionRef.current = activeSession;
+                setSelectedPrivateSession(null);
+                const sessionParticipants = await getDhikrSessionParticipants(activeSession.id);
+                setParticipants(sessionParticipants);
+                setActiveView('active');
+              }
+            }
+          } catch (error) {
+            // Erreur silencieuse - l'utilisateur pourra simplement rejoindre une session
+            logger.warn('[CercleDhikr] Erreur lors du rechargement de la session active:', error);
+          } finally {
+            // Attendre un peu avant de permettre les mises à jour Realtime
+            setTimeout(() => {
+              isReloadingSessionRef.current = false;
+            }, 1000);
           }
-        } catch (error) {
-          // Erreur silencieuse
         }
       }
-    }
-    
-    init();
+      
+      init();
+    });
     
     // Traiter les clics toutes les 0.5 secondes (seulement pour les sessions publiques)
     processIntervalRef.current = setInterval(async () => {
       try {
         await processDhikrSessionClicks();
       } catch (error) {
-        console.error('Erreur lors du traitement des clics:', error);
+        // Erreur silencieuse en production
       }
     }, 500);
 
@@ -125,7 +315,7 @@ export function CercleDhikr() {
         clearInterval(processIntervalRef.current);
       }
     };
-  }, [user?.id]);
+  }, [user?.id, route.params]);
 
   // Abonnement en temps réel aux sessions
   useEffect(() => {
@@ -147,8 +337,33 @@ export function CercleDhikr() {
         async (payload) => {
           const updatedSession = payload.new as DhikrSession;
           
+          // Ne pas écraser si on est en train de recharger la session
+          if (isReloadingSessionRef.current) {
+            return;
+          }
+          
           setSelectedSession(prev => {
             if (prev && prev.id === updatedSession.id) {
+              // Ne jamais écraser avec une valeur plus petite que celle actuelle
+              // Cela peut arriver si Realtime reçoit une mise à jour obsolète
+              const localCount = prev.current_count || 0;
+              const serverCount = updatedSession.current_count || 0;
+              
+              // Si la valeur du serveur est plus petite, garder la valeur locale
+              // (cela signifie qu'on a des clics locaux qui ne sont pas encore synchronisés)
+              if (localCount > serverCount) {
+                // Garder la valeur locale mais mettre à jour les autres champs
+                const updated = {
+                  ...updatedSession,
+                  current_count: localCount
+                };
+                selectedSessionRef.current = updated;
+                return updated;
+              }
+              
+              // Si la valeur du serveur est plus grande ou égale, utiliser celle du serveur
+              // (cela signifie que le serveur a la valeur la plus récente)
+              selectedSessionRef.current = updatedSession;
               return updatedSession;
             }
             return prev;
@@ -211,9 +426,9 @@ export function CercleDhikr() {
           table: 'dhikr_session_participants'
         },
         async (payload) => {
-          const sessionId = payload.new?.session_id || payload.old?.session_id;
+          const sessionId = (payload.new as any)?.session_id || (payload.old as any)?.session_id;
           
-          if (selectedSession && selectedSession.id === sessionId) {
+          if (sessionId && selectedSession && selectedSession.id === sessionId) {
             const sessionParticipants = await getDhikrSessionParticipants(sessionId);
             setParticipants(sessionParticipants);
           }
@@ -304,15 +519,33 @@ export function CercleDhikr() {
     try {
       // Charger toutes les sessions actives
       const data = await getActiveDhikrSessions();
+      
       // Filtrer pour ne garder que les sessions publiques (is_private = false ou undefined/null)
       // IMPORTANT: Les sessions publiques créées par l'admin doivent apparaître ici,
       // même si l'admin est le créateur. On ne filtre PAS par created_by.
+      // IMPORTANT: Pour les sessions automatiques (is_auto = true), ne garder que la plus récente
+      // car il ne doit y avoir qu'une seule session mondiale à la fois
       const publicSessions = Array.isArray(data) 
         ? data.filter(s => {
             if (!s) return false;
             // Une session est publique si is_private est explicitement false ou n'est pas défini
             const isPrivate = (s as any).is_private;
-            return isPrivate === false || isPrivate === null || isPrivate === undefined;
+            const isPublic = isPrivate === false || isPrivate === null || isPrivate === undefined;
+            
+            // Si c'est une session automatique, vérifier qu'elle est bien la plus récente
+            if ((s as any).is_auto === true) {
+              // Trouver toutes les sessions automatiques
+              const autoSessions = data.filter((other: any) => other?.is_auto === true);
+              if (autoSessions.length > 1) {
+                // Garder uniquement la plus récente
+                autoSessions.sort((a: any, b: any) => 
+                  new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                );
+                return s.id === autoSessions[0].id;
+              }
+            }
+            
+            return isPublic;
           })
         : [];
       
@@ -397,10 +630,10 @@ export function CercleDhikr() {
     try {
       // Charger uniquement les sessions créées par l'utilisateur (pas les invitées)
       const mySessions = await loadPrivateSessionsFromService(user.id);
-      console.log('Sessions privées chargées:', mySessions);
+      // Sessions privées chargées
       setPrivateSessions(Array.isArray(mySessions) ? mySessions : []);
     } catch (error) {
-      console.error('Erreur lors du chargement des sessions privées:', error);
+      // Erreur silencieuse en production
       setPrivateSessions([]);
     }
   }
@@ -447,7 +680,7 @@ export function CercleDhikr() {
                 }
                 await createNewSession();
               } catch (error) {
-                console.error('Erreur:', error);
+                // Erreur silencieuse en production
                 Alert.alert('Erreur', 'Impossible de quitter la session actuelle');
               }
             },
@@ -490,14 +723,14 @@ export function CercleDhikr() {
 
       if (sessionType === 'private') {
         // Créer une session privée
-        const newPrivateSession = await createPrivateSession(user.id, target);
-        console.log('Nouvelle session privée créée:', newPrivateSession);
+        const newPrivateSession = await createPrivateSession(user.id, target, undefined);
+        // Nouvelle session privée créée
         setSelectedPrivateSession(newPrivateSession);
         setSelectedSession(null);
         setActiveView('active');
         // Recharger les sessions privées pour mettre à jour la liste
         await loadPrivateSessions();
-        console.log('Sessions privées après création:', privateSessions);
+        // Sessions privées mises à jour
       } else {
         // Créer une session publique - Seulement pour les admins
         if (user?.isAdmin !== true) {
@@ -518,7 +751,7 @@ export function CercleDhikr() {
         }
       }
     } catch (error: any) {
-      console.error('Erreur lors de la création de la session:', error);
+      // Erreur silencieuse en production
       Alert.alert('Erreur', error.message || 'Erreur lors de la création de la session');
     } finally {
       setIsCreating(false);
@@ -528,8 +761,25 @@ export function CercleDhikr() {
   }
 
   async function handleJoinSession(session: DhikrSession) {
-    // Plus besoin de vérifier l'authentification - fonctionne sans authentification
-    const currentSession = user?.id ? await getUserActiveSession(user.id) : null;
+    if (!user?.id) {
+      Alert.alert('Erreur', 'Vous devez être connecté pour rejoindre une session.');
+      return;
+    }
+    
+    // Vérifier si l'utilisateur est déjà participant de cette session
+    const isAlreadyParticipant = await isUserParticipant(session.id, user.id);
+    if (isAlreadyParticipant) {
+      // L'utilisateur est déjà dans cette session, simplement l'afficher
+      setSelectedSession(session);
+      setSelectedPrivateSession(null);
+      const sessionParticipants = await getDhikrSessionParticipants(session.id);
+      setParticipants(sessionParticipants);
+      setActiveView('active');
+      return;
+    }
+    
+    // Vérifier si l'utilisateur est dans une autre session
+    const currentSession = await getUserActiveSession(user.id);
     if (currentSession && currentSession.id !== session.id) {
       Alert.alert(
         'Session existante',
@@ -547,7 +797,7 @@ export function CercleDhikr() {
                 }
                 await joinSession(session);
               } catch (error) {
-                console.error('Erreur:', error);
+                // Erreur silencieuse en production
                 Alert.alert('Erreur', 'Impossible de quitter la session actuelle');
               }
             },
@@ -566,14 +816,23 @@ export function CercleDhikr() {
       await joinDhikrSession(session.id, user?.id);
       const updatedSession = await getDhikrSession(session.id);
       if (updatedSession) {
+        // S'assurer que current_count est bien défini
+        if (updatedSession.current_count === undefined || updatedSession.current_count === null) {
+          updatedSession.current_count = 0;
+        }
         setSelectedSession(updatedSession);
+        selectedSessionRef.current = updatedSession;
         const sessionParticipants = await getDhikrSessionParticipants(updatedSession.id);
         setParticipants(sessionParticipants);
         setActiveView('active');
+        // Mettre à jour la liste des sessions où l'utilisateur est participant
+        if (user?.id) {
+          setUserParticipantSessions(prev => new Set([...prev, session.id]));
+        }
         await loadSessions();
       }
     } catch (error: any) {
-      console.error('Erreur lors de la jonction à la session:', error);
+      // Erreur silencieuse en production
       Alert.alert('Erreur', error.message || 'Impossible de rejoindre la session');
     }
   }
@@ -600,7 +859,7 @@ export function CercleDhikr() {
         await loadSessions();
       }, 500);
     } catch (error: any) {
-      console.error('Erreur lors de la sortie de la session:', error);
+      // Erreur silencieuse en production
       Alert.alert('Erreur', error.message || 'Erreur lors de la sortie de la session');
     }
   }
@@ -637,6 +896,11 @@ export function CercleDhikr() {
         // Ensuite sauvegarder
         const success = await addPrivateSessionClick(user.id, selectedPrivateSession.id);
         
+        // Mettre à jour les statistiques utilisateur
+        if (success && user?.id) {
+          incrementUserDhikr(1);
+        }
+        
         if (!success) {
           // Si l'ajout a échoué, recharger depuis le stockage
           const updated = await loadPrivateSessionsFromService(user.id);
@@ -646,7 +910,7 @@ export function CercleDhikr() {
           }
         }
       } catch (error: any) {
-        console.error('Erreur lors de l\'ajout du clic:', error);
+        // Erreur silencieuse en production
         // En cas d'erreur, recharger depuis le stockage
         try {
           const updated = await loadPrivateSessionsFromService(user.id);
@@ -667,7 +931,8 @@ export function CercleDhikr() {
       return;
     }
 
-    if (selectedSession.current_count >= selectedSession.target_count) {
+    // Pour les sessions publiques illimitées, target_count peut être null
+    if (selectedSession.target_count !== null && selectedSession.current_count >= selectedSession.target_count) {
       return;
     }
 
@@ -676,19 +941,41 @@ export function CercleDhikr() {
     }
 
     try {
-      await addDhikrSessionClick(selectedSession.id);
-      await processDhikrSessionClicks();
+      // Mise à jour optimiste de l'UI pour un feedback immédiat
+      const currentCount = selectedSession.current_count || 0;
+      const newCount = selectedSession.target_count !== null 
+        ? Math.min(currentCount + 1, selectedSession.target_count)
+        : currentCount + 1;
       
-      // Recharger la session pour mettre à jour le compteur
-      const updatedSession = await getDhikrSession(selectedSession.id);
-      if (updatedSession) {
-        setSelectedSession({ ...updatedSession }); // Créer un nouvel objet pour forcer le re-render
-        // Recharger aussi les participants
-        const sessionParticipants = await getDhikrSessionParticipants(selectedSession.id);
-        setParticipants(Array.isArray(sessionParticipants) ? sessionParticipants : []);
+      // Mettre à jour l'état local immédiatement
+      const updatedSession = {
+        ...selectedSession,
+        current_count: newCount,
+        is_active: selectedSession.target_count === null || newCount < selectedSession.target_count
+      };
+      setSelectedSession(updatedSession);
+      selectedSessionRef.current = updatedSession;
+      
+      // Ensuite enregistrer le clic (passer l'ID utilisateur pour fiabilité)
+      await addDhikrSessionClick(selectedSession.id, user?.id);
+      
+      // Mettre à jour les statistiques utilisateur
+      if (user?.id) {
+        incrementUserDhikr(1);
       }
+      
+      // Ne pas recharger immédiatement pour éviter que le compteur retombe à 0
+      // La synchronisation se fera via Realtime qui mettra à jour automatiquement
     } catch (error: any) {
-      console.error('Erreur lors de l\'ajout du clic:', error);
+      // En cas d'erreur, recharger la session depuis le serveur
+      try {
+        const updatedSession = await getDhikrSession(selectedSession.id);
+        if (updatedSession) {
+          setSelectedSession({ ...updatedSession });
+        }
+      } catch (reloadError) {
+        // Ignorer l'erreur de rechargement
+      }
       Alert.alert('Erreur', error.message || 'Erreur lors de l\'ajout du clic');
     }
   }
@@ -923,7 +1210,9 @@ export function CercleDhikr() {
                 </View>
               ) : (
                 privateSessions.map((session) => {
-                  const progress = (session.current_count / session.target_count) * 100;
+                  const progress = session.target_count !== null 
+                    ? (session.current_count / session.target_count) * 100 
+                    : 0;
                   return (
                     <View key={session.id} style={[styles.card, { backgroundColor: theme.colors.backgroundSecondary }]}>
                       <View style={styles.sessionHeader}>
@@ -933,7 +1222,9 @@ export function CercleDhikr() {
                           </Text>
                           <View style={styles.sessionMeta}>
                             <Text style={[styles.metaText, { color: theme.colors.textSecondary }]}>
-                              {session.current_count} / {session.target_count}
+                              {session.target_count !== null 
+                                ? `${session.current_count} / ${session.target_count}`
+                                : session.current_count}
                             </Text>
                             <Text style={[styles.metaText, { color: theme.colors.textSecondary, fontSize: 12 }]}>
                               Privée
@@ -985,7 +1276,9 @@ export function CercleDhikr() {
                                     style: 'destructive',
                                     onPress: async () => {
                                       try {
-                                        await deletePrivateSession(user.id, session.id);
+                                        if (user.id) {
+                                          await deletePrivateSession(user.id, session.id);
+                                        }
                                         await loadPrivateSessions();
                                         if (selectedPrivateSession?.id === session.id) {
                                           setSelectedPrivateSession(null);
@@ -1093,27 +1386,53 @@ export function CercleDhikr() {
                 const sessionParticipants = (participants && Array.isArray(participants)) 
                   ? participants.filter(p => p.session_id === session.id)
                   : [];
-                const participantCount = sessionParticipants.length;
+                const participantCount = participantsCountMap[session.id] ?? sessionParticipants.length ?? 0;
                 const isFull = participantCount >= session.max_participants;
-                const progress = (session.current_count / session.target_count) * 100;
+                const progress = session.target_count ? (session.current_count / session.target_count) * 100 : 0;
 
                 return (
                   <View key={session.id} style={[styles.card, { backgroundColor: theme.colors.backgroundSecondary }]}>
                     <View style={styles.sessionHeader}>
                       <View style={styles.sessionInfo}>
-                        <Text style={[styles.sessionDhikr, { color: theme.colors.text }]}>
-                          {session.dhikr_text}
-                        </Text>
+                        {session.session_name && (
+                          <Text style={[styles.sessionName, { color: theme.colors.accent, marginBottom: 4, fontSize: 16, fontWeight: '600' }]}>
+                            {session.session_name}
+                          </Text>
+                        )}
+                        {(() => {
+                          const dhikr = parseDhikrText(session.dhikr_text);
+                          return (
+                            <View>
+                              <Text style={[styles.sessionDhikr, { color: theme.colors.text }]}>
+                                {dhikr.arabic}
+                              </Text>
+                              {dhikr.transliteration && (
+                                <Text style={[styles.sessionDhikrTranslit, { color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 }]}>
+                                  {dhikr.transliteration}
+                                </Text>
+                              )}
+                            </View>
+                          );
+                        })()}
                         <View style={styles.sessionMeta}>
                           <View style={styles.metaItem}>
                             <Users size={16} color={theme.colors.textSecondary} />
-                            <Text style={[styles.metaText, { color: theme.colors.textSecondary }]}>
-                              {participantCount} / {session.max_participants}
-                            </Text>
-                          </View>
                           <Text style={[styles.metaText, { color: theme.colors.textSecondary }]}>
-                            {session.current_count} / {session.target_count}
+                            {participantCount} {session.max_participants ? `/ ${session.max_participants}` : ''}
                           </Text>
+                          </View>
+                          {session.target_count !== null && (
+                            <Text style={[styles.metaText, { color: theme.colors.textSecondary }]}>
+                              {session.target_count !== null 
+                                ? `${session.current_count} / ${session.target_count}`
+                                : session.current_count}
+                            </Text>
+                          )}
+                          {session.target_count === null && (
+                            <Text style={[styles.metaText, { color: theme.colors.textSecondary }]}>
+                              {session.current_count}
+                            </Text>
+                          )}
                         </View>
                       </View>
                       {session.is_active && (
@@ -1149,12 +1468,20 @@ export function CercleDhikr() {
                           styles.joinButtonText,
                           { color: isFull ? theme.colors.textSecondary : theme.colors.background }
                         ]}>
-                          {isFull ? 'Session pleine' : 'Rejoindre'}
+                          {isFull 
+                            ? 'Session pleine' 
+                            : (user?.id && userParticipantSessions.has(session.id)) 
+                              ? 'Continuer' 
+                              : 'Rejoindre'}
                         </Text>
                       </Pressable>
                       
                       {/* Bouton de suppression pour le créateur ou l'admin - Invisible pour les non-admins */}
-                      {user?.id && (session.created_by === user.id || user.isAdmin === true) && (
+                      {/* Pour les sessions automatiques (is_auto), seuls les admins peuvent supprimer */}
+                      {user?.id && (
+                        (session.is_auto === true && user.isAdmin === true) ||
+                        (session.is_auto !== true && (session.created_by === user.id || user.isAdmin === true))
+                      ) && (
                         <Pressable
                           onPress={() => {
                             Alert.alert(
@@ -1195,7 +1522,7 @@ export function CercleDhikr() {
                                         'Session supprimée. Tous les participants ont été automatiquement déconnectés.'
                                       );
                                     } catch (error: any) {
-                                      console.error('Erreur détaillée lors de la suppression:', error);
+                                      // Erreur silencieuse en production
                                       Alert.alert('Erreur', error.message || 'Erreur lors de la suppression');
                                     }
                                   },
@@ -1225,9 +1552,36 @@ export function CercleDhikr() {
               <View style={[styles.card, { backgroundColor: theme.colors.backgroundSecondary }]}>
                 <View style={styles.sessionHeader}>
                   <View style={styles.sessionInfo}>
-                    <Text style={[styles.sessionDhikr, { color: theme.colors.text }]}>
-                      {selectedSession.dhikr_text}
-                    </Text>
+                    {selectedSession.session_name && (
+                      <Text style={[styles.sessionName, { color: theme.colors.accent, marginBottom: 8, fontSize: 18, fontWeight: 'bold' }]}>
+                        {selectedSession.session_name}
+                      </Text>
+                    )}
+                    {(() => {
+                      const dhikr = parseDhikrText(selectedSession.dhikr_text);
+                      return (
+                        <View>
+                          <Text style={[styles.sessionDhikr, { color: theme.colors.text, fontSize: 20 }]}>
+                            {dhikr.arabic}
+                          </Text>
+                          {dhikr.transliteration && (
+                            <Text style={[styles.sessionDhikrTranslit, { color: theme.colors.textSecondary, fontSize: 16, marginTop: 8 }]}>
+                              {dhikr.transliteration}
+                            </Text>
+                          )}
+                          {dhikr.translation && (
+                            <Text style={[styles.sessionDhikrTranslation, { color: theme.colors.textSecondary, fontSize: 15, marginTop: 8, fontStyle: 'italic' }]}>
+                              {dhikr.translation}
+                            </Text>
+                          )}
+                          {dhikr.reference && (
+                            <Text style={[styles.sessionDhikrReference, { color: theme.colors.accent, fontSize: 13, marginTop: 8 }]}>
+                              {dhikr.reference}
+                            </Text>
+                          )}
+                        </View>
+                      );
+                    })()}
                     <View style={styles.sessionMeta}>
                       <View style={styles.metaItem}>
                         <Users size={16} color={theme.colors.textSecondary} />
@@ -1244,20 +1598,27 @@ export function CercleDhikr() {
                     </View>
                   </View>
                   <View style={styles.sessionHeaderActions}>
-                    <Pressable
-                      onPress={handleLeaveSession}
-                      style={({ pressed }) => [
-                        styles.leaveButton,
-                        pressed && styles.buttonPressed
-                      ]}
-                    >
-                      <LogOut size={16} color="#ff6b6b" />
-                      <Text style={styles.leaveButtonText}>Quitter</Text>
-                    </Pressable>
+                    {/* Bouton Quitter - Caché pour les sessions automatiques (mondiales) */}
+                    {selectedSession.is_auto !== true && (
+                      <Pressable
+                        onPress={handleLeaveSession}
+                        style={({ pressed }) => [
+                          styles.leaveButton,
+                          pressed && styles.buttonPressed
+                        ]}
+                      >
+                        <LogOut size={16} color="#ff6b6b" />
+                        <Text style={styles.leaveButtonText}>Quitter</Text>
+                      </Pressable>
+                    )}
                     
                     {/* Bouton de suppression pour le créateur ou l'admin - Invisible pour les non-admins */}
                     {/* Ne pas afficher pour les sessions privées invitées */}
-                    {user?.id && !(selectedSession as any)._isInvitedPrivate && (selectedSession.created_by === user.id || user.isAdmin === true) && (
+                    {/* Pour les sessions automatiques (is_auto), seuls les admins peuvent supprimer */}
+                    {user?.id && !(selectedSession as any)._isInvitedPrivate && (
+                      (selectedSession.is_auto === true && user.isAdmin === true) ||
+                      (selectedSession.is_auto !== true && (selectedSession.created_by === user.id || user.isAdmin === true))
+                    ) && (
                       <Pressable
                         onPress={() => {
                           Alert.alert(
@@ -1315,14 +1676,24 @@ export function CercleDhikr() {
                   targetColor={theme.colors.textSecondary}
                 />
 
-                {/* Click Button */}
-                {selectedSession.is_active && selectedSession.current_count < selectedSession.target_count && (
+                {/* Click Button - Toujours visible si la session est active */}
+                {selectedSession.is_active && (
+                  (selectedSession.target_count === null) || 
+                  (selectedSession.target_count !== null && selectedSession.current_count < selectedSession.target_count)
+                ) && (
                   <Pressable
                     onPress={handleClick}
                     style={({ pressed }) => [
                       styles.clickButton,
-                      { backgroundColor: theme.colors.accent },
-                      pressed && styles.buttonPressed
+                      { 
+                        backgroundColor: theme.colors.accent,
+                        transform: [{ scale: pressed ? 0.95 : 1 }],
+                        shadowColor: theme.colors.accent,
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.4,
+                        shadowRadius: 8,
+                        elevation: 8,
+                      }
                     ]}
                   >
                     <Text style={[styles.clickButtonText, { color: theme.colors.background }]}>
@@ -1332,28 +1703,14 @@ export function CercleDhikr() {
                 )}
               </View>
 
-              {/* Participants List */}
+              {/* Participants - Afficher seulement le nombre */}
               <View style={[styles.card, { backgroundColor: theme.colors.backgroundSecondary }]}>
-                    <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
-                      Participants ({participants && Array.isArray(participants) ? participants.length : 0})
-                    </Text>
-                    {participants && Array.isArray(participants) && participants.map((participant) => (
-                  <View key={participant.id} style={styles.participantItem}>
-                    <View style={[styles.participantAvatar, { backgroundColor: theme.colors.accent }]}>
-                      <Text style={[styles.participantInitial, { color: theme.colors.background }]}>
-                        {(participant.user_name || participant.user_email || 'U')[0].toUpperCase()}
-                      </Text>
-                    </View>
-                    <View style={styles.participantInfo}>
-                      <Text style={[styles.participantName, { color: theme.colors.text }]}>
-                        {participant.user_name || participant.user_email || 'Utilisateur'}
-                      </Text>
-                    </View>
-                    <Text style={[styles.participantCount, { color: theme.colors.accent }]}>
-                      {participant.click_count}
-                    </Text>
-                  </View>
-                ))}
+                <View style={styles.participantsCountContainer}>
+                  <Users size={24} color={theme.colors.accent} />
+                  <Text style={[styles.participantsCountText, { color: theme.colors.text }]}>
+                    {participants && Array.isArray(participants) ? participants.length : 0} participant{participants && participants.length > 1 ? 's' : ''}
+                  </Text>
+                </View>
               </View>
             </View>
           )}
@@ -1380,41 +1737,91 @@ export function CercleDhikr() {
                   )}
                 </View>
                 
-                {/* Bouton de suppression pour le créateur */}
+                {/* Boutons d'action pour le créateur */}
                 {user?.id && selectedPrivateSession.userId === user.id && (
-                  <Pressable
-                    onPress={() => {
-                      Alert.alert(
-                        'Supprimer la session',
-                        'Êtes-vous sûr de vouloir supprimer cette session ? Cette action est irréversible.',
-                        [
-                          { text: 'Annuler', style: 'cancel' },
-                          {
-                            text: 'Supprimer',
-                            style: 'destructive',
-                            onPress: async () => {
-                              try {
-                                await deletePrivateSession(user.id, selectedPrivateSession.id);
-                                setSelectedPrivateSession(null);
-                                setActiveView('my-sessions');
-                                await loadPrivateSessions();
-                                Alert.alert('Succès', 'Session supprimée');
-                              } catch (error: any) {
-                                Alert.alert('Erreur', error.message || 'Erreur lors de la suppression');
-                              }
+                  <View style={styles.sessionHeaderActions}>
+                    {/* Bouton Partager le lien */}
+                    <Pressable
+                      onPress={async () => {
+                        try {
+                          if (!selectedPrivateSession.invite_token) {
+                            Alert.alert('Erreur', 'Token d\'invitation introuvable');
+                            return;
+                          }
+
+                          const inviteLink = generateInviteLink(selectedPrivateSession.id, selectedPrivateSession.invite_token);
+                          const inviteLinkWeb = generateInviteLinkWeb(selectedPrivateSession.id, selectedPrivateSession.invite_token);
+
+                          // Partager via l'API native
+                          // Le deep link fonctionnera si l'app est installée
+                          // Format: ayna://dhikr/invite/SESSION_ID?token=TOKEN
+                          try {
+                            await Share.share({
+                              message: `Rejoignez ma session de dhikr privée !\n\nCliquez sur ce lien pour rejoindre:\n${inviteLinkWeb}\n\n(Assurez-vous d'avoir l'app AYNA installée)`,
+                              title: 'Invitation à une session de dhikr',
+                            });
+                          } catch (shareError) {
+                            // Si le partage échoue, copier dans le presse-papiers
+                            Clipboard.setString(inviteLinkWeb);
+                            Alert.alert(
+                              'Lien copié',
+                              'Le lien d\'invitation a été copié dans le presse-papiers. Vous pouvez le partager avec vos contacts.',
+                              [{ text: 'OK' }]
+                            );
+                          }
+                        } catch (error: any) {
+                          Alert.alert('Erreur', error.message || 'Erreur lors du partage du lien');
+                        }
+                      }}
+                      style={({ pressed }) => [
+                        styles.shareButton,
+                        { backgroundColor: theme.colors.accent },
+                        pressed && styles.buttonPressed
+                      ]}
+                    >
+                      <Share2 size={18} color={theme.colors.background} />
+                      <Text style={[styles.shareButtonText, { color: theme.colors.background }]}>
+                        Partager
+                      </Text>
+                    </Pressable>
+
+                    {/* Bouton de suppression */}
+                    <Pressable
+                      onPress={() => {
+                        Alert.alert(
+                          'Supprimer la session',
+                          'Êtes-vous sûr de vouloir supprimer cette session ? Cette action est irréversible.',
+                          [
+                            { text: 'Annuler', style: 'cancel' },
+                            {
+                              text: 'Supprimer',
+                              style: 'destructive',
+                              onPress: async () => {
+                                try {
+                                  if (user.id) {
+                                    await deletePrivateSession(user.id, selectedPrivateSession.id);
+                                  }
+                                  setSelectedPrivateSession(null);
+                                  setActiveView('my-sessions');
+                                  await loadPrivateSessions();
+                                  Alert.alert('Succès', 'Session supprimée');
+                                } catch (error: any) {
+                                  Alert.alert('Erreur', error.message || 'Erreur lors de la suppression');
+                                }
+                              },
                             },
-                          },
-                        ]
-                      );
-                    }}
-                    style={({ pressed }) => [
-                      styles.deleteSessionButton,
-                      pressed && styles.buttonPressed
-                    ]}
-                  >
-                    <Trash2 size={18} color="#ff6b6b" />
-                    <Text style={styles.deleteSessionButtonText}>Supprimer</Text>
-                  </Pressable>
+                          ]
+                        );
+                      }}
+                      style={({ pressed }) => [
+                        styles.deleteSessionButton,
+                        pressed && styles.buttonPressed
+                      ]}
+                    >
+                      <Trash2 size={18} color="#ff6b6b" />
+                      <Text style={styles.deleteSessionButtonText}>Supprimer</Text>
+                    </Pressable>
+                  </View>
                 )}
               </View>
 
@@ -1428,14 +1835,21 @@ export function CercleDhikr() {
                   targetColor={theme.colors.textSecondary}
                 />
 
-                {/* Click Button */}
+                {/* Click Button - Toujours visible si la session est active */}
                 {selectedPrivateSession.is_active && selectedPrivateSession.current_count < selectedPrivateSession.target_count && (
                   <Pressable
                     onPress={handleClick}
                     style={({ pressed }) => [
                       styles.clickButton,
-                      { backgroundColor: theme.colors.accent },
-                      pressed && styles.buttonPressed
+                      { 
+                        backgroundColor: theme.colors.accent,
+                        transform: [{ scale: pressed ? 0.95 : 1 }],
+                        shadowColor: theme.colors.accent,
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.4,
+                        shadowRadius: 8,
+                        elevation: 8,
+                      }
                     ]}
                   >
                     <Text style={[styles.clickButtonText, { color: theme.colors.background }]}>
@@ -1738,9 +2152,22 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 24,
   },
   clickButtonText: {
     fontSize: 32,
+    fontWeight: '600',
+    fontFamily: 'System',
+  },
+  participantsCountContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 16,
+  },
+  participantsCountText: {
+    fontSize: 18,
     fontWeight: '600',
     fontFamily: 'System',
   },
@@ -1824,6 +2251,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    marginTop: 12,
+  },
+  shareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  shareButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: 'System',
+  },
+  helpText: {
+    fontSize: 12,
+    fontFamily: 'System',
+    marginTop: 8,
+    textAlign: 'center',
   },
 });
 

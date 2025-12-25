@@ -21,16 +21,16 @@ EXPO_PUBLIC_USE_SUPABASE=true
 
 # Configuration API AYNA (optionnel)
 EXPO_PUBLIC_AYNA_IFRAME_URL=
-EXPO_PUBLIC_AYNA_API_PROXY=
+# ⚠️ SÉCURITÉ : EXPO_PUBLIC_AYNA_API_PROXY supprimé - utiliser Supabase Edge Function
 
 # Configuration OpenRouter (optionnel)
-EXPO_PUBLIC_OPENROUTER_API_KEY=
+# ⚠️ SÉCURITÉ : EXPO_PUBLIC_OPENROUTER_API_KEY supprimé - utiliser Supabase Edge Function
 EXPO_PUBLIC_OPENROUTER_SITE_URL=https://ayna.app
 EXPO_PUBLIC_OPENROUTER_SITE_NAME=AYNA
 EXPO_PUBLIC_OPENROUTER_MODEL=meta-llama/llama-3.3-70b-instruct:free
 
 # Configuration Ollama (optionnel)
-EXPO_PUBLIC_OLLAMA_API_KEY=
+# ⚠️ SÉCURITÉ : EXPO_PUBLIC_OLLAMA_API_KEY supprimé - utiliser Supabase Edge Function
 
 # Configuration API Base (optionnel)
 EXPO_PUBLIC_API_BASE_URL=
@@ -47,13 +47,14 @@ EXPO_PUBLIC_QURANAPI_PAGES_DEV=https://quranapi.pages.dev/api
 EXPO_PUBLIC_QURAN_API_BASE=https://apis.quran.foundation/content/api/v4
 EXPO_PUBLIC_QURAN_OAUTH_URL=https://oauth2.quran.foundation
 EXPO_PUBLIC_QURAN_CLIENT_ID=fe9df116-3b96-4b89-92d9-53afd343c1ac
-EXPO_PUBLIC_QURAN_CLIENT_SECRET=ZvlBKxAmYkCr74eBhJVHzBjaqI
+# ⚠️ SÉCURITÉ : EXPO_PUBLIC_QURAN_CLIENT_SECRET supprimé - utiliser Supabase Edge Function pour OAuth
 
 # Configuration Dua & Dhikr (optionnel)
 EXPO_PUBLIC_DUA_DHIKR_BASE=https://dua-dhikr.onrender.com
 
 # Configuration AlQuran Cloud (optionnel)
-EXPO_PUBLIC_ALQURAN_CLOUD_BASE=http://api.alquran.cloud/v1
+# ⚠️ SÉCURITÉ : Forcer HTTPS - HTTP supprimé
+EXPO_PUBLIC_ALQURAN_CLOUD_BASE=https://api.alquran.cloud/v1
 `;
 
 // Vérifier si .env existe déjà

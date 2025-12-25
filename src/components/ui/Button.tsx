@@ -1,6 +1,14 @@
-import React from 'react';
-import { Pressable, Text, StyleSheet, ViewStyle, TextStyle, ActivityIndicator } from 'react-native';
-import { LucideIcon } from 'lucide-react-native';
+import React, { useEffect } from 'react';
+import { Text, StyleSheet, ViewStyle, TextStyle, ActivityIndicator, Pressable, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
+import { LucideIcon, Check } from 'lucide-react-native';
+import { usePressScale } from '@/hooks/useScale';
+import { useHapticFeedback } from '@/hooks/useHapticFeedback';
+import { ANIMATION_DURATION, ANIMATION_VALUES } from '@/utils/animations';
+import { useUser } from '@/contexts/UserContext';
+import { getTheme } from '@/data/themes';
+import { spacing, borderRadius, fontSize, fontWeight, touchTarget } from '@/utils/designTokens';
 
 export type ButtonVariant = 'default' | 'outline' | 'ghost' | 'destructive' | 'secondary';
 export type ButtonSize = 'sm' | 'default' | 'lg' | 'icon';
@@ -17,6 +25,12 @@ export interface ButtonProps {
   style?: ViewStyle;
   textStyle?: TextStyle;
   testID?: string;
+  // Accessibilité
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
+  accessibilityRole?: 'button' | 'link' | 'none';
+  // États supplémentaires
+  success?: boolean;
 }
 
 /**
@@ -47,21 +61,36 @@ export function Button({
   style,
   textStyle,
   testID,
+  accessibilityLabel,
+  accessibilityHint,
+  accessibilityRole = 'button',
+  success = false,
 }: ButtonProps) {
-  const isDisabled = disabled || loading;
+  const { user } = useUser();
+  const theme = getTheme(user?.theme || 'default');
+  const isDisabled = disabled || loading || success;
+  const haptic = useHapticFeedback();
 
-  const getVariantStyles = (): { container: ViewStyle; text: TextStyle } => {
+  const handlePress = () => {
+    if (!isDisabled && onPress) {
+      haptic.light();
+      onPress();
+    }
+  };
+
+  const getVariantStyles = (): { container: ViewStyle; text: TextStyle; useGradient?: boolean; gradientColors?: [string, string, ...string[]] } => {
     const baseContainer: ViewStyle = {
-      borderRadius: 8,
+      borderRadius: borderRadius.md,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 8,
+      gap: spacing.sm,
+      borderWidth: 0,
     };
 
     const baseText: TextStyle = {
       fontFamily: 'System',
-      fontWeight: '500',
+      fontWeight: fontWeight.medium,
     };
 
     switch (variant) {
@@ -69,25 +98,35 @@ export function Button({
         return {
           container: {
             ...baseContainer,
-            backgroundColor: '#FFA500',
+            backgroundColor: 'transparent',
+            overflow: 'hidden',
           },
           text: {
             ...baseText,
-            color: '#0A0F2C',
+            fontWeight: fontWeight.bold,
+            color: theme.colors.background,
+            textShadowColor: 'rgba(0, 0, 0, 0.2)',
+            textShadowOffset: { width: 0, height: 1 },
+            textShadowRadius: 2,
           },
+          useGradient: true,
+          gradientColors: [theme.colors.primary, theme.colors.accent, theme.colors.primary],
         };
       case 'outline':
         return {
           container: {
             ...baseContainer,
             backgroundColor: 'transparent',
-            borderWidth: 1,
-            borderColor: 'rgba(255, 255, 255, 0.3)',
           },
           text: {
             ...baseText,
-            color: '#FFFFFF',
+            color: theme.colors.background,
+            textShadowColor: 'rgba(0, 0, 0, 0.2)',
+            textShadowOffset: { width: 0, height: 1 },
+            textShadowRadius: 2,
           },
+          useGradient: true,
+          gradientColors: [theme.colors.primary, theme.colors.accent, theme.colors.primary],
         };
       case 'ghost':
         return {
@@ -97,35 +136,54 @@ export function Button({
           },
           text: {
             ...baseText,
-            color: '#FFFFFF',
+            color: theme.colors.background,
+            textShadowColor: 'rgba(0, 0, 0, 0.2)',
+            textShadowOffset: { width: 0, height: 1 },
+            textShadowRadius: 2,
           },
+          useGradient: true,
+          gradientColors: [theme.colors.primary, theme.colors.accent, theme.colors.primary],
         };
       case 'destructive':
         return {
           container: {
             ...baseContainer,
-            backgroundColor: '#EF4444',
+            backgroundColor: 'transparent',
+            overflow: 'hidden',
           },
           text: {
             ...baseText,
+            fontWeight: fontWeight.bold,
             color: '#FFFFFF',
+            textShadowColor: 'rgba(0, 0, 0, 0.2)',
+            textShadowOffset: { width: 0, height: 1 },
+            textShadowRadius: 2,
           },
+          useGradient: true,
+          gradientColors: ['#EF4444', '#DC2626', '#EF4444'],
         };
       case 'secondary':
         return {
           container: {
             ...baseContainer,
-            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+            backgroundColor: 'transparent',
           },
           text: {
             ...baseText,
-            color: '#FFFFFF',
+            color: theme.colors.background,
+            textShadowColor: 'rgba(0, 0, 0, 0.2)',
+            textShadowOffset: { width: 0, height: 1 },
+            textShadowRadius: 2,
           },
+          useGradient: true,
+          gradientColors: [theme.colors.primary, theme.colors.accent, theme.colors.primary],
         };
       default:
         return {
           container: baseContainer,
           text: baseText,
+          useGradient: true,
+          gradientColors: [theme.colors.primary, theme.colors.accent, theme.colors.primary],
         };
     }
   };
@@ -135,30 +193,30 @@ export function Button({
       case 'sm':
         return {
           container: {
-            paddingVertical: 8,
-            paddingHorizontal: 12,
-            minHeight: 36,
+            paddingVertical: spacing.sm,
+            paddingHorizontal: spacing.md,
+            minHeight: touchTarget.minimum - spacing.sm,
           },
           text: {
-            fontSize: 14,
+            fontSize: fontSize.sm,
           },
         };
       case 'lg':
         return {
           container: {
-            paddingVertical: 14,
-            paddingHorizontal: 24,
-            minHeight: 48,
+            paddingVertical: spacing.md + spacing.xs,
+            paddingHorizontal: spacing.lg,
+            minHeight: touchTarget.comfortable,
           },
           text: {
-            fontSize: 16,
+            fontSize: fontSize.base,
           },
         };
       case 'icon':
         return {
           container: {
-            width: 40,
-            height: 40,
+            width: touchTarget.minimum,
+            height: touchTarget.minimum,
             padding: 0,
           },
           text: {},
@@ -166,12 +224,12 @@ export function Button({
       default:
         return {
           container: {
-            paddingVertical: 10,
-            paddingHorizontal: 16,
-            minHeight: 40,
+            paddingVertical: spacing.sm + spacing.xs,
+            paddingHorizontal: spacing.base,
+            minHeight: touchTarget.minimum,
           },
           text: {
-            fontSize: 15,
+            fontSize: fontSize.sm + 1,
           },
         };
     }
@@ -179,12 +237,28 @@ export function Button({
 
   const variantStyles = getVariantStyles();
   const sizeStyles = getSizeStyles();
+  const useGradient = variantStyles.useGradient !== false; // Utiliser le gradient pour toutes les variantes sauf destructive
+  const gradientColors: [string, string, ...string[]] = variantStyles.gradientColors || [theme.colors.primary, theme.colors.accent, theme.colors.primary] as [string, string, string];
+
+  // Animations avec Reanimated
+  const opacity = useSharedValue(isDisabled ? 0.5 : 1);
+  const { animatedStyle: scaleStyle, handlePressIn, handlePressOut } = usePressScale();
+
+  useEffect(() => {
+    opacity.value = withTiming(isDisabled ? 0.5 : 1, {
+      duration: ANIMATION_DURATION.FAST,
+    });
+  }, [isDisabled, opacity]);
+
+  const containerAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: opacity.value,
+    };
+  });
 
   const containerStyle: ViewStyle = {
     ...variantStyles.container,
     ...sizeStyles.container,
-    opacity: isDisabled ? 0.5 : 1,
-    ...style,
   };
 
   const textStyleFinal: TextStyle = {
@@ -193,11 +267,36 @@ export function Button({
     ...textStyle,
   };
 
+  // Styles pour le gradient (padding interne)
+  const gradientStyle: ViewStyle = {
+    paddingVertical: size === 'sm' ? spacing.sm : size === 'lg' ? spacing.md + spacing.xs : spacing.md,
+    paddingHorizontal: size === 'sm' ? spacing.md : size === 'lg' ? spacing.lg : spacing.base,
+    borderRadius: borderRadius.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm + spacing.xs,
+    minHeight: size === 'sm' ? touchTarget.minimum - spacing.sm : size === 'lg' ? touchTarget.comfortable : touchTarget.minimum,
+    // Overflow hidden pour les coins arrondis du gradient
+    overflow: 'hidden',
+  };
+
   const renderContent = () => {
     if (loading) {
       return (
         <ActivityIndicator
           size="small"
+          color={variantStyles.text.color}
+          accessibilityLabel="Chargement en cours"
+        />
+      );
+    }
+
+    if (success) {
+      // Icône de succès (checkmark)
+      return (
+        <Check
+          size={size === 'sm' ? 16 : size === 'lg' ? 20 : 18}
           color={variantStyles.text.color}
         />
       );
@@ -214,7 +313,7 @@ export function Button({
       <>
         {iconElement && iconPosition === 'left' && iconElement}
         {typeof children === 'string' ? (
-          <Text style={textStyleFinal}>{children}</Text>
+          <Text style={textStyleFinal} numberOfLines={1} ellipsizeMode="clip">{children}</Text>
         ) : (
           children
         )}
@@ -223,21 +322,63 @@ export function Button({
     );
   };
 
+  const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+  // Si on utilise le gradient (toutes les variantes), wrapper dans LinearGradient
+  if (useGradient) {
+    return (
+      <AnimatedPressable
+        onPress={handlePress}
+        disabled={isDisabled}
+        hitSlop={{ top: spacing.xs, bottom: spacing.xs, left: spacing.xs, right: spacing.xs }}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={[
+          containerStyle,
+          containerAnimatedStyle,
+          scaleStyle,
+          style,
+        ]}
+        testID={testID}
+        accessibilityRole={accessibilityRole}
+        accessibilityLabel={accessibilityLabel || (typeof children === 'string' ? children : undefined)}
+        accessibilityHint={accessibilityHint}
+        accessibilityState={{ disabled: isDisabled, busy: loading }}
+      >
+        <LinearGradient
+          colors={gradientColors}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={gradientStyle}
+        >
+          {renderContent()}
+        </LinearGradient>
+      </AnimatedPressable>
+    );
+  }
+
+  // Branche de fallback pour les variantes sans gradient (non utilisée actuellement)
   return (
-    <Pressable
-      onPress={onPress}
+    <AnimatedPressable
+      onPress={handlePress}
       disabled={isDisabled}
-      style={({ pressed }) => [
+      hitSlop={{ top: spacing.xs, bottom: spacing.xs, left: spacing.xs, right: spacing.xs }}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      style={[
         containerStyle,
-        pressed && !isDisabled && {
-          opacity: 0.8,
-          transform: [{ scale: 0.98 }],
-        },
+        containerAnimatedStyle,
+        scaleStyle,
+        style,
       ]}
       testID={testID}
+      accessibilityRole={accessibilityRole}
+      accessibilityLabel={accessibilityLabel || (typeof children === 'string' ? children : undefined)}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
     >
       {renderContent()}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 

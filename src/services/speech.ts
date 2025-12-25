@@ -20,12 +20,21 @@ export interface TTSOptions {
 
 /**
  * Parle un texte (Text-to-Speech)
+ * Note: Speech.speak() démarre la lecture de manière non-bloquante
+ * La Promise se résout quand la lecture est terminée (ou est arrêtée)
  */
 export async function speak(
   text: string,
   options: TTSOptions = {}
 ): Promise<void> {
   try {
+    console.log('[Speech] speak appelé avec:', { text, options });
+    
+    if (!text || text.trim() === '') {
+      console.warn('[Speech] Texte vide, pas de lecture');
+      return;
+    }
+
     const {
       language = 'fr-FR',
       pitch = 1.0,
@@ -34,15 +43,96 @@ export async function speak(
       volume = 1.0,
     } = options;
 
-    await Speech.speak(text, {
+    console.log('[Speech] Paramètres de lecture:', { language, pitch, rate, quality, volume });
+
+    // Speech.speak() démarre la lecture de manière non-bloquante
+    // Construire les options de manière sécurisée
+    const speechOptions: any = {
       language,
       pitch,
-      rate,
       quality,
       volume,
+    };
+    
+    // Ajouter rate seulement s'il est dans une plage valide
+    // Certaines plateformes peuvent avoir des problèmes avec rate < 0.5
+    // iOS nécessite généralement rate >= 0.5
+    if (rate !== undefined) {
+      if (rate >= 0.5 && rate <= 1.0) {
+        speechOptions.rate = rate;
+      } else if (rate < 0.5) {
+        // Si rate est trop bas, utiliser 0.5 comme minimum
+        speechOptions.rate = 0.5;
+        console.warn('[Speech] Rate trop bas, utilisation de 0.5 comme minimum');
+      } else {
+        // Si rate est trop haut, utiliser 1.0 comme maximum
+        speechOptions.rate = 1.0;
+        console.warn('[Speech] Rate trop haut, utilisation de 1.0 comme maximum');
+      }
+    }
+    
+    console.log('[Speech] Options finales pour Speech.speak:', speechOptions);
+    console.log('[Speech] Texte à lire:', text.substring(0, 50) + '...');
+    
+    try {
+      // Appeler Speech.speak() directement
+      Speech.speak(text, speechOptions);
+      console.log('[Speech] Speech.speak() appelé avec succès');
+      
+      // Vérifier immédiatement si la lecture a commencé (sans attendre)
+      Speech.isSpeakingAsync().then((isSpeaking) => {
+        console.log('[Speech] État de la lecture immédiatement après l\'appel:', isSpeaking);
+      }).catch((error) => {
+        console.error('[Speech] Erreur lors de la vérification immédiate:', error);
+      });
+    } catch (speakError) {
+      console.error('[Speech] Erreur lors de l\'appel de Speech.speak():', speakError);
+      throw speakError;
+    }
+    
+    // Vérifier immédiatement si la lecture a commencé
+    setTimeout(async () => {
+      try {
+        const isSpeaking = await Speech.isSpeakingAsync();
+        console.log('[Speech] État de la lecture après 500ms:', isSpeaking);
+        if (!isSpeaking) {
+          console.warn('[Speech] ATTENTION: La lecture n\'a pas commencé après 500ms');
+        }
+      } catch (error) {
+        console.error('[Speech] Erreur lors de la vérification de l\'état:', error);
+      }
+    }, 500);
+
+    // Vérifier périodiquement si la lecture est terminée
+    return new Promise<void>((resolve) => {
+      let hasStarted = false;
+      const checkInterval = setInterval(async () => {
+        try {
+          const isSpeaking = await Speech.isSpeakingAsync();
+          if (!hasStarted && isSpeaking) {
+            hasStarted = true;
+            console.log('[Speech] Lecture démarrée avec succès');
+          }
+          if (!isSpeaking && hasStarted) {
+            console.log('[Speech] Lecture terminée');
+            clearInterval(checkInterval);
+            resolve();
+          }
+        } catch (error) {
+          console.error('[Speech] Erreur lors de la vérification:', error);
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 200); // Vérifier toutes les 200ms
+
+      // Timeout de sécurité (10 minutes max)
+      setTimeout(() => {
+        console.log('[Speech] Timeout de sécurité atteint');
+        clearInterval(checkInterval);
+        resolve();
+      }, 10 * 60 * 1000);
     });
   } catch (error) {
-    console.error('Erreur lors de la synthèse vocale:', error);
     throw error;
   }
 }
@@ -52,9 +142,11 @@ export async function speak(
  */
 export async function stopSpeaking(): Promise<void> {
   try {
-    await Speech.stop();
+    // Speech.stop() est synchrone et arrête immédiatement la lecture
+    Speech.stop();
   } catch (error) {
-    console.error('Erreur lors de l\'arrêt de la synthèse vocale:', error);
+    // Erreur silencieuse en production
+    console.error('Erreur lors de l\'arrêt de la lecture:', error);
   }
 }
 
@@ -79,7 +171,7 @@ export async function getAvailableLanguages(): Promise<string[]> {
       'en-GB', // Anglais (UK)
     ];
   } catch (error) {
-    console.error('Erreur lors de la récupération des langues:', error);
+    // Erreur silencieuse en production
     return ['fr-FR'];
   }
 }

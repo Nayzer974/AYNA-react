@@ -12,6 +12,9 @@ import { GalaxyBackground } from '@/components/GalaxyBackground';
 import { ArrowLeft } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { trackPageView, trackEvent } from '@/services/analytics';
+import { isValidEmail } from '@/utils/validation';
+import { useRateLimit, RATE_LIMIT_CONFIGS } from '@/utils/rateLimiter';
+import { logLoginAttempt, logRateLimitExceeded } from '@/services/securityLogger';
 
 /**
  * Page de connexion
@@ -45,12 +48,40 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
+
+  // ✅ SÉCURITÉ : Rate limiting pour les tentatives de connexion
+  const { isAllowed: isLoginAllowed, getWaitTime, getRemainingRequests } = useRateLimit(
+    'login_attempts',
+    RATE_LIMIT_CONFIGS.login
+  );
 
   const handleSubmit = async () => {
     setError(null);
     
+    // ✅ SÉCURITÉ : Validation des entrées
     if (!email || !password) {
       setError(t('auth.error.emailPasswordRequired'));
+      return;
+    }
+
+    // ✅ SÉCURITÉ : Validation de l'email
+    if (!isValidEmail(email)) {
+      setError(t('auth.error.invalidEmail'));
+      return;
+    }
+
+    // ✅ SÉCURITÉ : Rate limiting
+    if (!isLoginAllowed()) {
+      const waitTime = getWaitTime();
+      const waitMinutes = Math.ceil(waitTime / 1000 / 60);
+      setError(`Trop de tentatives. Veuillez réessayer dans ${waitMinutes} minute${waitMinutes > 1 ? 's' : ''}.`);
+      Alert.alert(
+        t('auth.error.rateLimit'),
+        `Trop de tentatives de connexion. Veuillez réessayer dans ${waitMinutes} minute${waitMinutes > 1 ? 's' : ''}.`
+      );
+      // ✅ SÉCURITÉ : Logger le dépassement de rate limit
+      await logRateLimitExceeded('login', { email });
       return;
     }
 
@@ -61,10 +92,12 @@ export function Login() {
 
     try {
       setLoading(true);
-      console.log('Tentative de connexion avec:', email);
+      // Tentative de connexion
       await login(email, password);
-      console.log('Connexion réussie, user.id:', user?.id);
+        // Connexion réussie
       trackEvent('login_success', { method: 'email' });
+      // ✅ SÉCURITÉ : Logger la connexion réussie
+      await logLoginAttempt(true, 'email');
       // La navigation sera gérée automatiquement par useEffect quand user.id sera défini
     } catch (err: any) {
       // Ne pas afficher l'erreur si elle concerne juste la récupération des données utilisateur
@@ -74,7 +107,9 @@ export function Login() {
         setError(errorMessage);
         Alert.alert(t('auth.error.loginError'), errorMessage);
         trackEvent('login_failed', { error: errorMessage });
-        console.error('Erreur de connexion:', err);
+        // ✅ SÉCURITÉ : Logger la connexion échouée
+        await logLoginAttempt(false, 'email', errorMessage);
+        // Erreur silencieuse en production
       }
     } finally {
       setLoading(false);

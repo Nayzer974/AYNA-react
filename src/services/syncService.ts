@@ -41,7 +41,7 @@ export async function isOnline(): Promise<boolean> {
     const state = await NetInfo.fetch();
     return state.isConnected === true && state.isInternetReachable === true;
   } catch (error) {
-    console.error('Erreur lors de la vérification de la connexion:', error);
+    // Erreur silencieuse en production
     return false;
   }
 }
@@ -62,7 +62,7 @@ export async function addToSyncQueue(item: Omit<SyncItem, 'id' | 'timestamp' | '
     queue.push(newItem);
     await saveSyncQueue(queue);
   } catch (error) {
-    console.error('Erreur lors de l\'ajout à la file de synchronisation:', error);
+    // Erreur silencieuse en production
   }
 }
 
@@ -75,7 +75,7 @@ export async function getSyncQueue(): Promise<SyncItem[]> {
     if (!raw) return [];
     return JSON.parse(raw);
   } catch (error) {
-    console.error('Erreur lors de la récupération de la file de synchronisation:', error);
+    // Erreur silencieuse en production
     return [];
   }
 }
@@ -87,7 +87,7 @@ async function saveSyncQueue(queue: SyncItem[]): Promise<void> {
   try {
     await AsyncStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
   } catch (error) {
-    console.error('Erreur lors de la sauvegarde de la file de synchronisation:', error);
+    // Erreur silencieuse en production
   }
 }
 
@@ -100,7 +100,7 @@ async function removeFromSyncQueue(itemId: string): Promise<void> {
     const filtered = queue.filter(item => item.id !== itemId);
     await saveSyncQueue(filtered);
   } catch (error) {
-    console.error('Erreur lors de la suppression de la file de synchronisation:', error);
+    // Erreur silencieuse en production
   }
 }
 
@@ -109,7 +109,7 @@ async function removeFromSyncQueue(itemId: string): Promise<void> {
  */
 async function syncItemToSupabase(item: SyncItem): Promise<boolean> {
   if (!supabase) {
-    console.warn('Supabase n\'est pas configuré, impossible de synchroniser');
+    // Supabase n'est pas configuré, impossible de synchroniser
     return false;
   }
 
@@ -121,7 +121,7 @@ async function syncItemToSupabase(item: SyncItem): Promise<boolean> {
         const { data: { user: supabaseUser }, error: userError } = await supabase.auth.getUser();
         
         if (userError || !supabaseUser?.id) {
-          console.error('Erreur lors de la récupération de l\'utilisateur Supabase pour la synchronisation:', userError);
+          // Erreur silencieuse en production
           return false;
         }
 
@@ -146,13 +146,9 @@ async function syncItemToSupabase(item: SyncItem): Promise<boolean> {
           });
         
         if (khalwaError) {
-          console.error('Erreur lors de la synchronisation de la session Khalwa:', khalwaError);
-          // Si c'est une erreur RLS, donner plus de détails
+          // Erreur silencieuse en production
           if (khalwaError.code === '42501') {
-            console.error('❌ Erreur RLS lors de la synchronisation - Vérifiez que :');
-            console.error('  1. Les politiques RLS sont correctement configurées (exécutez fix-all-rls-and-missing-tables.sql)');
-            console.error('  2. L\'utilisateur est bien authentifié dans Supabase');
-            console.error('  3. L\'ID utilisateur correspond à auth.uid()');
+            // Erreur RLS lors de la synchronisation
           }
           return false;
         }
@@ -204,12 +200,12 @@ async function syncItemToSupabase(item: SyncItem): Promise<boolean> {
                 }
                 return true;
               }
-              console.error('Erreur lors de la synchronisation du module visit:', moduleError);
+              // Erreur silencieuse en production
               return false;
             }
             return true;
           } catch (error) {
-            console.error('Erreur lors de la synchronisation du module visit:', error);
+            // Erreur silencieuse en production
             return false;
           }
         } else if (item.data.module) {
@@ -226,7 +222,7 @@ async function syncItemToSupabase(item: SyncItem): Promise<boolean> {
             });
           
           if (usageError) {
-            console.error('Erreur lors de la synchronisation du tracking:', usageError);
+            // Erreur silencieuse en production
             return false;
           }
           return true;
@@ -234,11 +230,11 @@ async function syncItemToSupabase(item: SyncItem): Promise<boolean> {
         return false;
 
       default:
-        console.warn('Type de synchronisation non reconnu:', item.type);
+        // Type de synchronisation non reconnu
         return false;
     }
   } catch (error) {
-    console.error('Erreur lors de la synchronisation:', error);
+    // Erreur silencieuse en production
     return false;
   }
 }
@@ -249,12 +245,12 @@ async function syncItemToSupabase(item: SyncItem): Promise<boolean> {
 export async function syncQueue(): Promise<{ synced: number; failed: number }> {
   const online = await isOnline();
   if (!online) {
-    console.log('Hors ligne, synchronisation reportée');
+    // Hors ligne, synchronisation reportée
     return { synced: 0, failed: 0 };
   }
 
   if (!supabase) {
-    console.warn('Supabase n\'est pas configuré, synchronisation impossible');
+    // Supabase n'est pas configuré, synchronisation impossible
     return { synced: 0, failed: 0 };
   }
 
@@ -279,7 +275,7 @@ export async function syncQueue(): Promise<{ synced: number; failed: number }> {
       
       // Si trop de tentatives, supprimer l'élément (pour éviter une queue infinie)
       if (item.retryCount > 5) {
-        console.warn(`Élément ${item.id} supprimé après 5 tentatives échouées`);
+        // Élément supprimé après 5 tentatives échouées
         await removeFromSyncQueue(item.id);
         failed++;
       } else {
@@ -318,7 +314,7 @@ export async function getSyncStatus(): Promise<SyncStatus> {
       isSyncing: status.isSyncing || false,
     };
   } catch (error) {
-    console.error('Erreur lors de la récupération du statut de synchronisation:', error);
+    // Erreur silencieuse en production
     return {
       isOnline: false,
       lastSyncTime: null,
@@ -340,7 +336,7 @@ async function updateSyncStatus(updates: Partial<SyncStatus>): Promise<void> {
       isSyncing: updated.isSyncing,
     }));
   } catch (error) {
-    console.error('Erreur lors de la mise à jour du statut de synchronisation:', error);
+    // Erreur silencieuse en production
   }
 }
 
@@ -378,7 +374,7 @@ export function setupNetworkListener(onStatusChange?: (isOnline: boolean) => voi
     // Si la connexion revient, synchroniser automatiquement
     if (isConnected) {
       startAutoSync().catch(error => {
-        console.error('Erreur lors de la synchronisation automatique:', error);
+        // Erreur silencieuse en production
       });
     }
   });
@@ -406,9 +402,9 @@ export async function cleanupSyncedData(): Promise<void> {
     // gèrent déjà la priorité Supabase > Local
     // Cette fonction peut être étendue si nécessaire
     
-    console.log('Nettoyage des données synchronisées effectué');
+    // Nettoyage des données synchronisées effectué
   } catch (error) {
-    console.error('Erreur lors du nettoyage des données:', error);
+    // Erreur silencieuse en production
   }
 }
 

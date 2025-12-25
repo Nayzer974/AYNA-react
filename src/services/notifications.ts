@@ -1,165 +1,213 @@
 /**
- * Service de notifications push
- * Utilise expo-notifications pour gérer les notifications locales et push
+ * Service de notifications - Préférences et planification
+ * 
+ * Gère les préférences utilisateur et la planification des notifications locales
  */
 
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
-import Constants from 'expo-constants';
-import { Platform } from 'react-native';
-import { supabase } from './supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
 
-// Configuration des notifications
+export interface NotificationPreferences {
+  enabled: boolean;
+  prayerReminders: boolean;
+  dhikrReminders: boolean;
+  journalReminders: boolean;
+  dailyVerse: boolean;
+  spiritualEvents: boolean;
+  reminderTimes: {
+    morning: string; // HH:MM
+    afternoon: string;
+    evening: string;
+  };
+  quietHours: {
+    enabled: boolean;
+    start: string; // HH:MM
+    end: string; // HH:MM
+  };
+}
+
+const NOTIFICATION_PREFS_KEY = '@ayna_notification_prefs';
+
+// Configurer le comportement des notifications
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
-const NOTIFICATION_TOKEN_KEY = '@ayna_notification_token';
-
 /**
- * Demande les permissions de notification
+ * Vérifie les permissions de notification sans les demander automatiquement
  */
-export async function requestNotificationPermissions(): Promise<boolean> {
-  if (!Device.isDevice) {
-    console.warn('Les notifications push ne fonctionnent que sur un appareil physique');
+export async function checkNotificationPermissions(): Promise<boolean> {
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    return status === 'granted';
+  } catch {
     return false;
   }
-
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-
-  if (finalStatus !== 'granted') {
-    console.warn('Permission de notification refusée');
-    return false;
-  }
-
-  return true;
 }
 
 /**
- * Enregistre le token de notification push
+ * Demande explicitement les permissions de notification
+ * À utiliser uniquement quand l'utilisateur active les notifications dans les paramètres
  */
-export async function registerForPushNotifications(): Promise<string | null> {
+export async function requestNotificationPermissions(): Promise<boolean> {
+  try {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    
+    return finalStatus === 'granted';
+  } catch {
+    return false;
+  }
+}
+
+export async function schedulePrayerReminder(
+  prayerName: string,
+  time: Date
+): Promise<string | null> {
   try {
     const hasPermission = await requestNotificationPermissions();
-    if (!hasPermission) {
-      return null;
-    }
-
-    // Obtenir le token
-    // Utiliser le project ID depuis Constants ou une variable d'environnement
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId || 
-                      Constants.expoConfig?.extra?.expoProjectId ||
-                      process.env.EXPO_PUBLIC_PROJECT_ID;
+    if (!hasPermission) return null;
     
-    if (!projectId) {
-      console.warn('Expo Project ID non configuré. Les notifications push peuvent ne pas fonctionner.');
-    }
-
-    const token = await Notifications.getExpoPushTokenAsync(
-      projectId ? { projectId } : undefined
-    );
-
-    // Sauvegarder le token localement
-    await AsyncStorage.setItem(NOTIFICATION_TOKEN_KEY, token.data);
-
-    // Envoyer le token à Supabase pour l'utilisateur connecté
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      // Mettre à jour le profil utilisateur avec le token
-      await supabase
-        .from('profiles')
-        .update({ push_token: token.data })
-        .eq('id', user.id);
-    }
-
-    return token.data;
-  } catch (error) {
-    console.error('Erreur lors de l\'enregistrement des notifications push:', error);
+    const identifier = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Heure de prière',
+        body: `Il est temps pour ${prayerName}`,
+        sound: true,
+        data: { type: 'prayer', prayerName },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: time,
+      },
+    });
+    
+    return identifier;
+  } catch {
     return null;
   }
 }
 
-/**
- * Planifie une notification locale
- */
-export async function scheduleLocalNotification(
-  title: string,
-  body: string,
-  trigger?: Notifications.NotificationTriggerInput
-): Promise<string> {
-  return await Notifications.scheduleNotificationAsync({
-    content: {
-      title,
-      body,
-      sound: true,
-      priority: Notifications.AndroidNotificationPriority.HIGH,
-    },
-    trigger: trigger || null, // null = immédiat
-  });
+export async function scheduleDhikrReminder(hour: number, minute: number): Promise<string | null> {
+  try {
+    const hasPermission = await requestNotificationPermissions();
+    if (!hasPermission) return null;
+    
+    const identifier = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Rappel de dhikr',
+        body: 'N\'oubliez pas votre moment de dhikr quotidien',
+        sound: true,
+        data: { type: 'dhikr' },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+        hour,
+        minute,
+        repeats: true,
+      },
+    });
+    
+    return identifier;
+  } catch {
+    return null;
+  }
 }
 
-/**
- * Planifie un rappel de prière
- */
-export async function schedulePrayerReminder(
-  prayerName: string,
-  time: Date
-): Promise<string> {
-  return await scheduleLocalNotification(
-    `Heure de ${prayerName}`,
-    `Il est temps pour la prière ${prayerName}`,
-    {
-      date: time,
-      repeats: true,
+export async function scheduleDailyVerse(): Promise<string | null> {
+  try {
+    const hasPermission = await requestNotificationPermissions();
+    if (!hasPermission) return null;
+    
+    const identifier = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Verset du jour',
+        body: 'Votre verset quotidien vous attend',
+        sound: true,
+        data: { type: 'verse' },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+        hour: 8,
+        minute: 0,
+        repeats: true,
+      },
+    });
+    
+    return identifier;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveNotificationPreferences(prefs: NotificationPreferences): Promise<void> {
+  try {
+    await AsyncStorage.setItem(NOTIFICATION_PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    // Erreur silencieuse
+  }
+}
+
+export async function getNotificationPreferences(): Promise<NotificationPreferences> {
+  try {
+    const stored = await AsyncStorage.getItem(NOTIFICATION_PREFS_KEY);
+    if (stored) {
+      return JSON.parse(stored);
     }
-  );
+    return {
+      enabled: false, // Désactivées par défaut
+      prayerReminders: false, // Désactivées par défaut
+      dhikrReminders: false,
+      journalReminders: false,
+      dailyVerse: false, // Désactivées par défaut
+      spiritualEvents: false, // Désactivées par défaut
+      reminderTimes: {
+        morning: '08:00',
+        afternoon: '14:00',
+        evening: '20:00',
+      },
+      quietHours: {
+        enabled: false,
+        start: '22:00',
+        end: '07:00',
+      },
+    };
+  } catch {
+    return {
+      enabled: false, // Désactivées par défaut
+      prayerReminders: false, // Désactivées par défaut
+      dhikrReminders: false,
+      journalReminders: false,
+      dailyVerse: false, // Désactivées par défaut
+      spiritualEvents: false, // Désactivées par défaut
+      reminderTimes: {
+        morning: '08:00',
+        afternoon: '14:00',
+        evening: '20:00',
+      },
+      quietHours: {
+        enabled: false,
+        start: '22:00',
+        end: '07:00',
+      },
+    };
+  }
 }
 
-/**
- * Planifie un rappel pour le Challenge 40 jours
- */
-export async function scheduleChallengeReminder(
-  day: number,
-  time: Date
-): Promise<string> {
-  return await scheduleLocalNotification(
-    `Jour ${day} du Challenge`,
-    `N'oublie pas de compléter ton défi du jour ${day}`,
-    {
-      date: time,
-    }
-  );
-}
-
-/**
- * Annule toutes les notifications planifiées
- */
 export async function cancelAllNotifications(): Promise<void> {
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  try {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+  } catch {
+    // Erreur silencieuse
+  }
 }
-
-/**
- * Annule une notification spécifique
- */
-export async function cancelNotification(notificationId: string): Promise<void> {
-  await Notifications.cancelScheduledNotificationAsync(notificationId);
-}
-
-/**
- * Obtient le token de notification sauvegardé
- */
-export async function getStoredNotificationToken(): Promise<string | null> {
-  return await AsyncStorage.getItem(NOTIFICATION_TOKEN_KEY);
-}
-

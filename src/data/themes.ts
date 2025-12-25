@@ -7,8 +7,12 @@ export interface Theme {
     accent: string;
     background: string;
     backgroundSecondary: string;
+    backgroundTertiary?: string;
     text: string;
     textSecondary: string;
+    error?: string;
+    success?: string;
+    border?: string;
   };
 }
 
@@ -23,7 +27,10 @@ export const themes: Record<string, Theme> = {
       background: '#0A0F2C',
       backgroundSecondary: '#1E1E2F',
       text: '#FFFFFF',
-      textSecondary: 'rgba(255, 255, 255, 0.8)'
+      textSecondary: 'rgba(255, 255, 255, 0.8)',
+      error: '#EF4444',
+      success: '#10B981',
+      border: 'rgba(255, 255, 255, 0.1)'
     }
   },
   ocean: {
@@ -78,9 +85,48 @@ export const themes: Record<string, Theme> = {
       textSecondary: 'rgba(255, 248, 220, 0.8)'
     }
   },
+  galaxy: {
+    id: 'galaxy',
+    name: 'Galaxie',
+    colors: {
+      primary: '#8C7AE6', // Violet/bleu galaxy
+      secondary: '#5F4BB6',
+      accent: '#A29BFE',
+      background: '#0A0E27', // Fond très sombre
+      backgroundSecondary: '#1A1F3A',
+      text: '#E8E4FF',
+      textSecondary: 'rgba(232, 228, 255, 0.8)'
+    }
+  },
+  minimal: {
+    id: 'minimal',
+    name: 'Sombre Minimaliste',
+    colors: {
+      primary: '#E0E0E0', // Gris clair pour les éléments principaux
+      secondary: '#9E9E9E', // Gris moyen
+      accent: '#FFFFFF', // Blanc pur pour les accents
+      background: '#000000', // Noir pur pour le fond
+      backgroundSecondary: '#1A1A1A', // Gris très foncé pour les éléments secondaires
+      text: '#FFFFFF', // Blanc pour le texte
+      textSecondary: 'rgba(255, 255, 255, 0.7)' // Blanc avec transparence
+    }
+  },
 };
 
 export function getTheme(themeId: string): Theme {
-  return themes[themeId] || themes.default;
+  // D'abord vérifier dans les thèmes standards
+  if (themes[themeId]) {
+    return themes[themeId];
+  }
+  
+  // Si c'est un thème personnalisé (commence par 'custom_'), charger depuis AsyncStorage
+  // Note: Pour une implémentation complète, il faudrait charger depuis le service themeCreator
+  // Pour l'instant, retourner le thème par défaut
+  
+  return themes.default;
+}
+
+export function getAllThemes(): Theme[] {
+  return Object.values(themes);
 }
 

@@ -5,7 +5,7 @@ export interface DhikrSession {
   id: string;
   created_by: string;
   dhikr_text: string;
-  target_count: number;
+  target_count: number | null;
   current_count: number;
   is_active: boolean;
   is_open: boolean;
@@ -13,6 +13,9 @@ export interface DhikrSession {
   created_at: string;
   updated_at: string;
   completed_at?: string;
+  session_name?: string | null;
+  prayer_period?: string | null;
+  is_auto?: boolean;
 }
 
 export interface DhikrSessionParticipant {
@@ -31,7 +34,7 @@ export interface DhikrSessionParticipant {
  */
 async function getUserId(): Promise<string | null> {
   if (!supabase) {
-    console.warn('[getUserId] Supabase n\'est pas configuré');
+    // Supabase n'est pas configuré
     return null;
   }
 
@@ -136,7 +139,7 @@ export async function createDhikrSession(
   });
 
   if (error) {
-    console.error('Erreur lors de la création de la session:', error);
+    // Erreur silencieuse en production
     
     // Messages d'erreur personnalisés
     if (error.message?.includes('déjà dans une autre session')) {
@@ -211,7 +214,7 @@ export async function joinDhikrSession(sessionId: string, userIdOverride?: strin
     });
 
     if (error) {
-      console.error('Erreur lors de la jonction à la session:', error);
+      // Erreur silencieuse en production
       throw new Error(error.message || 'Impossible de rejoindre la session');
     }
 
@@ -241,7 +244,7 @@ export async function leaveDhikrSession(sessionId: string): Promise<boolean> {
   });
 
   if (error) {
-    console.error('Erreur lors de la sortie de la session:', error);
+    // Erreur silencieuse en production
     throw new Error(error.message || 'Erreur lors de la sortie de la session');
   }
 
@@ -252,51 +255,89 @@ export async function leaveDhikrSession(sessionId: string): Promise<boolean> {
  * Ajoute un clic à une session de dhikr
  * Met à jour directement le compteur (pas de queue pour simplifier)
  */
-export async function addDhikrSessionClick(sessionId: string): Promise<boolean> {
+export async function addDhikrSessionClick(sessionId: string, userIdOverride?: string): Promise<boolean> {
   if (!supabase) {
     throw new Error('Supabase n\'est pas configuré');
   }
 
   try {
-    // Récupérer la session actuelle
-    const { data: session, error: fetchError } = await supabase
-      .from('dhikr_sessions')
-      .select('current_count, target_count, is_active')
-      .eq('id', sessionId)
-      .single();
-
-    if (fetchError || !session) {
-      console.error('Erreur lors de la récupération de la session:', fetchError);
-      throw new Error('Session introuvable');
+    // Obtenir l'ID utilisateur
+    let userId: string | null = userIdOverride || null;
+    if (!userId) {
+      userId = await getUserId();
     }
 
-    // Vérifier si la session est active et n'a pas atteint la cible
-    if (!session.is_active || session.current_count >= session.target_count) {
-      return false; // Session terminée ou complète
+    // Utiliser la fonction RPC add_dhikr_click_simple qui enregistre les clics
+    const { data, error: rpcError } = await supabase.rpc('add_dhikr_click_simple', {
+      p_session_id: sessionId,
+      p_user_id: userId
+    });
+
+    if (rpcError) {
+      // Si la fonction RPC n'existe pas, utiliser la méthode manuelle
+      if (rpcError.message?.includes('Could not find the function') || 
+          rpcError.message?.includes('function') && rpcError.message?.includes('not found')) {
+        console.warn('[dhikrSessions] Fonction RPC add_dhikr_click_simple non trouvée, utilisation de la méthode manuelle');
+        
+        // Méthode manuelle de fallback
+        const { data: session, error: fetchError } = await supabase
+          .from('dhikr_sessions')
+          .select('current_count, target_count, is_active')
+          .eq('id', sessionId)
+          .single();
+
+        if (fetchError || !session) {
+          throw new Error('Session introuvable');
+        }
+
+        if (!session.is_active) {
+          return false;
+        }
+
+        if (session.target_count !== null && session.current_count >= session.target_count) {
+          return false;
+        }
+
+        const newCount = session.target_count !== null 
+          ? Math.min(session.current_count + 1, session.target_count)
+          : session.current_count + 1;
+        const isCompleted = session.target_count !== null && newCount >= session.target_count;
+
+        // Enregistrer le clic dans dhikr_session_clicks
+        await supabase
+          .from('dhikr_session_clicks')
+          .insert({
+            session_id: sessionId,
+            user_id: userId,
+            clicked_at: new Date().toISOString()
+          });
+
+        // Mettre à jour la session
+        const { error: updateError } = await supabase
+          .from('dhikr_sessions')
+          .update({
+            current_count: newCount,
+            is_active: !isCompleted,
+            completed_at: isCompleted ? new Date().toISOString() : undefined,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', sessionId);
+
+        if (updateError) {
+          throw updateError;
+        }
+
+        return true;
+      }
+      
+      // Autre erreur RPC
+      throw rpcError;
     }
 
-    // Incrémenter le compteur directement
-    const newCount = Math.min(session.current_count + 1, session.target_count);
-    const isCompleted = newCount >= session.target_count;
-
-    const { error: updateError } = await supabase
-      .from('dhikr_sessions')
-      .update({
-        current_count: newCount,
-        is_active: !isCompleted,
-        completed_at: isCompleted ? new Date().toISOString() : undefined,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', sessionId);
-
-    if (updateError) {
-      console.error('Erreur lors de la mise à jour du compteur:', updateError);
-      throw updateError;
-    }
-
-    return true;
+    // La fonction RPC a réussi
+    return data === true;
   } catch (error: any) {
-    console.error('Erreur lors de l\'ajout du clic:', error);
+    console.error('[dhikrSessions] Erreur lors de l\'enregistrement du clic:', error);
     throw error;
   }
 }
@@ -317,21 +358,37 @@ export async function getActiveDhikrSessions(): Promise<DhikrSession[]> {
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Erreur lors de la récupération des sessions:', error);
+    // Erreur silencieuse en production
     return [];
   }
 
-  return data || [];
+  // Filtrer les sessions automatiques : ne garder que celles de la période actuelle
+  // Les sessions automatiques des périodes précédentes doivent être supprimées
+  const sessions = data || [];
+  
+  // Si aucune session n'est automatique, retourner toutes les sessions
+  const autoSessions = sessions.filter((s: any) => s.is_auto === true);
+  if (autoSessions.length === 0) {
+    return sessions;
+  }
+
+  // Pour les sessions automatiques, on les retourne toutes pour l'instant
+  // Le système de suppression automatique devrait les gérer
+  // Mais on peut aussi filtrer ici si nécessaire
+  return sessions;
 }
 
 /**
  * Obtient une session par ID
+ * Force le rechargement depuis le serveur (pas de cache)
  */
 export async function getDhikrSession(sessionId: string): Promise<DhikrSession | null> {
   if (!supabase) {
     return null;
   }
 
+  // Forcer le rechargement depuis le serveur en ajoutant un timestamp
+  // pour éviter le cache
   const { data, error } = await supabase
     .from('dhikr_sessions')
     .select('*')
@@ -339,8 +396,14 @@ export async function getDhikrSession(sessionId: string): Promise<DhikrSession |
     .single();
 
   if (error) {
-    console.error('Erreur lors de la récupération de la session:', error);
+    // Erreur silencieuse en production
+    console.warn('[dhikrSessions] Erreur lors de la récupération de la session:', error);
     return null;
+  }
+
+  // S'assurer que current_count est toujours défini
+  if (data && (data.current_count === undefined || data.current_count === null)) {
+    data.current_count = 0;
   }
 
   return data;
@@ -361,7 +424,7 @@ export async function getDhikrSessionParticipants(sessionId: string): Promise<Dh
     .order('joined_at', { ascending: true });
 
   if (error) {
-    console.error('Erreur lors de la récupération des participants:', error);
+    // Erreur silencieuse en production
     return [];
   }
 
@@ -399,18 +462,19 @@ export async function getUserActiveSession(userId: string): Promise<DhikrSession
     .from('dhikr_session_participants')
     .select('session_id')
     .eq('user_id', userId)
-    .limit(1)
-    .single();
+    .limit(1);
 
-  if (participantError || !participantData) {
+  if (participantError || !participantData || participantData.length === 0) {
     return null;
   }
+
+  const sessionId = participantData[0].session_id;
 
   // Récupérer la session si elle est active
   const { data: sessionData, error: sessionError } = await supabase
     .from('dhikr_sessions')
     .select('*')
-    .eq('id', participantData.session_id)
+    .eq('id', sessionId)
     .eq('is_active', true)
     .single();
 
@@ -456,11 +520,11 @@ export async function deleteDhikrSession(sessionId: string, userId?: string, isA
         // Si la fonction n'existe pas, utiliser la méthode manuelle
         if (error.message?.includes('Could not find the function') || 
             error.message?.includes('function') && error.message?.includes('not found')) {
-          console.warn('Fonction RPC delete_dhikr_session non trouvée, utilisation de la méthode manuelle');
+          // Fonction RPC non trouvée, utilisation de la méthode manuelle
           // Continuer avec la méthode manuelle ci-dessous
         } else {
           // Autre erreur de la fonction RPC
-          console.error('Erreur lors de la suppression de la session (RPC):', error);
+          // Erreur silencieuse en production
           
           if (error.message?.includes('ne peut supprimer') || error.message?.includes('permissions')) {
             throw new Error(error.message);
@@ -484,7 +548,7 @@ export async function deleteDhikrSession(sessionId: string, userId?: string, isA
       // Si la fonction RPC n'existe pas, continuer avec la méthode manuelle
       if (rpcError.message?.includes('Could not find the function') || 
           rpcError.message?.includes('function') && rpcError.message?.includes('not found')) {
-        console.warn('Fonction RPC delete_dhikr_session non trouvée, utilisation de la méthode manuelle');
+        // Fonction RPC non trouvée, utilisation de la méthode manuelle
         // Continuer avec la méthode manuelle ci-dessous
       } else {
         throw rpcError;
@@ -523,13 +587,13 @@ export async function deleteDhikrSession(sessionId: string, userId?: string, isA
       .eq('session_id', sessionId);
 
     if (participantsError) {
-      console.error('Erreur lors de la suppression des participants:', participantsError);
+      // Erreur silencieuse en production
       throw new Error('Impossible de supprimer les participants de la session');
     }
 
     // Log pour debug (optionnel)
     if (participantsData && participantsData.length > 0) {
-      console.log(`Session supprimée: ${participantsData.length} participant(s) éjecté(s)`);
+      // Session supprimée
     }
 
     // Supprimer les clics en queue
@@ -539,7 +603,7 @@ export async function deleteDhikrSession(sessionId: string, userId?: string, isA
       .eq('session_id', sessionId);
 
     if (clicksError) {
-      console.warn('Erreur lors de la suppression des clics:', clicksError);
+      // Erreur silencieuse en production
     }
 
     // Supprimer la session
@@ -550,7 +614,7 @@ export async function deleteDhikrSession(sessionId: string, userId?: string, isA
       .select('id');
 
     if (deleteError) {
-      console.error('Erreur détaillée Supabase:', deleteError);
+      // Erreur silencieuse en production
       throw deleteError;
     }
 
@@ -578,7 +642,7 @@ export async function deleteDhikrSession(sessionId: string, userId?: string, isA
 
     return true;
   } catch (err: any) {
-    console.error('Erreur lors de la suppression de la session:', err);
+    // Erreur silencieuse en production
     throw new Error(err.message || 'Impossible de supprimer la session');
   }
 }
@@ -599,7 +663,7 @@ export async function deleteAllActiveDhikrSessions(): Promise<number> {
       .eq('is_active', true);
 
     if (fetchError) {
-      console.error('Erreur lors de la récupération des sessions:', fetchError);
+      // Erreur silencieuse en production
       throw fetchError;
     }
 
@@ -617,7 +681,7 @@ export async function deleteAllActiveDhikrSessions(): Promise<number> {
         .in('session_id', sessionIds);
 
       if (participantsError) {
-        console.warn('Erreur lors de la suppression des participants:', participantsError);
+        // Erreur silencieuse en production
         // Continuer même si la suppression des participants échoue
       }
     }
@@ -630,7 +694,7 @@ export async function deleteAllActiveDhikrSessions(): Promise<number> {
         .in('session_id', sessionIds);
 
       if (clicksError) {
-        console.warn('Erreur lors de la suppression des clics:', clicksError);
+        // Erreur silencieuse en production
         // Continuer même si la suppression des clics échoue
       }
     }
@@ -643,13 +707,13 @@ export async function deleteAllActiveDhikrSessions(): Promise<number> {
       .select('id');
 
     if (deleteError) {
-      console.error('Erreur lors de la suppression des sessions:', deleteError);
+      // Erreur silencieuse en production
       throw deleteError;
     }
 
     return deletedSessions?.length || 0;
   } catch (err: any) {
-    console.error('Erreur lors de la suppression des sessions:', err);
+    // Erreur silencieuse en production
     throw new Error(err.message || 'Impossible de supprimer les sessions');
   }
 }

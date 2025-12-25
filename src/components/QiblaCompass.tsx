@@ -1,55 +1,95 @@
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated } from 'react-native';
-import Svg, { Circle, Polygon } from 'react-native-svg';
+/**
+ * Composant de boussole Qibla
+ * Rotation simple : rotation = bearingKaaba - heading
+ */
+
+import React, { useEffect } from 'react';
+import { View, StyleSheet } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import Svg, { Circle, Polygon, Text as SvgText } from 'react-native-svg';
 
 interface QiblaCompassProps {
   rotation: number | null;
+  size?: number;
+  showLabels?: boolean;
 }
 
-/**
- * Composant de boussole Qibla avec SVG
- * La flèche pointe vers la Kaaba en fonction de la rotation calculée
- */
-export function QiblaCompass({ rotation }: QiblaCompassProps) {
-  const rotateAnim = useRef(new Animated.Value(rotation !== null ? -rotation : 0)).current;
+export function QiblaCompass({ rotation, size = 280, showLabels = true }: QiblaCompassProps) {
+  const rotationValue = useSharedValue(0);
 
   useEffect(() => {
-    if (rotation !== null) {
-      Animated.timing(rotateAnim, {
-        toValue: -rotation,
-        duration: 80,
-        useNativeDriver: true,
-      }).start();
+    // Rotation directe : rotation = bearingKaaba - heading
+    // Aucune inversion, aucune correction CSS
+    if (typeof rotation === 'number' && Number.isFinite(rotation) && !isNaN(rotation)) {
+      rotationValue.value = withSpring(rotation, {
+        damping: 15,
+        stiffness: 100,
+        mass: 1,
+      });
     }
-  }, [rotation, rotateAnim]);
+  }, [rotation, rotationValue]);
 
-  const animatedStyle = {
-    transform: [{ 
-      rotate: rotateAnim.interpolate({
-        inputRange: [-360, 360],
-        outputRange: ['-360deg', '360deg'],
-      })
-    }],
-  };
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ rotate: `${rotationValue.value}deg` }],
+    };
+  });
+
+  const svgSize = size;
+  const center = svgSize / 2;
+  const radius = svgSize / 2 - 20;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { width: svgSize, height: svgSize }]}>
+      {/* Cercle de la boussole (fixe) */}
+      <Svg width={svgSize} height={svgSize} style={StyleSheet.absoluteFill}>
+        <Circle
+          cx={center}
+          cy={center}
+          r={radius}
+          fill="none"
+          stroke="rgba(255, 255, 255, 0.3)"
+          strokeWidth="2"
+        />
+        {/* Marqueurs cardinaux (fixes) */}
+        {showLabels && ['N', 'E', 'S', 'W'].map((label, index) => {
+          const angle = index * 90;
+          const rad = (angle - 90) * Math.PI / 180;
+          const x = center + (radius - 15) * Math.cos(rad);
+          const y = center + (radius - 15) * Math.sin(rad);
+          return (
+            <SvgText
+              key={label}
+              x={x}
+              y={y + 5}
+              fontSize="16"
+              fontWeight="bold"
+              fill="rgba(255, 255, 255, 0.8)"
+              textAnchor="middle"
+            >
+              {label}
+            </SvgText>
+          );
+        })}
+      </Svg>
+
+      {/* Flèche Qibla (animée) */}
       <Animated.View style={[styles.compassContainer, animatedStyle]}>
-        <Svg width={140} height={140} viewBox="0 0 24 24">
-          {/* Cercle de la boussole */}
-          <Circle
-            cx="12"
-            cy="12"
-            r="10"
-            fill="none"
-            stroke="white"
+        <Svg width={svgSize} height={svgSize}>
+          {/* Flèche principale pointant vers la Kaaba */}
+          <Polygon
+            points={`${center},${center - radius + 10} ${center + 15},${center + 20} ${center},${center + 10} ${center - 15},${center + 20}`}
+            fill="#FFD700"
+            stroke="#FFA500"
             strokeWidth="2"
           />
-          {/* Flèche pointant vers le haut (vers la Kaaba) */}
-          <Polygon
-            points="12,7 14.5,14.5 12,13 9.5,14.5"
-            fill="white"
-            stroke="white"
+          {/* Cercle central */}
+          <Circle
+            cx={center}
+            cy={center}
+            r="8"
+            fill="rgba(255, 255, 255, 0.2)"
+            stroke="rgba(255, 255, 255, 0.5)"
             strokeWidth="1"
           />
         </Svg>
@@ -68,4 +108,3 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
-

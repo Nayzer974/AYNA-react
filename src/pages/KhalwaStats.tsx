@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, InteractionManager } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
@@ -32,7 +32,7 @@ export function KhalwaStats() {
       setStats(statsData);
       setRecentSessions(sessions);
     } catch (error) {
-      console.error('Erreur lors du chargement des statistiques:', error);
+      // Erreur silencieuse en production
     } finally {
       setLoading(false);
     }
@@ -40,7 +40,11 @@ export function KhalwaStats() {
 
   useEffect(() => {
     if (user?.id) {
-      loadStats();
+      // Différer le chargement après les interactions
+      const interaction = InteractionManager.runAfterInteractions(() => {
+        loadStats();
+      });
+      return () => interaction.cancel();
     }
   }, [user?.id, loadStats]);
 

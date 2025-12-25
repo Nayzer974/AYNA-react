@@ -1,39 +1,41 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Compass, AlertCircle, Loader, ArrowLeft } from 'lucide-react-native';
+import { Compass, AlertCircle, Loader, ArrowLeft, Settings } from 'lucide-react-native';
 import { useQibla } from '@/hooks/useQibla';
 import { QiblaCompass } from '@/components/QiblaCompass';
 import { QiblaInfo } from '@/components/QiblaInfo';
+import { CompassDebugScreen } from '@/components/CompassDebugScreen';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GalaxyBackground } from '@/components/GalaxyBackground';
 import { useTranslation } from 'react-i18next';
 
 /**
- * Page Qibla complète
- * Affiche une boussole qui pointe vers la Kaaba en utilisant :
- * - L'API AlAdhan pour obtenir la direction Qibla
- * - Les capteurs du téléphone (magnétomètre) pour l'orientation
- * - Une rotation calculée pour pointer vers la Kaaba
+ * Page Qibla complète avec fusion de capteurs
+ * Implémente la logique Google Maps : bearing_destination - heading_réel
+ * - GPS heading si vitesse > 1.5 m/s
+ * - Capteurs (gyro, accel, mag) sinon
+ * - Déclinaison magnétique pour Nord vrai
  */
 export function QiblaPage() {
   const navigation = useNavigation();
   const { user } = useUser();
   const theme = getTheme(user?.theme || 'default');
   const { t } = useTranslation();
+  const [showDebug, setShowDebug] = useState(false);
   
   const {
-    qiblaAngle,
-    deviceHeading,
+    location,
+    heading,
+    bearingKaaba,
     rotation,
+    pitch,
+    roll,
     loading,
     error,
-    permissionGranted,
-    isSupported,
-    requestPermissionsAndStart,
   } = useQibla();
 
   return (
@@ -49,13 +51,28 @@ export function QiblaPage() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Back Button */}
-          <Pressable
-            onPress={() => navigation.goBack()}
-            style={[styles.backButton, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]}
-          >
-            <ArrowLeft size={24} color={theme.colors.text} />
-          </Pressable>
+          {/* Header avec boutons */}
+          <View style={styles.headerRow}>
+            <Pressable
+              onPress={() => {
+                // Si on est en mode debug, le bouton retour doit juste revenir à la boussole
+                if (showDebug) {
+                  setShowDebug(false);
+                } else {
+                  navigation.goBack();
+                }
+              }}
+              style={[styles.backButton, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]}
+            >
+              <ArrowLeft size={24} color={theme.colors.text} />
+            </Pressable>
+            <Pressable
+              onPress={() => setShowDebug(!showDebug)}
+              style={[styles.debugButton, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]}
+            >
+              <Settings size={20} color={theme.colors.text} />
+            </Pressable>
+          </View>
 
           {/* Titre */}
           <View style={styles.header}>
@@ -82,72 +99,69 @@ export function QiblaPage() {
             </View>
           )}
 
-          {/* Message de support */}
-          {!isSupported && !error && (
-            <View style={[styles.warningCard, { backgroundColor: 'rgba(234, 179, 8, 0.2)', borderColor: 'rgba(234, 179, 8, 0.5)' }]}>
-              <AlertCircle size={20} color="#eab308" />
-              <View style={styles.warningContent}>
-                <Text style={[styles.warningTitle, { color: '#eab308' }]}>
-                  {t('qibla.sensorNotAvailable')}
-                </Text>
-                <Text style={[styles.warningText, { color: '#fde047' }]}>
-                  {t('qibla.sensorNotAvailableMessage')}
-                </Text>
-              </View>
-            </View>
-          )}
+          {/* Écran de debug */}
+          {showDebug && <CompassDebugScreen />}
 
-          {/* État de chargement */}
-          {loading && (
-            <View style={styles.loadingContainer}>
-              <Loader size={32} color={theme.colors.textSecondary} />
-              <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
-                {t('qibla.loading')}
-              </Text>
-            </View>
-          )}
-
-          {/* Bouton d'activation */}
-          {!permissionGranted && isSupported && !error && !loading && (
-            <View style={styles.activationContainer}>
-              <Pressable
-                onPress={requestPermissionsAndStart}
-                style={[styles.activateButton, { backgroundColor: theme.colors.accent }]}
-              >
-                <Compass size={20} color={theme.colors.background} />
-                <Text style={[styles.activateButtonText, { color: theme.colors.background }]}>
-                  {t('qibla.grantPermission')}
-                </Text>
-              </Pressable>
-              <Text style={[styles.activateHint, { color: theme.colors.textSecondary }]}>
-                {t('qibla.permissionMessage')}
-              </Text>
-            </View>
-          )}
-
-          {/* Interface principale de la boussole */}
-          {permissionGranted && !error && !loading && (
+          {/* Interface principale */}
+          {!showDebug && (
             <>
-              {/* Boussole avec flèche */}
-              <View style={styles.compassContainer}>
-                <QiblaCompass rotation={rotation} />
-              </View>
+              {/* Message d'erreur */}
+              {error && (
+                <View style={[styles.errorCard, { backgroundColor: 'rgba(239, 68, 68, 0.2)', borderColor: 'rgba(239, 68, 68, 0.5)' }]}>
+                  <AlertCircle size={20} color="#ef4444" />
+                  <View style={styles.errorContent}>
+                    <Text style={[styles.errorTitle, { color: '#ef4444' }]}>
+                      {t('qibla.error')}
+                    </Text>
+                    <Text style={[styles.errorText, { color: '#fca5a5' }]}>
+                      {error}
+                    </Text>
+                  </View>
+                </View>
+              )}
 
-              {/* Informations détaillées */}
-              <View style={styles.infoContainer}>
-                <QiblaInfo
-                  qiblaAngle={qiblaAngle}
-                  deviceHeading={deviceHeading}
-                  rotation={rotation}
-                />
-              </View>
+              {/* État de chargement */}
+              {loading && (
+                <View style={styles.loadingContainer}>
+                  <Loader size={32} color={theme.colors.textSecondary} />
+                  <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
+                    {t('qibla.loading')}
+                  </Text>
+                </View>
+              )}
 
-              {/* Instructions */}
-              <View style={styles.instructionsContainer}>
-                <Text style={[styles.instructionsText, { color: theme.colors.textSecondary }]}>
-                  {t('qibla.subtitle')}
-                </Text>
-              </View>
+              {/* Interface principale de la boussole */}
+              {!error && !loading && (
+                <>
+                  {/* Boussole avec flèche */}
+                  <View style={styles.compassContainer}>
+                    <QiblaCompass 
+                      rotation={rotation} 
+                      size={280}
+                      showLabels={true}
+                    />
+                  </View>
+
+                  {/* Informations détaillées */}
+                  <View style={styles.infoContainer}>
+                    <QiblaInfo
+                      qiblaAngle={bearingKaaba}
+                      deviceHeading={heading}
+                      rotation={rotation}
+                    />
+                  </View>
+
+                  {/* Instructions */}
+                  <View style={styles.instructionsContainer}>
+                    <Text style={[styles.instructionsText, { color: theme.colors.textSecondary }]}>
+                      {t('qibla.subtitle')}
+                    </Text>
+                    <Text style={[styles.instructionsText, { color: theme.colors.textSecondary, marginTop: 8, fontSize: 12 }]}>
+                      Calibrez le magnétomètre en faisant un mouvement en forme de 8
+                    </Text>
+                  </View>
+                </>
+              )}
             </>
           )}
         </ScrollView>
@@ -167,14 +181,37 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
   },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 16,
+  },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  debugButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sourceIndicator: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
     marginBottom: 16,
-    alignSelf: 'flex-start',
+  },
+  sourceText: {
+    fontSize: 12,
+    fontWeight: '600',
+    fontFamily: 'System',
+    textAlign: 'center',
   },
   header: {
     alignItems: 'center',

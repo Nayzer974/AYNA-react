@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { getSurahWithTranslation, SurahData } from '@/services/quranApi';
 import i18n from '@/i18n';
+import { logger } from '@/utils/logger';
 
 export interface Verse {
   number: number;
@@ -146,6 +147,19 @@ export function QuranProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
+      // Nettoyer le cache corrompu avant de charger
+      try {
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+        const userLang = (i18n.language || 'fr') as 'fr' | 'en' | 'ar';
+        const cacheKeys = [
+          `quran_alquran_cloud_arabic_${surahNumber}`,
+          `quran_alquran_cloud_${userLang}_${surahNumber}`,
+        ];
+        await AsyncStorage.multiRemove(cacheKeys).catch(() => {});
+      } catch (e) {
+        // Ignore cache cleanup errors
+      }
+      
       // Récupérer la langue de l'utilisateur depuis i18n
       const userLang = (i18n.language || 'fr') as 'fr' | 'en' | 'ar';
       const { arabic, translation: french } = await getSurahWithTranslation(surahNumber, userLang);
@@ -156,10 +170,14 @@ export function QuranProvider({ children }: { children: ReactNode }) {
         
         let arabicText = arabicAyah.text;
         let frenchText = frenchAyah?.text || '';
+        const numberInSurah =
+          (arabicAyah as any).numberInSurah ??
+          (arabicAyah as any).verse_number ??
+          index + 1;
         
         // Nettoyer la Basmala du premier verset si nécessaire
         // Conditions : verset 1 ET pas Al-Fatiha (Sourate 1) car pour Al-Fatiha la Basmala est un verset à part entière
-        if (arabicAyah.numberInSurah === 1 && surahNumber !== 1) {
+        if (numberInSurah === 1 && surahNumber !== 1) {
           const originalArabicText = arabicText;
           
           // Utiliser la fonction utilitaire pour retirer la Basmala
@@ -197,7 +215,7 @@ export function QuranProvider({ children }: { children: ReactNode }) {
         
         return {
           number: arabicAyah.number,
-          numberInSurah: arabicAyah.numberInSurah,
+          numberInSurah,
           arabic: arabicText,
           french: frenchText,
           juz: arabicAyah.juz,
@@ -215,7 +233,8 @@ export function QuranProvider({ children }: { children: ReactNode }) {
         language: state.language
       });
     } catch (error: any) {
-      console.error('Error loading surah:', error);
+      logger.error('Error loading surah:', error);
+      
       setState(prev => ({
         ...prev,
         loading: false,

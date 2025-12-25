@@ -37,7 +37,7 @@ async function fetchAllDhikr(): Promise<DhikrItem[]> {
     
     return [];
   } catch (e) {
-    console.warn('Erreur lors de la récupération des dhikr:', e);
+    // Erreur silencieuse en production
     return getFallbackDhikr();
   }
 }
@@ -94,5 +94,52 @@ export async function getDhikrOfDay(preferredLang = 'fr'): Promise<DhikrItem | n
   const dayIndex = Math.floor((Date.now() / 86400000)) % list.length;
   
   return list[dayIndex] || list[0] || null;
+}
+
+/**
+ * Récupère plusieurs dhikr pour un carrousel
+ * 
+ * @param count Nombre de dhikr à récupérer (par défaut: 3)
+ * @param preferredLang Langue préférée (par défaut: 'fr')
+ * @returns Un tableau de dhikr
+ */
+export async function getMultipleDhikr(count = 3, preferredLang = 'fr'): Promise<DhikrItem[]> {
+  const all = await fetchAllDhikr();
+  if (all.length === 0) return getFallbackDhikr().slice(0, count);
+  
+  // Si les données de l'API n'ont pas de traduction, essayer de les extraire du texte
+  const processed = all.map(d => {
+    // Si le texte contient " (traduction)", extraire les deux parties
+    if (d.text && !d.translation && d.text.includes(' (')) {
+      const match = d.text.match(/^(.+?)\s*\((.+?)\)$/);
+      if (match) {
+        return {
+          ...d,
+          text: match[1].trim(),
+          translation: match[2].trim()
+        };
+      }
+    }
+    return d;
+  });
+  
+  // Essayer de trouver des items dans la langue préférée ou en arabe
+  const inLang = processed.filter(d => 
+    (d.language || '').toLowerCase().includes(preferredLang) || 
+    (d.language || '').toLowerCase().includes('ar')
+  );
+  const list = inLang.length > 0 ? inLang : processed;
+  
+  // Calculer l'index de départ basé sur le jour
+  const dayIndex = Math.floor((Date.now() / 86400000)) % list.length;
+  
+  // Récupérer 'count' dhikr en commençant par l'index du jour
+  const result: DhikrItem[] = [];
+  for (let i = 0; i < count; i++) {
+    const index = (dayIndex + i) % list.length;
+    result.push(list[index] || list[0]);
+  }
+  
+  return result;
 }
 

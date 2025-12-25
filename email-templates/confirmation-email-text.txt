@@ -1,0 +1,23 @@
+As-salâmu âlaykum
+
+Bienvenue dans la communauté AYNA !
+
+Pour finaliser votre inscription et accéder à toutes les fonctionnalités, veuillez confirmer votre adresse email en cliquant sur le lien ci-dessous :
+
+{{ .ConfirmationURL }}
+
+Ce lien est valide pendant 24 heures.
+
+Si vous n'avez pas créé de compte, vous pouvez ignorer cet email.
+
+---
+AYNA - Votre compagnon spirituel
+nurayna.com
+
+© 2024 AYNA. Tous droits réservés.
+
+
+
+
+
+

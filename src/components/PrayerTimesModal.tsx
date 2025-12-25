@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, ActivityIndicator, ScrollView, Alert } from 'react-native';
+import Animated, { FadeIn, FadeOut, SlideInDown, SlideInUp } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
-import { X, Check } from 'lucide-react-native';
+import { X, Check, Compass, Clock } from 'lucide-react-native';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
-import { getPrayerTimesByCoords } from '@/services/hijri';
-import * as Location from 'expo-location';
+import { getTodayPrayerTimes, initialize as initializePrayerTimes } from '@/services/PrayerTimeManager';
 import Svg, { Rect, Line } from 'react-native-svg';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LinearGradient } from 'expo-linear-gradient';
+import { GlassCard } from '@/components/ui/GlassCard';
+import { spacing, borderRadius, fontSize, fontWeight, shadows } from '@/utils/designTokens';
 
 interface PrayerTimesModalProps {
   visible: boolean;
@@ -28,13 +32,48 @@ const prayerNames: Record<string, string> = {
  */
 export function PrayerTimesModal({ visible, onClose }: PrayerTimesModalProps) {
   const navigation = useNavigation();
-  const { user } = useUser();
+  const { user, incrementUserPrayer } = useUser();
   const theme = getTheme(user?.theme || 'default');
   const [timings, setTimings] = useState<Record<string, string> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [completedPrayers, setCompletedPrayers] = useState<Set<string>>(new Set());
   const isAuthenticated = Boolean(user?.id);
+
+  // Fonction pour obtenir la clé de stockage pour la date actuelle
+  const getStorageKey = (): string => {
+    const today = new Date();
+    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    return `@ayna_completed_prayers_${dateStr}`;
+  };
+
+  // Charger les prières complétées depuis AsyncStorage
+  const loadCompletedPrayers = async () => {
+    try {
+      const key = getStorageKey();
+      const stored = await AsyncStorage.getItem(key);
+      if (stored) {
+        const prayers = JSON.parse(stored);
+        setCompletedPrayers(new Set(prayers));
+      } else {
+        setCompletedPrayers(new Set());
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des prières complétées:', error);
+      setCompletedPrayers(new Set());
+    }
+  };
+
+  // Sauvegarder les prières complétées dans AsyncStorage
+  const saveCompletedPrayers = async (prayers: Set<string>) => {
+    try {
+      const key = getStorageKey();
+      const prayersArray = Array.from(prayers);
+      await AsyncStorage.setItem(key, JSON.stringify(prayersArray));
+    } catch (error) {
+      console.error('Erreur lors de la sauvegarde des prières complétées:', error);
+    }
+  };
 
   useEffect(() => {
     if (visible) {
@@ -43,6 +82,7 @@ export function PrayerTimesModal({ visible, onClose }: PrayerTimesModalProps) {
       setError(null);
       setTimings(null);
       loadPrayerTimes();
+      loadCompletedPrayers(); // Charger les prières complétées
     } else {
       // Réinitialiser quand le modal se ferme
       setLoading(false);
@@ -55,41 +95,34 @@ export function PrayerTimesModal({ visible, onClose }: PrayerTimesModalProps) {
     try {
       setLoading(true);
       setError(null);
-      
-      let latitude: number;
-      let longitude: number;
-      
-      // Essayer d'abord d'obtenir la localisation actuelle
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          throw new Error('Permission de localisation refusée');
-        }
 
-        const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-          timeout: 10000,
-        });
-        
-        latitude = location.coords.latitude;
-        longitude = location.coords.longitude;
-      } catch (locationError: any) {
-        // Si la géolocalisation échoue, utiliser la localisation de l'utilisateur stockée
-        console.warn('Géolocalisation échouée, utilisation de la localisation du profil:', locationError);
-        
-        const userLocation = user?.location;
-        if (userLocation?.latitude && userLocation?.longitude) {
-          latitude = userLocation.latitude;
-          longitude = userLocation.longitude;
+      // Récupérer les heures de prière du jour depuis le stockage
+      const todayTimings = await getTodayPrayerTimes();
+
+      if (todayTimings) {
+        // Si les heures sont déjà stockées, les utiliser
+        setTimings(todayTimings);
+        console.log('Heures de prière chargées depuis le stockage:', todayTimings);
+      } else {
+        // Si pas de données stockées, initialiser le gestionnaire
+        // Cela va récupérer et stocker les heures de prière
+        const userLocation = user?.location
+          ? {
+              latitude: user.location.latitude,
+              longitude: user.location.longitude,
+            }
+          : undefined;
+
+        await initializePrayerTimes(userLocation);
+
+        // Réessayer de récupérer les heures après l'initialisation
+        const updatedTimings = await getTodayPrayerTimes();
+        if (updatedTimings) {
+          setTimings(updatedTimings);
         } else {
-          throw new Error('Localisation non disponible. Veuillez activer la localisation ou définir votre position dans les paramètres.');
+          throw new Error('Impossible de charger les heures de prière après l\'initialisation');
         }
       }
-
-      // Charger les heures de prière avec les coordonnées obtenues
-      const { data } = await getPrayerTimesByCoords(latitude, longitude);
-      console.log('Heures de prière chargées:', data.timings);
-      setTimings(data.timings);
     } catch (err: any) {
       console.error('Erreur lors du chargement des heures de prière:', err);
       setError(err.message || 'Impossible de charger les heures de prière');
@@ -98,23 +131,78 @@ export function PrayerTimesModal({ visible, onClose }: PrayerTimesModalProps) {
     }
   };
 
-  const togglePrayer = (prayerName: string) => {
+  // Fonction pour vérifier si une prière peut être cochée (heure arrivée ou dépassée)
+  const canCheckPrayer = (prayerName: string): boolean => {
+    if (!timings || !timings[prayerName]) {
+      return false;
+    }
+
+    const prayerTime = timings[prayerName];
+    const now = new Date();
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    
+    // Comparer les heures au format HH:MM
+    const [currentHours, currentMinutes] = currentTime.split(':').map(Number);
+    const [prayerHours, prayerMinutes] = prayerTime.split(':').map(Number);
+    
+    const currentTotalMinutes = currentHours * 60 + currentMinutes;
+    const prayerTotalMinutes = prayerHours * 60 + prayerMinutes;
+    
+    // Gérer le cas spécial de Fajr (première prière de la journée)
+    // Si on est après Isha (dernière prière), on ne peut pas cocher Fajr car c'est le Fajr d'hier
+    if (prayerName === 'Fajr' && timings['Isha']) {
+      const [ishaHours, ishaMinutes] = timings['Isha'].split(':').map(Number);
+      const ishaTotalMinutes = ishaHours * 60 + ishaMinutes;
+      
+      // Si on est après Isha, on ne peut pas cocher Fajr (c'est le Fajr d'hier)
+      if (currentTotalMinutes >= ishaTotalMinutes) {
+        return false;
+      }
+    }
+    
+    // Pour toutes les autres prières, on peut cocher si l'heure actuelle >= heure de la prière
+    return currentTotalMinutes >= prayerTotalMinutes;
+  };
+
+  const togglePrayer = async (prayerName: string) => {
     // Permettre de voir les prières même sans authentification
     // Mais ne pas permettre de les cocher sans être connecté
     if (!isAuthenticated || !user?.id) {
       Alert.alert('Information', 'Connectez-vous pour marquer les prières comme complétées');
       return;
     }
+
+    // Vérifier si l'heure de la prière est arrivée
+    if (!canCheckPrayer(prayerName)) {
+      Alert.alert(
+        'Information',
+        `Vous ne pouvez cocher cette prière qu'après ${timings?.[prayerName] || "l'heure de la prière"}.`
+      );
+      return;
+    }
+    
+    // Vérifier si la prière était déjà complétée AVANT la mise à jour
+    const wasCompleted = completedPrayers.has(prayerName);
     
     setCompletedPrayers(prev => {
       const next = new Set(prev);
-      if (next.has(prayerName)) {
+      
+      if (wasCompleted) {
+        // Décochée - ne rien faire pour les stats
         next.delete(prayerName);
       } else {
+        // Cochée
         next.add(prayerName);
       }
+      // Sauvegarder immédiatement
+      saveCompletedPrayers(next);
       return next;
     });
+    
+    // Appeler incrementUserPrayer APRÈS la mise à jour de l'état local, en dehors de la fonction de mise à jour
+    if (!wasCompleted && incrementUserPrayer) {
+      incrementUserPrayer(1);
+    }
   };
 
   const mainPrayers = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib'];
@@ -171,28 +259,36 @@ export function PrayerTimesModal({ visible, onClose }: PrayerTimesModalProps) {
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        <Pressable 
-          style={styles.modalContent} 
-          onPress={(e) => e.stopPropagation()}
+        <Pressable style={styles.backdrop} onPress={onClose} />
+        <Animated.View
+          entering={FadeIn}
+          exiting={FadeOut}
+          style={[
+            styles.modalContent,
+            {
+              backgroundColor: theme.colors.backgroundSecondary,
+              borderColor: theme.colors.border || 'rgba(255, 255, 255, 0.1)',
+            },
+          ]}
         >
-          <View style={[styles.gradient, { backgroundColor: theme.colors.backgroundSecondary }]}>
-            {/* Header */}
-            <View style={styles.header}>
-              <Text style={[styles.title, { color: theme.colors.text }]}>
-                Heures de prière
-              </Text>
-              <Pressable
-                onPress={onClose}
-                style={({ pressed }) => [
-                  styles.closeButton,
-                  pressed && styles.closeButtonPressed
-                ]}
-              >
-                <X size={24} color={theme.colors.textSecondary} />
-              </Pressable>
-            </View>
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={[styles.title, { color: theme.colors.text }]}>
+              Heures de prière
+            </Text>
+            <Pressable
+              onPress={onClose}
+              style={({ pressed }) => [
+                styles.closeButton,
+                pressed && styles.closeButtonPressed
+              ]}
+            >
+              <X size={24} color={theme.colors.textSecondary} />
+            </Pressable>
+          </View>
 
-            {/* Content */}
+          {/* Content */}
+          <View style={styles.scrollContainer}>
             <ScrollView
               style={styles.scrollView}
               contentContainerStyle={styles.content}
@@ -226,8 +322,11 @@ export function PrayerTimesModal({ visible, onClose }: PrayerTimesModalProps) {
                 </View>
               ) : timings ? (
                 <>
-                  {/* Bouton Boussole Qibla */}
-                  <View style={styles.qiblaButtonContainer}>
+                  {/* Bouton Boussole Qibla - Plus visible */}
+                  <Animated.View 
+                    entering={SlideInDown.delay(50).duration(400)}
+                    style={styles.qiblaButtonContainer}
+                  >
                     <Pressable
                       onPress={() => {
                         onClose();
@@ -235,29 +334,46 @@ export function PrayerTimesModal({ visible, onClose }: PrayerTimesModalProps) {
                       }}
                       style={({ pressed }) => [
                         styles.qiblaButton,
-                        {
-                          backgroundColor: theme.colors.backgroundSecondary,
-                          borderColor: theme.colors.accent,
-                        },
                         pressed && styles.qiblaButtonPressed
                       ]}
                     >
-                      <KaabaIcon size={32} />
-                      <Text style={[styles.qiblaButtonText, { color: theme.colors.text }]}>
-                        Boussole Qibla
-                      </Text>
+                      <LinearGradient
+                        colors={[
+                          theme.colors.accent + '30',
+                          theme.colors.accent + '20',
+                        ]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.qiblaButtonGradient}
+                      >
+                        <View style={styles.qiblaButtonContent}>
+                          <View style={[styles.qiblaIconContainer, { backgroundColor: theme.colors.accent + '40' }]}>
+                            <Compass size={24} color={theme.colors.accent} />
+                          </View>
+                          <View style={styles.qiblaButtonTextContainer}>
+                            <Text style={[styles.qiblaButtonText, { color: theme.colors.text }]}>
+                              Trouver la Qibla
+                            </Text>
+                            <Text style={[styles.qiblaButtonSubtext, { color: theme.colors.textSecondary }]}>
+                              Boussole directionnelle
+                            </Text>
+                          </View>
+                        </View>
+                      </LinearGradient>
                     </Pressable>
-                  </View>
+                  </Animated.View>
 
                   {/* Grille des heures de prière - 2 colonnes */}
                   <View style={styles.prayerTimesGrid}>
                     {mainPrayers.map((key, index) => {
                       const isCompleted = completedPrayers.has(key);
-                      const canToggle = isAuthenticated;
+                      const canCheck = canCheckPrayer(key);
+                      const canToggle = isAuthenticated && canCheck;
                       
                       return (
-                        <View
+                        <Animated.View
                           key={key}
+                          entering={FadeIn.delay(index * 100).duration(400)}
                           style={styles.prayerTimeCardWrapper}
                         >
                           <Pressable
@@ -265,126 +381,229 @@ export function PrayerTimesModal({ visible, onClose }: PrayerTimesModalProps) {
                             disabled={!canToggle}
                             style={({ pressed }) => [
                               styles.prayerTimeCard,
-                              {
-                                backgroundColor: isCompleted 
-                                  ? 'rgba(106, 79, 182, 0.2)' 
-                                  : 'rgba(255, 255, 255, 0.05)',
-                                borderColor: isCompleted 
-                                  ? theme.colors.accent 
-                                  : 'rgba(255, 255, 255, 0.1)',
-                                opacity: canToggle ? 1 : 0.6,
-                              },
                               pressed && canToggle && styles.prayerTimeCardPressed
                             ]}
                           >
-                            <View style={styles.prayerTimeCardContent}>
-                              <View style={styles.prayerTimeLeft}>
-                                {isAuthenticated && (
-                                  <View
-                                    style={[
-                                      styles.checkbox,
-                                      {
-                                        backgroundColor: isCompleted 
-                                          ? theme.colors.accent 
-                                          : 'transparent',
-                                        borderColor: isCompleted 
-                                          ? theme.colors.accent 
-                                          : 'rgba(255, 255, 255, 0.3)',
-                                      }
-                                    ]}
-                                  >
-                                    {isCompleted && (
-                                      <Check size={12} color={theme.colors.background} />
+                            {isCompleted ? (
+                              <LinearGradient
+                                colors={[
+                                  theme.colors.accent + '30',
+                                  theme.colors.accent + '20',
+                                  theme.colors.accent + '15'
+                                ]}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={styles.prayerTimeCardGradient}
+                              >
+                                <View style={styles.prayerTimeCardContent}>
+                                  <View style={styles.prayerTimeLeft}>
+                                    {isAuthenticated && (
+                                      <View
+                                        style={[
+                                          styles.checkbox,
+                                          {
+                                            backgroundColor: theme.colors.accent,
+                                            borderColor: theme.colors.accent,
+                                            ...shadows.sm,
+                                          }
+                                        ]}
+                                      >
+                                        <Check size={14} color={theme.colors.background} />
+                                      </View>
                                     )}
+                                    <Text 
+                                      style={[
+                                        styles.prayerTimeLabel, 
+                                        { 
+                                          color: theme.colors.text,
+                                          textDecorationLine: 'none',
+                                        }
+                                      ]}
+                                      numberOfLines={1}
+                                      adjustsFontSizeToFit={false}
+                                      minimumFontScale={0.85}
+                                    >
+                                      {prayerNames[key] || key}
+                                    </Text>
                                   </View>
-                                )}
-                                <Text 
-                                  style={[
-                                    styles.prayerTimeLabel, 
-                                    { 
-                                      color: theme.colors.textSecondary,
-                                      textDecorationLine: isCompleted ? 'line-through' : 'none',
-                                      opacity: isCompleted ? 0.6 : 1,
-                                    }
-                                  ]}
-                                  numberOfLines={1}
-                                >
-                                  {prayerNames[key] || key}
-                                </Text>
-                              </View>
-                              <Text style={[styles.prayerTimeValue, { color: theme.colors.text }]}>
-                                {timings[key] || '—'}
-                              </Text>
-                            </View>
+                                  <View style={styles.prayerTimeValueContainer}>
+                                    <Clock size={16} color={theme.colors.accent} style={styles.clockIcon} />
+                                    <Text style={[styles.prayerTimeValue, { color: theme.colors.accent }]}>
+                                      {timings[key] || '—'}
+                                    </Text>
+                                  </View>
+                                </View>
+                              </LinearGradient>
+                            ) : (
+                              <GlassCard 
+                                intensity={canCheck ? 20 : 10}
+                                blurType="dark"
+                                style={styles.prayerTimeCardGlass}
+                              >
+                                <View style={styles.prayerTimeCardContent}>
+                                  <View style={styles.prayerTimeLeft}>
+                                    {isAuthenticated && (
+                                      <View
+                                        style={[
+                                          styles.checkbox,
+                                          {
+                                            backgroundColor: 'transparent',
+                                            borderColor: canCheck
+                                              ? 'rgba(255, 255, 255, 0.4)'
+                                              : 'rgba(255, 255, 255, 0.2)',
+                                            opacity: canCheck ? 1 : 0.5,
+                                          }
+                                        ]}
+                                      />
+                                    )}
+                                    <Text 
+                                      style={[
+                                        styles.prayerTimeLabel, 
+                                        { 
+                                          color: theme.colors.textSecondary,
+                                        }
+                                      ]}
+                                      numberOfLines={1}
+                                      adjustsFontSizeToFit={false}
+                                      minimumFontScale={0.85}
+                                    >
+                                      {prayerNames[key] || key}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.prayerTimeValueContainer}>
+                                    <Clock size={16} color={theme.colors.textSecondary} style={styles.clockIcon} />
+                                    <Text style={[styles.prayerTimeValue, { color: theme.colors.text }]}>
+                                      {timings[key] || '—'}
+                                    </Text>
+                                  </View>
+                                </View>
+                              </GlassCard>
+                            )}
                           </Pressable>
-                        </View>
+                        </Animated.View>
                       );
                     })}
                   </View>
 
                   {/* Isha centrée en bas */}
-                  <View style={styles.ishaContainer}>
+                  <Animated.View 
+                    entering={FadeIn.delay(400).duration(400)}
+                    style={styles.ishaContainer}
+                  >
                     <Pressable
-                      onPress={() => isAuthenticated && togglePrayer(ishaPrayer)}
-                      disabled={!isAuthenticated}
-                      style={({ pressed }) => [
-                        styles.ishaCard,
-                        {
-                          borderColor: completedPrayers.has(ishaPrayer)
-                            ? theme.colors.accent
-                            : theme.colors.accent,
-                          borderOpacity: completedPrayers.has(ishaPrayer) ? 1 : 0.3,
-                          opacity: isAuthenticated ? 1 : 0.6,
-                        },
-                        pressed && isAuthenticated && styles.ishaCardPressed
-                      ]}
+                      onPress={() => {
+                        const canCheck = canCheckPrayer(ishaPrayer);
+                        if (isAuthenticated && canCheck) {
+                          togglePrayer(ishaPrayer);
+                        }
+                      }}
+                      disabled={!isAuthenticated || !canCheckPrayer(ishaPrayer)}
+                      style={({ pressed }) => {
+                        const canCheck = canCheckPrayer(ishaPrayer);
+                        const isCompleted = completedPrayers.has(ishaPrayer);
+                        return [
+                          styles.ishaCard,
+                          pressed && isAuthenticated && canCheck && styles.ishaCardPressed
+                        ];
+                      }}
                     >
-                      <View style={styles.ishaCardContent}>
-                        <View style={styles.prayerTimeLeft}>
-                          {isAuthenticated && (
-                            <View
-                              style={[
-                                styles.checkbox,
-                                {
-                                  backgroundColor: completedPrayers.has(ishaPrayer)
-                                    ? theme.colors.accent
-                                    : 'transparent',
-                                  borderColor: completedPrayers.has(ishaPrayer)
-                                    ? theme.colors.accent
-                                    : 'rgba(255, 255, 255, 0.3)',
-                                }
-                              ]}
-                            >
-                              {completedPrayers.has(ishaPrayer) && (
-                                <Check size={12} color={theme.colors.background} />
+                      {completedPrayers.has(ishaPrayer) ? (
+                        <LinearGradient
+                          colors={[
+                            theme.colors.accent + '40',
+                            theme.colors.accent + '30',
+                            theme.colors.accent + '25'
+                          ]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.ishaCardGradient}
+                        >
+                          <View style={styles.ishaCardContent}>
+                            <View style={styles.prayerTimeLeft}>
+                              {isAuthenticated && (
+                                <View
+                                  style={[
+                                    styles.checkbox,
+                                    styles.checkboxLarge,
+                                    {
+                                      backgroundColor: theme.colors.accent,
+                                      borderColor: theme.colors.accent,
+                                      ...shadows.md,
+                                    }
+                                  ]}
+                                >
+                                  <Check size={16} color={theme.colors.background} />
+                                </View>
                               )}
+                              <Text 
+                                style={[
+                                  styles.ishaLabel, 
+                                  { 
+                                    color: theme.colors.text,
+                                  }
+                                ]}
+                              >
+                                {prayerNames[ishaPrayer] || ishaPrayer}
+                              </Text>
                             </View>
-                          )}
-                          <Text 
-                            style={[
-                              styles.ishaLabel, 
-                              { 
-                                color: theme.colors.text,
-                                textDecorationLine: completedPrayers.has(ishaPrayer) ? 'line-through' : 'none',
-                                opacity: completedPrayers.has(ishaPrayer) ? 0.6 : 1,
-                              }
-                            ]}
-                          >
-                            {prayerNames[ishaPrayer] || ishaPrayer}
-                          </Text>
-                        </View>
-                        <Text style={[styles.ishaValue, { color: theme.colors.text }]}>
-                          {timings[ishaPrayer] || '—'}
-                        </Text>
-                      </View>
+                            <View style={styles.prayerTimeValueContainer}>
+                              <Clock size={18} color={theme.colors.accent} style={styles.clockIcon} />
+                              <Text style={[styles.ishaValue, { color: theme.colors.accent }]}>
+                                {timings[ishaPrayer] || '—'}
+                              </Text>
+                            </View>
+                          </View>
+                        </LinearGradient>
+                      ) : (
+                        <GlassCard 
+                          intensity={canCheckPrayer(ishaPrayer) ? 25 : 15}
+                          blurType="dark"
+                          style={styles.ishaCardGlass}
+                        >
+                          <View style={styles.ishaCardContent}>
+                            <View style={styles.prayerTimeLeft}>
+                              {isAuthenticated && (
+                                <View
+                                  style={[
+                                    styles.checkbox,
+                                    styles.checkboxLarge,
+                                    {
+                                      backgroundColor: 'transparent',
+                                      borderColor: canCheckPrayer(ishaPrayer)
+                                        ? 'rgba(255, 255, 255, 0.4)'
+                                        : 'rgba(255, 255, 255, 0.2)',
+                                      opacity: canCheckPrayer(ishaPrayer) ? 1 : 0.5,
+                                    }
+                                  ]}
+                                />
+                              )}
+                              <Text 
+                                style={[
+                                  styles.ishaLabel, 
+                                  { 
+                                    color: theme.colors.text,
+                                  }
+                                ]}
+                              >
+                                {prayerNames[ishaPrayer] || ishaPrayer}
+                              </Text>
+                            </View>
+                            <View style={styles.prayerTimeValueContainer}>
+                              <Clock size={18} color={theme.colors.textSecondary} style={styles.clockIcon} />
+                              <Text style={[styles.ishaValue, { color: theme.colors.text }]}>
+                                {timings[ishaPrayer] || '—'}
+                              </Text>
+                            </View>
+                          </View>
+                        </GlassCard>
+                      )}
                     </Pressable>
-                  </View>
+                  </Animated.View>
                 </>
               ) : null}
             </ScrollView>
           </View>
-        </Pressable>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -393,28 +612,30 @@ export function PrayerTimesModal({ visible, onClose }: PrayerTimesModalProps) {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
+    zIndex: 9999,
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
   },
   modalContent: {
-    width: '90%',
+    width: '100%',
     maxWidth: 500,
-    maxHeight: '80%',
-    borderRadius: 24,
+    height: '85%',
+    maxHeight: 600,
+    borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.5,
-    shadowRadius: 60,
-    elevation: 20,
-    backgroundColor: 'transparent',
-  },
-  gradient: {
-    width: '100%',
-    flex: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+    position: 'relative',
+    zIndex: 10000,
   },
   header: {
     flexDirection: 'row',
@@ -436,6 +657,10 @@ const styles = StyleSheet.create({
   closeButtonPressed: {
     opacity: 0.7,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  scrollContainer: {
+    flex: 1,
+    width: '100%',
   },
   scrollView: {
     flex: 1,
@@ -480,24 +705,49 @@ const styles = StyleSheet.create({
     fontFamily: 'System',
   },
   qiblaButtonContainer: {
-    marginBottom: 20,
+    marginBottom: 24,
+    marginTop: 8,
   },
   qiblaButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 16,
-    borderWidth: 2,
+    borderRadius: borderRadius.lg,
+    overflow: 'hidden',
+    ...shadows.md,
   },
   qiblaButtonPressed: {
-    opacity: 0.7,
+    transform: [{ scale: 0.98 }],
+  },
+  qiblaButtonGradient: {
+    paddingVertical: spacing.base + 2,
+    paddingHorizontal: spacing.base + 4,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  qiblaButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: spacing.base,
+  },
+  qiblaIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.sm,
+  },
+  qiblaButtonTextContainer: {
+    flex: 1,
+    gap: 4,
   },
   qiblaButtonText: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
+    fontFamily: 'System',
+  },
+  qiblaButtonSubtext: {
+    fontSize: 14,
+    fontWeight: '400',
     fontFamily: 'System',
   },
   prayerTimesGrid: {
@@ -510,55 +760,99 @@ const styles = StyleSheet.create({
     width: '48%',
   },
   prayerTimeCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
+    borderRadius: borderRadius.lg,
+    overflow: 'hidden',
+    ...shadows.md,
   },
   prayerTimeCardPressed: {
-    opacity: 0.7,
+    transform: [{ scale: 0.97 }],
+  },
+  prayerTimeCardGradient: {
+    padding: spacing.base,
+    borderRadius: borderRadius.lg,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  prayerTimeCardGlass: {
+    padding: spacing.base,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   prayerTimeCardContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
+    minWidth: 0, // Permet aux enfants flex de se rétrécir
+  },
+  prayerTimeValueContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    flexShrink: 0, // Empêche le container de l'heure de rétrécir
+  },
+  clockIcon: {
+    opacity: 0.7,
   },
   prayerTimeLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     flex: 1,
+    minWidth: 0, // Permet au texte de se rétrécir si nécessaire
   },
   checkbox: {
     width: 20,
     height: 20,
-    borderRadius: 4,
+    borderRadius: borderRadius.sm,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0, // Empêche la checkbox de rétrécir
+  },
+  checkboxLarge: {
+    width: 24,
+    height: 24,
+    flexShrink: 0,
   },
   prayerTimeLabel: {
     fontSize: 14,
     fontWeight: '500',
     fontFamily: 'System',
     flex: 1,
+    flexShrink: 1, // Permet au texte de se rétrécir
+    minWidth: 0, // Important pour flexShrink
   },
   prayerTimeValue: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
     fontFamily: 'System',
     fontVariant: ['tabular-nums'],
+    letterSpacing: 0.5,
   },
   ishaContainer: {
     marginTop: 4,
   },
   ishaCard: {
-    borderRadius: 16,
-    borderWidth: 2,
-    padding: 20,
+    borderRadius: borderRadius.lg,
+    overflow: 'hidden',
+    ...shadows.lg,
   },
   ishaCardPressed: {
-    opacity: 0.7,
+    transform: [{ scale: 0.98 }],
+  },
+  ishaCardGradient: {
+    padding: spacing.base + 4,
+    borderRadius: borderRadius.lg,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  ishaCardGlass: {
+    padding: spacing.base + 4,
+    borderRadius: borderRadius.lg,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   ishaCardContent: {
     flexDirection: 'row',

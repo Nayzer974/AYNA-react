@@ -30,6 +30,7 @@ export async function trackEvent(
   properties?: Record<string, any>
 ): Promise<void> {
   try {
+    if (!supabase) return;
     const { data: { user } } = await supabase.auth.getUser();
     
     const event: AnalyticsEvent = {
@@ -46,7 +47,7 @@ export async function trackEvent(
     await AsyncStorage.setItem(ANALYTICS_KEY, JSON.stringify(events));
 
     // Envoyer à Supabase si connecté
-    if (user) {
+    if (user && supabase) {
       await supabase.from('analytics_events').insert({
         user_id: user.id,
         event_name: eventName,
@@ -55,7 +56,7 @@ export async function trackEvent(
       });
     }
   } catch (error) {
-    console.error('Erreur lors du tracking d\'événement:', error);
+    // Erreur silencieuse en production
   }
 }
 
@@ -120,6 +121,7 @@ export async function syncAnalyticsEvents(): Promise<void> {
     if (!storedEvents) return;
 
     const events: AnalyticsEvent[] = JSON.parse(storedEvents);
+    if (!supabase) return;
     const { data: { user } } = await supabase.auth.getUser();
     
     if (!user || events.length === 0) return;
@@ -132,35 +134,116 @@ export async function syncAnalyticsEvents(): Promise<void> {
       created_at: new Date(event.timestamp).toISOString(),
     }));
 
+    if (supabase) {
     await supabase.from('analytics_events').insert(eventsToInsert);
+    }
 
     // Vider le cache local après synchronisation réussie
     await AsyncStorage.removeItem(ANALYTICS_KEY);
   } catch (error) {
-    console.error('Erreur lors de la synchronisation des analytics:', error);
+    // Erreur silencieuse en production
   }
 }
 
 /**
  * Obtient les statistiques analytics pour un utilisateur
+ * Fusionne les événements locaux (AsyncStorage) avec ceux de Supabase
+ * pour inclure les activités récentes même si elles ne sont pas encore synchronisées
  */
 export async function getUserAnalytics(userId: string): Promise<any> {
   try {
-    const { data, error } = await supabase
-      .from('analytics_events')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(1000);
+    // Récupérer les événements locaux (y compris ceux du jour)
+    const storedEvents = await AsyncStorage.getItem(ANALYTICS_KEY);
+    const localEvents: AnalyticsEvent[] = storedEvents ? JSON.parse(storedEvents) : [];
+    
+    // Filtrer uniquement les événements de l'utilisateur actuel
+    const userLocalEvents = localEvents.filter(e => e.userId === userId);
 
-    if (error) throw error;
+    // Récupérer les événements de Supabase (sans limite pour récupérer toutes les données depuis la création du compte)
+    let remoteEvents: any[] = [];
+    try {
+      // Récupérer tous les événements par batch pour éviter les limites
+      let hasMore = true;
+      let offset = 0;
+      const batchSize = 1000;
+      
+      if (!supabase) return [];
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('analytics_events')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .range(offset, offset + batchSize - 1);
+
+        if (error) {
+          console.warn('[getUserAnalytics] Erreur récupération batch:', error);
+          hasMore = false;
+        } else if (data && data.length > 0) {
+          remoteEvents = [...remoteEvents, ...data];
+          offset += batchSize;
+          // Si on a récupéré moins que le batch size, on a tout récupéré
+          if (data.length < batchSize) {
+            hasMore = false;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+    } catch (error) {
+      console.warn('[getUserAnalytics] Erreur récupération événements Supabase:', error);
+      // Erreur silencieuse, on continue avec les événements locaux uniquement
+    }
+
+    // Fusionner les événements locaux et distants
+    // Convertir les événements locaux au format Supabase pour uniformiser
+    const normalizedLocalEvents = userLocalEvents.map(event => ({
+      id: `local_${event.timestamp}`,
+      user_id: event.userId,
+      event_name: event.name,
+      properties: event.properties || {},
+      created_at: new Date(event.timestamp).toISOString(),
+      timestamp: event.timestamp, // Garder le timestamp pour le filtrage
+    }));
+
+    // Convertir les événements distants pour inclure le timestamp
+    const normalizedRemoteEvents = remoteEvents.map(event => ({
+      ...event,
+      timestamp: event.created_at ? new Date(event.created_at).getTime() : Date.now(),
+    }));
+
+    // Fusionner en évitant les doublons (basé sur event_name + timestamp)
+    const eventMap = new Map<string, any>();
+    
+    // Ajouter d'abord les événements distants
+    normalizedRemoteEvents.forEach(event => {
+      const key = `${event.event_name}_${event.timestamp}`;
+      eventMap.set(key, event);
+    });
+    
+    // Ajouter les événements locaux (ils peuvent être plus récents)
+    normalizedLocalEvents.forEach(event => {
+      const key = `${event.event_name}_${event.timestamp}`;
+      // Les événements locaux ont priorité s'ils sont plus récents
+      const existing = eventMap.get(key);
+      if (!existing || event.timestamp > existing.timestamp) {
+        eventMap.set(key, event);
+      }
+    });
+
+    // Convertir en tableau et trier par timestamp (plus récent en premier)
+    const allEvents = Array.from(eventMap.values()).sort((a, b) => {
+      const timeA = a.timestamp || (a.created_at ? new Date(a.created_at).getTime() : 0);
+      const timeB = b.timestamp || (b.created_at ? new Date(b.created_at).getTime() : 0);
+      return timeB - timeA;
+    });
 
     return {
-      totalEvents: data?.length || 0,
-      events: data,
+      totalEvents: allEvents.length,
+      events: allEvents,
     };
   } catch (error) {
-    console.error('Erreur lors de la récupération des analytics:', error);
+    // Erreur silencieuse en production
     return { totalEvents: 0, events: [] };
   }
 }

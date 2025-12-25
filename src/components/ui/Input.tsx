@@ -1,5 +1,6 @@
 import React from 'react';
 import { TextInput, StyleSheet, View, Text, ViewStyle, TextStyle, TextInputProps } from 'react-native';
+import { spacing, borderRadius, fontSize, fontWeight, touchTarget } from '@/utils/designTokens';
 
 export interface InputProps extends TextInputProps {
   label?: string;
@@ -51,12 +52,12 @@ export function Input({
         <TextInput
           style={[
             styles.input,
-            leftIcon && styles.inputWithLeftIcon,
-            rightIcon && styles.inputWithRightIcon,
-            error && styles.inputError,
+            leftIcon ? styles.inputWithLeftIcon : undefined,
+            rightIcon ? styles.inputWithRightIcon : undefined,
+            error ? styles.inputError : undefined,
             inputStyle,
             style,
-          ]}
+          ].filter(Boolean)}
           placeholderTextColor="rgba(255, 255, 255, 0.5)"
           {...textInputProps}
         />
@@ -79,14 +80,14 @@ export function Input({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 16,
+    marginBottom: spacing.base,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
     fontFamily: 'System',
     color: '#FFFFFF',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -95,40 +96,40 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    height: 48,
-    paddingHorizontal: 16,
-    borderRadius: 12,
+    height: touchTarget.comfortable,
+    paddingHorizontal: spacing.base,
+    borderRadius: borderRadius.md,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: fontSize.base,
     fontFamily: 'System',
   },
   inputWithLeftIcon: {
-    paddingLeft: 48,
+    paddingLeft: touchTarget.comfortable,
   },
   inputWithRightIcon: {
-    paddingRight: 48,
+    paddingRight: touchTarget.comfortable,
   },
   inputError: {
     borderColor: '#EF4444',
   },
   leftIconContainer: {
     position: 'absolute',
-    left: 12,
+    left: spacing.md,
     zIndex: 1,
   },
   rightIconContainer: {
     position: 'absolute',
-    right: 12,
+    right: spacing.md,
     zIndex: 1,
   },
   error: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'System',
     color: '#EF4444',
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
 });
 

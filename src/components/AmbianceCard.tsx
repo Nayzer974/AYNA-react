@@ -70,8 +70,7 @@ export function AmbianceCard({
             {
               backgroundColor: cardBg,
               borderColor: borderColor,
-              shadowColor: isActive ? (ambianceTheme?.accentColor || '#FFD369') : '#000',
-              shadowOpacity: isActive ? 0.2 : 0.3,
+              // Suppression des shadowColor/shadowOpacity dynamiques pour Android
             },
           ]}
         >
@@ -126,9 +125,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 24,
     borderWidth: 2,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 16,
-    elevation: 8,
+    // Ombres simplifiées pour Android - elevation réduite
+    elevation: 3, // Réduit de 8 à 3 pour alléger le GPU
     minHeight: 180, // Hauteur minimale pour assurer une taille uniforme
     justifyContent: 'center',
   },

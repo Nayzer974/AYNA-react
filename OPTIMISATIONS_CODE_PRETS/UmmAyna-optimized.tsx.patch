@@ -1,0 +1,108 @@
+// ============================================
+// OPTIMISATION UMMAYNA.TSX - React.memo Amélioré
+// ============================================
+// 
+// Instructions :
+// 1. Remplacer la fonction de comparaison React.memo
+// 2. Optimiser renderPost
+//
+// Gain estimé : ~100ms par interaction
+
+// ========== DANS LE COMPOSANT UMMAYNA ==========
+
+export function UmmAyna() {
+  // ... existing code ...
+
+  // ✅ OPTIMISÉ : Fonction de comparaison améliorée
+  const PostItemComponent = React.memo(function PostItem({
+    post,
+    user,
+    isAdmin,
+    theme,
+    onLike,
+    onDelete,
+    onBan,
+  }: {
+    post: Post;
+    index: number;
+    user?: any;
+    isAdmin: boolean;
+    theme: ReturnType<typeof getTheme>;
+    onLike: (post: Post) => void;
+    onDelete: (postId: string, isAdminDelete?: boolean) => void;
+    onBan: (userId: string, userName: string) => void;
+  }) {
+    const initials = useMemo(() => {
+      const name = post.userName || 'U';
+      return name.substring(0, 1).toUpperCase();
+    }, [post.userName]);
+
+    const canDelete = user?.id && (user.id === post.userId || isAdmin);
+    const canBan = isAdmin && user?.id !== post.userId;
+
+    return (
+      <View
+        style={[
+          styles.postCard,
+          { backgroundColor: 'rgba(30, 30, 47, 0.8)', borderColor: 'rgba(255,255,255,0.05)' },
+        ]}
+      >
+        {/* ... existing post rendering code ... */}
+      </View>
+    );
+  }, (prevProps, nextProps) => {
+    // ✅ OPTIMISÉ : Comparaison optimisée
+    if (prevProps.post.id !== nextProps.post.id) return false;
+    if (prevProps.post.text !== nextProps.post.text) return false;
+    if (prevProps.post.likes !== nextProps.post.likes) return false;
+    if (prevProps.post.liked !== nextProps.post.liked) return false;
+    if (prevProps.post.userAvatar !== nextProps.post.userAvatar) return false;
+    if (prevProps.user?.id !== nextProps.user?.id) return false;
+    if (prevProps.isAdmin !== nextProps.isAdmin) return false;
+    // Comparer seulement les couleurs nécessaires du thème
+    if (prevProps.theme.colors.text !== nextProps.theme.colors.text) return false;
+    if (prevProps.theme.colors.accent !== nextProps.theme.colors.accent) return false;
+    
+    return true; // Pas de changement
+  });
+
+  PostItemComponent.displayName = 'PostItem';
+
+  // ✅ OPTIMISÉ : renderPost avec meilleure mémorisation
+  const renderPost = useCallback(({ item: post, index }: { item: Post; index: number }) => (
+    <PostItemComponent
+      post={post}
+      index={index}
+      user={user}
+      isAdmin={isAdmin === true}
+      theme={theme}
+      onLike={toggleLike}
+      onDelete={deletePost}
+      onBan={openBanModal}
+    />
+  ), [user, isAdmin, theme, toggleLike, deletePost, openBanModal]);
+
+  // ✅ OPTIMISÉ : keyExtractor déjà mémorisé (garder tel quel)
+  const keyExtractor = useCallback((item: Post) => item.id, []);
+
+  // ✅ OPTIMISÉ : Image avec priority et recyclingKey
+  <Image 
+    source={{ uri: post.userAvatar }} 
+    style={styles.avatar} 
+    contentFit="cover"
+    cachePolicy="memory-disk"
+    priority="normal"
+    recyclingKey={`avatar-${post.userId}`}
+    placeholder={require('../../assets/avatar/default.png')}
+  />
+
+  // ... rest of the code ...
+}
+
+
+
+
+
+
+
+

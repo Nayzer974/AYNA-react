@@ -20,13 +20,8 @@ export async function getPrayerTimesByCity(
   return res.json();
 }
 
-export async function hijriToGregorian(date: string): Promise<any> {
-  // date format: DD-MM-YYYY
-  const url = `${aladhanBaseUrl}/gToH/${encodeURIComponent(date)}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('Aladhan API error');
-  return res.json();
-}
+// NOTE: Les fonctions de conversion de dates Hijri ont été déplacées vers aladhan.ts
+// Ce fichier garde uniquement les fonctions pour les heures de prière et la Qibla qui utilisent AlAdhan
 
 export async function getPrayerTimesByCoords(
   latitude: number,
@@ -34,6 +29,32 @@ export async function getPrayerTimesByCoords(
   method = 2
 ): Promise<PrayerTimingsResponse> {
   const url = `${aladhanBaseUrl}/timings?latitude=${latitude}&longitude=${longitude}&method=${method}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Aladhan API error');
+  return res.json();
+}
+
+/**
+ * Récupère les heures de prière pour une date spécifique
+ * @param latitude Latitude de l'utilisateur
+ * @param longitude Longitude de l'utilisateur
+ * @param day Jour (1-31)
+ * @param month Mois (1-12)
+ * @param year Année (ex: 2025)
+ * @param method Méthode de calcul (défaut: 2 - ISNA)
+ * @returns Record avec les heures de prière
+ */
+export async function getPrayerTimesForDate(
+  latitude: number,
+  longitude: number,
+  day: number,
+  month: number,
+  year: number,
+  method = 2
+): Promise<PrayerTimingsResponse> {
+  // Format: DD-MM-YYYY (ex: 21-12-2025)
+  const dateStr = `${String(day).padStart(2, '0')}-${String(month).padStart(2, '0')}-${year}`;
+  const url = `${aladhanBaseUrl}/timings/${dateStr}?latitude=${latitude}&longitude=${longitude}&method=${method}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('Aladhan API error');
   return res.json();
@@ -53,7 +74,7 @@ export async function getQiblaByCoords(latitude: number, longitude: number): Pro
   
   // Si toujours en erreur, calculer la direction localement
   if (!res.ok) {
-    console.warn('Aladhan Qibla API error, calculating direction locally');
+    // Calcul de la direction localement
     const direction = calculateQiblaDirection(latitude, longitude);
     return { data: { direction } };
   }

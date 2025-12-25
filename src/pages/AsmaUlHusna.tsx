@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Modal } from 'react-native';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { useDimensions } from '@/hooks/useDimensions';
 import { useNavigation } from '@react-navigation/native';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
@@ -14,8 +16,6 @@ import { speak, stopSpeaking, isSpeaking } from '@/services/speech';
 import { Volume2 } from 'lucide-react-native';
 import { useEffect } from 'react';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = (SCREEN_WIDTH - 48) / 2; // 2 colonnes avec padding
 
 /**
  * Page Asma ul Husna - Les 99 noms d'Allah
@@ -25,6 +25,8 @@ export function AsmaUlHusna() {
   const { user } = useUser();
   const theme = getTheme(user?.theme || 'default');
   const { t } = useTranslation();
+  const { width: SCREEN_WIDTH } = useDimensions();
+  const CARD_WIDTH = React.useMemo(() => (SCREEN_WIDTH - 48) / 2, [SCREEN_WIDTH]); // 2 colonnes avec padding
   const [selectedName, setSelectedName] = useState<AsmaName | null>(null);
   const [readingName, setReadingName] = useState<number | null>(null);
 
@@ -45,7 +47,7 @@ export function AsmaUlHusna() {
       await speak(textToRead, 'ar');
       trackEvent('asma_name_read', { nameNumber: name.number, name: name.transliteration });
     } catch (error) {
-      console.error('Erreur lecture vocale:', error);
+      // Erreur silencieuse en production
       setReadingName(null);
     }
   };
@@ -125,15 +127,26 @@ export function AsmaUlHusna() {
         transparent
         animationType="fade"
         onRequestClose={() => setSelectedName(null)}
+        statusBarTranslucent={true}
       >
         <Pressable
           style={styles.modalOverlay}
           onPress={() => setSelectedName(null)}
         >
           <Pressable
-            style={[styles.modalContent, { backgroundColor: theme.colors.backgroundSecondary }]}
             onPress={(e) => e.stopPropagation()}
           >
+            <Animated.View
+              entering={FadeIn}
+              exiting={FadeOut}
+              style={[
+                styles.modalContent,
+                {
+                  backgroundColor: theme.colors.backgroundSecondary,
+                  borderColor: theme.colors.border || 'rgba(255, 255, 255, 0.1)',
+                },
+              ]}
+            >
             {selectedName && (
               <>
                 {/* Close button */}
@@ -280,22 +293,25 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
+    padding: 20,
+    zIndex: 9999,
   },
   modalContent: {
-    borderRadius: 24,
+    borderRadius: 20,
     padding: 24,
     width: '100%',
     maxWidth: 600,
     maxHeight: '90%',
+    borderWidth: 1,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.5,
-    shadowRadius: 60,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
     elevation: 10,
+    zIndex: 10000,
   },
   closeButton: {
     position: 'absolute',

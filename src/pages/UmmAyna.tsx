@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,23 +9,25 @@ import {
   Pressable,
   Modal,
   Alert,
-  Image,
   ActivityIndicator,
   RefreshControl,
+  InteractionManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Heart, MessageCircle, Trash2, Ban, ShieldCheck } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { FadeInDown, FadeIn, withSpring, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import { Image } from 'expo-image';
+import Animated, { FadeInDown, FadeIn, FadeOut, withSpring, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { GalaxyBackground } from '@/components/GalaxyBackground';
 import { BackButton } from '@/components/BackButton';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
 import { supabase, isCurrentUserAdmin } from '@/services/supabase';
 import { APP_CONFIG } from '@/config';
+import { logger } from '@/utils/logger';
 
-interface Post {
+export interface Post {
   id: string;
   userId: string;
   userName: string;
@@ -44,7 +46,7 @@ interface BanModalState {
   durationMinutes: number;
 }
 
-type Tab = 'feed' | 'groups' | 'events';
+type Tab = 'feed' | 'foundation' | 'groups' | 'events';
 
 export function UmmAyna() {
   const navigation = useNavigation();
@@ -56,6 +58,7 @@ export function UmmAyna() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const deletedPostIdsRef = useRef<Set<string>>(new Set()); // Track des posts supprimés pour éviter qu'ils reviennent
   const [banModal, setBanModal] = useState<BanModalState>({
     isOpen: false,
     userId: null,
@@ -78,54 +81,75 @@ export function UmmAyna() {
     }
   }, [user?.avatar, user?.id]);
 
-  // Charger les posts depuis Supabase
+  // Charger les posts depuis Supabase (différé après interactions)
   useEffect(() => {
     let mounted = true;
 
-    async function init() {
-      // Vérifier si l'utilisateur est admin
-      if (user?.id) {
-        const adminStatus = user.isAdmin !== undefined ? user.isAdmin : await isCurrentUserAdmin();
-        if (mounted) {
-          setIsAdmin(adminStatus);
-        }
-      }
-      await loadPosts();
-
-      // Abonnement en temps réel aux changements de posts
-      if (APP_CONFIG.useSupabase && supabase && mounted) {
-        // Nettoyer l'ancien channel s'il existe
-        if (channelRef.current) {
-          supabase.removeChannel(channelRef.current);
-        }
-
-        const channel = supabase
-          .channel('community_posts_changes')
-          .on(
-            'postgres_changes',
-            {
-              event: '*',
-              schema: 'public',
-              table: 'community_posts',
-            },
-            async (payload) => {
-              console.log('Changement détecté dans les posts:', payload.eventType);
+    InteractionManager.runAfterInteractions(() => {
+      async function init() {
+        try {
+          // Vérifier si l'utilisateur est admin
+          if (user?.id) {
+            try {
+              const adminStatus = user.isAdmin !== undefined ? user.isAdmin : await isCurrentUserAdmin();
               if (mounted) {
-                await loadPosts();
+                setIsAdmin(adminStatus);
+              }
+            } catch (adminError) {
+              logger.error('[UmmAyna] Erreur lors de la vérification admin:', adminError);
+              if (mounted) {
+                setIsAdmin(false);
               }
             }
-          )
-          .subscribe((status) => {
-            if (status === 'SUBSCRIBED') {
-              console.log('Abonnement en temps réel activé pour les posts');
-            }
-          });
+          }
+          await loadPosts();
+        } catch (error) {
+          logger.error('[UmmAyna] Erreur dans init:', error);
+          if (mounted) {
+            setLoading(false);
+            setPosts([]);
+          }
+        }
 
-        channelRef.current = channel;
+        // Abonnement en temps réel aux changements de posts
+        if (APP_CONFIG.useSupabase && supabase && mounted) {
+          // Nettoyer l'ancien channel s'il existe
+          if (channelRef.current) {
+            supabase.removeChannel(channelRef.current);
+          }
+
+          const channel = supabase
+            .channel('community_posts_changes')
+            .on(
+              'postgres_changes',
+              {
+                event: '*',
+                schema: 'public',
+                table: 'community_posts',
+              },
+              async (payload) => {
+                // Changement détecté dans les posts
+                // Ignorer les événements DELETE pour éviter de recharger immédiatement après suppression
+                // (on gère déjà le rechargement manuellement dans deletePost)
+                // Le payload.eventType peut être 'INSERT', 'UPDATE', ou 'DELETE'
+                const eventType = (payload as any).eventType || (payload as any).type;
+                if (mounted && eventType !== 'DELETE' && eventType !== 'delete') {
+                  await loadPosts();
+                }
+              }
+            )
+            .subscribe((status) => {
+              if (status === 'SUBSCRIBED') {
+                // Abonnement en temps réel activé
+              }
+            });
+
+          channelRef.current = channel;
+        }
       }
-    }
 
-    init();
+      init();
+    });
 
     // Nettoyer l'abonnement au démontage
     return () => {
@@ -135,9 +159,9 @@ export function UmmAyna() {
         channelRef.current = null;
       }
     };
-  }, [user?.id, user?.isAdmin]);
+  }, [user?.id, user?.isAdmin, activeTab]);
 
-  async function loadPosts() {
+  const loadPosts = useCallback(async () => {
     if (!APP_CONFIG.useSupabase || !supabase) {
       // Fallback vers les posts statiques si Supabase n'est pas configuré
       setPosts([
@@ -174,12 +198,44 @@ export function UmmAyna() {
     }
 
     try {
-      const { data, error } = await supabase
+      // Filtrer selon l'onglet actif
+      let query = supabase
         .from('community_posts')
-        .select('*')
+        .select('*');
+      
+      // Si on est sur l'onglet Fondation, charger uniquement les posts Fondation
+      if (activeTab === 'foundation') {
+        query = query.eq('is_foundation', true);
+      } else {
+        // Sinon, charger uniquement les posts du feed (pas Fondation)
+        // Utiliser une condition OR pour gérer les cas où is_foundation est NULL ou false
+        query = query.or('is_foundation.is.null,is_foundation.eq.false');
+      }
+      
+      const { data, error } = await query
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        logger.error('[UmmAyna] Erreur lors du chargement des posts:', error);
+        logger.error('[UmmAyna] Détails de l\'erreur:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+        });
+        throw error;
+      }
+      
+      logger.log('[UmmAyna] Posts chargés:', data?.length || 0, 'posts');
+      logger.log('[UmmAyna] Onglet actif:', activeTab);
+      if (data && data.length > 0) {
+        logger.log('[UmmAyna] Premier post:', {
+          id: data[0].id,
+          text: data[0].text?.substring(0, 50),
+          is_foundation: data[0].is_foundation,
+          user_id: data[0].user_id,
+        });
+      }
 
       if (data) {
         // Charger les likes de l'utilisateur actuel (si connecté)
@@ -193,7 +249,10 @@ export function UmmAyna() {
           likedPostIds = new Set(userLikes?.map((like) => like.post_id) || []);
         }
 
-        const formattedPosts: Post[] = data.map((post: any) => ({
+        // Filtrer les posts supprimés avant de les formater
+        const formattedPosts: Post[] = data
+          .filter((post: any) => !deletedPostIdsRef.current.has(post.id)) // Exclure les posts supprimés
+          .map((post: any) => ({
           id: post.id,
           userId: post.user_id,
           userName: post.user_name || 'Utilisateur',
@@ -206,21 +265,26 @@ export function UmmAyna() {
 
         setPosts(formattedPosts);
       }
-    } catch (error) {
-      console.error('Erreur lors du chargement des posts:', error);
+    } catch (error: any) {
+      logger.error('[UmmAyna] Erreur dans loadPosts:', error);
+      // Afficher les posts vides en cas d'erreur pour éviter un écran blanc
+      setPosts([]);
     } finally {
+      // Toujours mettre à jour l'état de chargement, même en cas d'erreur
+      // Cela évite que l'écran reste bloqué sur le chargement
       setLoading(false);
       setRefreshing(false);
     }
-  }
+  }, [activeTab, user?.id, user?.avatar]);
 
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
     loadPosts();
-  }, []);
+  }, [loadPosts]);
 
   async function publishPost() {
-    if (!newPost.trim() || !user?.id) return;
+    // Permettre la publication même si l'utilisateur n'est pas connecté
+    if (!newPost.trim()) return;
 
     // Vérifier si l'utilisateur est banni (optionnel, ne bloque pas si la fonction n'existe pas)
     if (APP_CONFIG.useSupabase && supabase) {
@@ -244,9 +308,9 @@ export function UmmAyna() {
       } catch (error: any) {
         // Si la fonction RPC n'existe pas encore, on continue quand même
         if (error?.message?.includes('function') || error?.message?.includes('does not exist') || error?.code === '42883') {
-          console.warn('Fonction de vérification de bannissement non disponible. Continuez...');
+          // Fonction non disponible, continuer
         } else {
-          console.warn('Erreur lors de la vérification du bannissement:', error);
+          // Erreur silencieuse en production
         }
       }
     }
@@ -256,9 +320,9 @@ export function UmmAyna() {
       setPosts([
         {
           id: Date.now().toString(),
-          userId: user.id,
-          userName: user.name || 'Vous',
-          userAvatar: user.avatar,
+          userId: user?.id || 'anonymous',
+          userName: user?.name || 'Utilisateur anonyme',
+          userAvatar: user?.avatar,
           text: newPost,
           likes: 0,
           liked: false,
@@ -271,40 +335,100 @@ export function UmmAyna() {
     }
 
     try {
+      // Préparer les données du post
+      // user_id sera automatiquement rempli par le DEFAULT auth.uid() si l'utilisateur est connecté
+      // Sinon, il sera NULL pour les utilisateurs anonymes
+      const postData: any = {
+        // Ne pas spécifier user_id explicitement, laisser le DEFAULT auth.uid() le remplir
+        // Si l'utilisateur est connecté, auth.uid() sera utilisé automatiquement
+        // Si non connecté, user_id sera NULL
+        user_name: user?.name || 'Utilisateur anonyme',
+        text: newPost.trim(),
+        likes_count: 0,
+        is_foundation: activeTab === 'foundation', // Marquer comme post Fondation si on est sur l'onglet Fondation
+      };
+
+      // Ajouter user_avatar si disponible
+      if (user?.avatar) {
+        postData.user_avatar = user.avatar;
+      }
+      
+      // Si l'utilisateur est connecté, on peut spécifier user_id explicitement
+      // Sinon, on laisse le DEFAULT auth.uid() gérer (qui sera NULL si non connecté)
+      if (user?.id) {
+        postData.user_id = user.id;
+      }
+
       const { data, error } = await supabase
         .from('community_posts')
-        .insert([
-          {
-            user_id: user.id,
-            user_name: user.name || 'Utilisateur',
-            text: newPost,
-            likes_count: 0,
-          },
-        ])
+        .insert([postData])
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        logger.error('Erreur Supabase lors de la publication:', {
+          error,
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+        });
+        throw error;
+      }
 
       if (data) {
-        setPosts([
-          {
+        logger.info('UmmAyna', 'Post inséré avec succès:', data);
+        
+        // Ajouter le nouveau post à l'état local immédiatement
+        const newPost: Post = {
             id: data.id,
             userId: data.user_id,
-            userName: data.user_name || user.name || 'Vous',
-            userAvatar: data.user_id === user.id ? user.avatar : data.user_avatar,
+          userName: data.user_name || user?.name || 'Utilisateur',
+          userAvatar: data.user_avatar || user?.avatar,
             text: data.text,
-            likes: 0,
+            likes: data.likes_count || 0,
             liked: false,
             createdAt: data.created_at,
-          },
-          ...posts,
-        ]);
+        };
+        setPosts([newPost, ...posts]);
         setNewPost('');
+        
+        // Recharger les posts après un court délai pour s'assurer que tout est synchronisé
+        // mais en excluant les posts supprimés (via le filtre dans loadPosts)
+        setTimeout(async () => {
+          await loadPosts();
+        }, 500);
+      } else {
+        logger.error('[UmmAyna] Aucune donnée retournée après l\'insertion');
+        throw new Error('Aucune donnée retournée après l\'insertion');
       }
     } catch (error: any) {
-      console.error('Erreur lors de la publication:', error);
-      Alert.alert('Erreur', 'Erreur lors de la publication. Veuillez réessayer.');
+      logger.error('[UmmAyna] Erreur complète lors de la publication:', error);
+      
+      // Message d'erreur plus détaillé
+      let errorMessage = 'Erreur lors de la publication. Veuillez réessayer.';
+      
+      if (error?.message) {
+        // Messages d'erreur spécifiques selon le type d'erreur
+        if (error.message.includes('permission') || error.message.includes('policy') || error.code === '42501' || error.code === '401') {
+          errorMessage = 'Permissions insuffisantes. Vérifiez que vous êtes bien connecté.';
+        } else if (error.message.includes('duplicate') || error.code === '23505') {
+          errorMessage = 'Cette publication existe déjà.';
+        } else if (error.message.includes('null') || error.code === '23502') {
+          errorMessage = 'Certaines informations sont manquantes. Veuillez réessayer.';
+        } else if (error.message.includes('network') || error.message.includes('timeout')) {
+          errorMessage = 'Problème de connexion. Vérifiez votre connexion internet.';
+        } else if (error.code === 'PGRST116') {
+          errorMessage = 'Aucune ligne retournée. Vérifiez vos permissions.';
+        } else {
+          // En mode développement, afficher le message d'erreur complet
+          if (__DEV__) {
+            errorMessage = `Erreur: ${error.message}${error.code ? ` (Code: ${error.code})` : ''}`;
+          }
+        }
+      }
+      
+      Alert.alert('Erreur', errorMessage);
     }
   }
 
@@ -316,21 +440,110 @@ export function UmmAyna() {
     }
 
     try {
-      let query = supabase.from('community_posts').delete().eq('id', postId);
+      logger.log('[UmmAyna] Tentative de suppression du post:', postId);
+      logger.log('[UmmAyna] isAdminDelete:', isAdminDelete);
+      // Ne jamais logger user?.id directement
 
-      // Si ce n'est pas un admin, vérifier que c'est le propriétaire
-      if (!isAdminDelete && user?.id) {
-        query = query.eq('user_id', user.id);
+      // Utiliser la fonction RPC pour supprimer le post (contourne RLS)
+      // Cela garantit que la suppression fonctionne même si la politique RLS est restrictive
+      // Passer user_id si disponible pour les utilisateurs connectes dans l'app mais pas dans Supabase
+      let deleteResult: { data: any[] | null; error: any } = { data: null, error: null };
+      
+      // Passer toujours user?.id, même si NULL (pour les posts anonymes)
+      // La fonction RPC gérera le cas où p_user_id est NULL
+      const { data: deletedPostId, error: rpcError } = await supabase.rpc('delete_community_post', {
+        p_post_id: postId,
+        p_user_id: user?.id || null // Passer l'ID utilisateur du contexte, NULL si non connecté
+      });
+      
+      // Si la fonction RPC n'existe pas, utiliser la méthode directe
+      if (rpcError && (rpcError.message?.includes('function') || rpcError.message?.includes('not found'))) {
+        logger.warn('[UmmAyna] Fonction RPC non trouvée, utilisation de la méthode directe');
+        const result = await supabase
+          .from('community_posts')
+          .delete()
+          .eq('id', postId)
+          .select();
+        
+        deleteResult = { data: result.data, error: result.error };
+      } else if (rpcError) {
+        logger.error('[UmmAyna] Erreur RPC lors de la suppression:', rpcError);
+        // Améliorer le message d'erreur pour les admins
+        if (rpcError.message?.includes('permission') || rpcError.message?.includes("Vous n'avez pas")) {
+          const errorMsg = isAdmin 
+            ? 'Erreur de permissions. Vérifiez que votre statut admin est correctement configuré dans la base de données.'
+            : rpcError.message;
+          throw new Error(errorMsg);
+        }
+        throw rpcError;
+      } else {
+        // La fonction RPC a fonctionné, simuler data pour la compatibilité
+        deleteResult = { 
+          data: deletedPostId ? [{ id: deletedPostId }] : [], 
+          error: null 
+        };
       }
 
-      const { error } = await query;
+      const { data, error } = deleteResult;
 
-      if (error) throw error;
-
+      if (error) {
+        logger.error('[UmmAyna] Erreur lors de la suppression:', error);
+        throw error;
+      }
+      
+      logger.info('UmmAyna', 'Post supprimé avec succès:', data);
+      logger.info('UmmAyna', 'Nombre de lignes supprimées:', data?.length || 0);
+      
+      // Vérifier que la suppression a bien fonctionné
+      if (!data || data.length === 0) {
+        logger.warn('[UmmAyna] Aucune ligne supprimée - la suppression a peut-être échoué silencieusement');
+        Alert.alert(
+          'Erreur de suppression',
+          'La suppression n\'a pas fonctionné. Vérifiez que vous avez les permissions nécessaires.'
+        );
+        return;
+      }
+      
+      // Ajouter le post à la liste des posts supprimés pour éviter qu'il revienne
+      deletedPostIdsRef.current.add(postId);
+      logger.log('[UmmAyna] Post ajouté à la liste des supprimés. Total supprimés:', deletedPostIdsRef.current.size);
+      
+      // Mettre à jour l'état local immédiatement pour un feedback instantané
       setPosts(posts.filter((p) => p.id !== postId));
-    } catch (error) {
-      console.error('Erreur lors de la suppression:', error);
-      Alert.alert('Erreur', 'Erreur lors de la suppression. Veuillez réessayer.');
+      
+      // Ne PAS recharger les posts après suppression pour éviter que le post revienne
+      // Le post est déjà retiré de l'état local et ajouté à la liste des supprimés
+      // Le prochain chargement (via publication ou refresh) filtrera automatiquement ce post
+      
+      // Nettoyer la liste des posts supprimés après 10 minutes pour éviter qu'elle grandisse indéfiniment
+      setTimeout(() => {
+        deletedPostIdsRef.current.delete(postId);
+        logger.info('UmmAyna', 'Post retiré de la liste des supprimés après timeout');
+      }, 10 * 60 * 1000);
+    } catch (error: any) {
+      logger.error('[UmmAyna] Erreur complète lors de la suppression:', error);
+      
+      // Message d'erreur plus détaillé
+      let errorMessage = 'Erreur lors de la suppression. Veuillez réessayer.';
+      
+      if (error?.message) {
+        if (error.message.includes('permission') || error.message.includes("Vous n'avez pas")) {
+          errorMessage = isAdmin 
+            ? 'Erreur de permissions. Vérifiez que votre statut admin est correctement configuré dans la base de données.'
+            : 'Vous n\'avez pas la permission de supprimer ce post.';
+        } else if (error.message.includes("n'existe pas") || error.message.includes("n'existe pas")) {
+          errorMessage = 'Le post n\'existe pas ou a déjà été supprimé.';
+        } else if (error.code === '42501' || error.code === 'PGRST301') {
+          errorMessage = 'Permissions insuffisantes. Vérifiez que vous êtes bien connecté et que vous avez les droits nécessaires.';
+        } else {
+          // En mode développement, afficher le message d'erreur complet
+          if (__DEV__) {
+            errorMessage = `Erreur: ${error.message}${error.code ? ` (Code: ${error.code})` : ''}`;
+          }
+        }
+      }
+      
+      Alert.alert('Erreur', errorMessage);
     }
   }
 
@@ -377,20 +590,19 @@ export function UmmAyna() {
         } else {
           // Si la fonction n'existe pas, utiliser un fallback
           if (emailError?.message?.includes('function') || emailError?.message?.includes('does not exist') || emailError?.code === '42883') {
-            console.warn('Fonction get_user_email non disponible. Le système de bannissement n\'est pas encore configuré.');
-            // Utiliser l'ID comme fallback pour l'email
+            // Fonction non disponible, utiliser fallback
             userEmail = `${userId}@banned.local`;
           } else {
-            console.warn('Impossible de récupérer l\'email de l\'utilisateur:', emailError);
+            // Erreur silencieuse en production
           }
         }
       } catch (e: any) {
         // Si la fonction n'existe pas, continuer avec le fallback
         if (e?.message?.includes('function') || e?.message?.includes('does not exist') || e?.code === '42883') {
-          console.warn('Fonction get_user_email non disponible. Le système de bannissement n\'est pas encore configuré.');
+          // Fonction non disponible, utiliser fallback
           userEmail = `${userId}@banned.local`;
         } else {
-          console.warn('Erreur lors de la récupération de l\'email:', e);
+          // Erreur silencieuse en production
         }
       }
 
@@ -411,7 +623,7 @@ export function UmmAyna() {
           .eq('user_id', userId);
 
         if (likesError) {
-          console.warn('Erreur lors de la suppression des likes:', likesError);
+          // Erreur silencieuse en production
         }
 
         // 3. Créer un enregistrement de bannissement
@@ -442,7 +654,7 @@ export function UmmAyna() {
         if (emailBanError) {
           // Si l'email existe déjà, ignorer l'erreur
           if (!emailBanError.message?.includes('duplicate') && !emailBanError.code?.includes('23505')) {
-            console.warn('Erreur lors du bannissement de l\'email:', emailBanError);
+            // Erreur silencieuse en production
           }
         }
 
@@ -485,7 +697,7 @@ export function UmmAyna() {
           .eq('user_id', userId);
 
         if (likesError) {
-          console.warn('Erreur lors de la suppression des likes:', likesError);
+          // Erreur silencieuse en production
         }
 
         const hours = Math.floor(durationMinutes / 60);
@@ -503,7 +715,7 @@ export function UmmAyna() {
       await loadPosts();
       closeBanModal();
     } catch (error) {
-      console.error('Erreur lors du bannissement:', error);
+      // Erreur silencieuse en production
       Alert.alert('Erreur', 'Erreur lors du bannissement. Veuillez réessayer.');
     }
   }
@@ -561,142 +773,138 @@ export function UmmAyna() {
         )
       );
     } catch (error) {
-      console.error('Erreur lors du like:', error);
+      // Erreur silencieuse en production
     }
   }
 
-  function renderPost({ item: post, index }: { item: Post; index: number }) {
-    const avatarUrl = post.userId === user?.id ? user.avatar : post.userAvatar;
-    const canDelete = user?.id && (post.userId === user.id || isAdmin === true);
-    const canBan = isAdmin === true && post.userId !== user?.id;
-    const scale = useSharedValue(1);
+  // Item de publication (extrait en composant pour éviter toute référence manquante en build)
+  const PostItemComponent = React.memo(function PostItem({
+  post,
+  user,
+  isAdmin,
+  theme,
+  onLike,
+  onDelete,
+  onBan,
+}: {
+  post: Post;
+  index: number;
+  user?: any;
+  isAdmin: boolean;
+  theme: ReturnType<typeof getTheme>;
+  onLike: (post: Post) => void;
+  onDelete: (postId: string, isAdminDelete?: boolean) => void;
+  onBan: (userId: string, userName: string) => void;
+}) {
+  const initials = useMemo(() => {
+    const name = post.userName || 'U';
+    return name.substring(0, 1).toUpperCase();
+  }, [post.userName]);
 
-    const animatedStyle = useAnimatedStyle(() => ({
-      transform: [{ scale: scale.value }],
-    }));
+  const canDelete = user?.id && (user.id === post.userId || isAdmin);
+  const canBan = isAdmin && user?.id !== post.userId;
 
-    return (
-      <Animated.View
-        entering={FadeInDown.delay(index * 100).springify()}
-        style={[
-          styles.postCard,
-          {
-            backgroundColor: 'rgba(30, 30, 47, 0.8)',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: 0.3,
-            shadowRadius: 16,
-            elevation: 8,
-          },
-        ]}
-      >
-        <View style={styles.postHeader}>
-          <View style={styles.avatarContainer}>
-            <LinearGradient
-              colors={['#FFD369', '#5A2D82']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.avatarGradient}
-            >
-              {avatarUrl ? (
-                <Image
-                  source={{ uri: avatarUrl }}
-                  style={styles.avatar}
-                  onError={() => {
-                    // L'image ne charge pas, le placeholder avec la première lettre sera affiché
-                  }}
-                />
-              ) : null}
-            </LinearGradient>
-            {!avatarUrl && (
-              <View style={StyleSheet.absoluteFill}>
-                <Text style={styles.avatarText}>{post.userName[0].toUpperCase()}</Text>
-              </View>
+  return (
+    <View
+      style={[
+        styles.postCard,
+        { backgroundColor: 'rgba(30, 30, 47, 0.8)', borderColor: 'rgba(255,255,255,0.05)' },
+      ]}
+    >
+      <View style={styles.postHeader}>
+        <View style={styles.avatarContainer}>
+          <LinearGradient
+            colors={['#FFD369', '#FB923C']}
+            style={styles.avatarGradient}
+          >
+            {post.userAvatar ? (
+              <Image 
+                source={{ uri: post.userAvatar }} 
+                style={styles.avatar} 
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                priority="normal"
+                recyclingKey={`avatar-${post.userId || post.id}`}
+                placeholder={require('../../avatar/avatar1.png')}
+              />
+            ) : (
+              <Text style={styles.avatarText}>{initials}</Text>
             )}
-          </View>
-          <Text style={[styles.postUserName, { color: '#ffffff' }]}>
-            {post.userName}
+          </LinearGradient>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.postUserName, { color: theme.colors.text }]}>
+            {post.userName || 'Utilisateur'}
+          </Text>
+          <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
+            {new Date(post.createdAt).toLocaleString('fr-FR')}
           </Text>
         </View>
+        {canDelete && (
+          <Pressable
+            onPress={() => onDelete(post.id, isAdmin)}
+            style={({ pressed }) => [styles.deleteButton, pressed && styles.buttonPressed]}
+          >
+            <Trash2 size={18} color="#ef4444" />
+          </Pressable>
+        )}
+        {canBan && (
+          <Pressable
+            onPress={() => onBan(post.userId, post.userName)}
+            style={({ pressed }) => [styles.banButton, pressed && styles.buttonPressed]}
+          >
+            <Ban size={18} color="#fbbf24" />
+          </Pressable>
+        )}
+      </View>
 
-        <Text style={styles.postText}>{post.text}</Text>
+      <Text style={styles.postText}>{post.text}</Text>
 
-        <View style={styles.postActions}>
-          <View style={styles.postActionsLeft}>
-            <Pressable
-              onPress={() => {
-                scale.value = withSpring(post.liked ? 1.2 : 1);
-                toggleLike(post);
-              }}
-              disabled={!user?.id}
-              style={({ pressed }) => [
-                styles.likeButton,
-                pressed && styles.buttonPressed,
-                !user?.id && styles.buttonDisabled,
-              ]}
-            >
-              <Animated.View style={animatedStyle}>
-                <Heart
-                  size={20}
-                  color={post.liked ? '#ef4444' : 'rgba(255, 255, 255, 0.8)'}
-                  fill={post.liked ? '#ef4444' : 'none'}
-                />
-              </Animated.View>
-              <Text
-                style={[
-                  styles.likeCount,
-                  {
-                    color: post.liked ? '#ef4444' : 'rgba(255, 255, 255, 0.8)',
-                  },
-                ]}
-              >
-                {post.likes}
-              </Text>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [styles.commentButton, pressed && styles.buttonPressed]}
-            >
-              <MessageCircle size={20} color="rgba(255, 255, 255, 0.8)" />
-            </Pressable>
-          </View>
-
-          {(canDelete || canBan) && (
-            <View style={styles.postActionsRight}>
-              {canDelete && (
-                <Pressable
-                  onPress={() => {
-                    const isAdminAction = isAdmin === true && post.userId !== user?.id;
-                    const message = isAdminAction
-                      ? `Êtes-vous sûr de vouloir supprimer cette publication de ${post.userName} ?`
-                      : 'Êtes-vous sûr de vouloir supprimer cette publication ?';
-                    Alert.alert('Confirmation', message, [
-                      { text: 'Annuler', style: 'cancel' },
-                      {
-                        text: 'Supprimer',
-                        style: 'destructive',
-                        onPress: () => deletePost(post.id, isAdminAction),
-                      },
-                    ]);
-                  }}
-                  style={({ pressed }) => [styles.deleteButton, pressed && styles.buttonPressed]}
-                >
-                  <Trash2 size={20} color="#f87171" />
-                </Pressable>
-              )}
-              {canBan && (
-                <Pressable
-                  onPress={() => openBanModal(post.userId, post.userName)}
-                  style={({ pressed }) => [styles.banButton, pressed && styles.buttonPressed]}
-                >
-                  <Ban size={20} color="#fb923c" />
-                </Pressable>
-              )}
-            </View>
-          )}
+      <View style={styles.postActions}>
+        <View style={styles.postActionsLeft}>
+          <Pressable
+            onPress={() => onLike(post)}
+            style={({ pressed }) => [styles.likeButton, pressed && styles.buttonPressed]}
+          >
+            <Heart size={18} color={post.liked ? '#fb7185' : '#9ca3af'} fill={post.liked ? '#fb7185' : 'none'} />
+            <Text style={[styles.likeCount, { color: theme.colors.text }]}>{post.likes}</Text>
+          </Pressable>
+          <Pressable style={styles.commentButton}>
+            <MessageCircle size={18} color="#9ca3af" />
+          </Pressable>
         </View>
-      </Animated.View>
-    );
-  }
+      </View>
+    </View>
+  );
+}, (prevProps, nextProps) => {
+  // Comparaison personnalisée pour éviter les re-renders inutiles
+  return (
+    prevProps.post.id === nextProps.post.id &&
+    prevProps.post.text === nextProps.post.text &&
+    prevProps.post.likes === nextProps.post.likes &&
+    prevProps.post.liked === nextProps.post.liked &&
+    prevProps.user?.id === nextProps.user?.id &&
+    prevProps.isAdmin === nextProps.isAdmin &&
+    prevProps.theme.colors.text === nextProps.theme.colors.text
+  );
+});
+
+  PostItemComponent.displayName = 'PostItem';
+
+  const renderPost = useCallback(({ item: post, index }: { item: Post; index: number }) => (
+    <PostItemComponent
+      post={post}
+      index={index}
+      user={user}
+      isAdmin={isAdmin === true}
+      theme={theme}
+      onLike={toggleLike}
+      onDelete={deletePost}
+      onBan={openBanModal}
+    />
+  ), [user, isAdmin, theme, toggleLike, deletePost, openBanModal]);
+  
+  const keyExtractor = useCallback((item: Post) => item.id, []);
 
   return (
     <View style={styles.wrapper}>
@@ -747,7 +955,7 @@ export function UmmAyna() {
 
             {/* Tabs */}
             <View style={styles.tabs}>
-              {(['feed', 'groups', 'events'] as Tab[]).map((tab) => (
+              {(['feed', 'foundation'] as Tab[]).map((tab) => (
                 <Pressable
                   key={tab}
                   onPress={() => setActiveTab(tab)}
@@ -769,8 +977,6 @@ export function UmmAyna() {
                   >
                     {tab === 'feed'
                       ? 'Fil'
-                      : tab === 'groups'
-                      ? 'Groupes'
                       : 'Ayna Fondation'}
                   </Text>
                 </Pressable>
@@ -851,15 +1057,121 @@ export function UmmAyna() {
                       </Animated.View>
                     )}
 
-                    {posts.length === 0 && !loading && user?.id && (
-                      <View style={styles.emptyState}>
-                        <Text style={[styles.emptyStateText, { color: 'rgba(255, 255, 255, 0.8)' }]}>
-                          Aucune publication pour le moment
-                        </Text>
-                      </View>
-                    )}
+                    <FlatList
+                      data={posts}
+                      renderItem={renderPost}
+                      keyExtractor={(item) => item.id}
+                      scrollEnabled={false}
+                      removeClippedSubviews={true}
+                      initialNumToRender={5}
+                      maxToRenderPerBatch={5}
+                      windowSize={10}
+                      updateCellsBatchingPeriod={50}
+                      getItemLayout={(data, index) => ({
+                        length: 200, // Hauteur approximative d'un post (padding 24*2 + header ~56 + text ~70 + actions ~40 + margin 16)
+                        offset: 200 * index,
+                        index,
+                      })}
+                      ListEmptyComponent={
+                        posts.length === 0 && !loading && user?.id ? (
+                          <View style={styles.emptyState}>
+                            <Text style={[styles.emptyStateText, { color: 'rgba(255, 255, 255, 0.8)' }]}>
+                              Aucune publication pour le moment
+                            </Text>
+                          </View>
+                        ) : null
+                      }
+                    />
+                  </>
+                )}
+              </View>
+            )}
 
-                    {posts.map((post, index) => renderPost({ item: post, index }))}
+            {/* Fondation Tab - Admin Only */}
+            {activeTab === 'foundation' && (
+              <View style={styles.feedContent}>
+                {!isAdmin ? (
+                  <View style={styles.emptyState}>
+                    <Text style={[styles.emptyStateText, { color: 'rgba(255, 255, 255, 0.8)' }]}>
+                      Seuls les administrateurs peuvent publier sur Ayna Fondation
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    {/* New Post for Foundation - Admin Only */}
+                    <Animated.View
+                      entering={FadeIn.delay(100)}
+                      style={[
+                        styles.newPostCard,
+                        {
+                          backgroundColor: 'rgba(30, 30, 47, 0.8)',
+                          shadowColor: '#000',
+                          shadowOffset: { width: 0, height: 4 },
+                          shadowOpacity: 0.2,
+                          shadowRadius: 8,
+                          elevation: 4,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.foundationLabel, { color: theme.colors.accent }]}>
+                        Publication Fondation
+                      </Text>
+                      <TextInput
+                        value={newPost}
+                        onChangeText={setNewPost}
+                        placeholder="Publier un message pour la Fondation..."
+                        placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                        multiline
+                        numberOfLines={3}
+                        style={[
+                          styles.newPostInput,
+                          { color: theme.colors.text },
+                        ]}
+                      />
+                      <Pressable
+                        onPress={publishPost}
+                        disabled={!newPost.trim() || !user.id}
+                        style={({ pressed }) => [
+                          styles.publishButton,
+                          {
+                            backgroundColor: '#FFD369',
+                            opacity: newPost.trim() && user.id ? 1 : 0.5,
+                          },
+                          pressed && styles.buttonPressed,
+                        ]}
+                      >
+                        <Text style={[styles.publishButtonText, { color: '#0A0F2C' }]}>
+                          Publier
+                        </Text>
+                      </Pressable>
+                    </Animated.View>
+
+                    {/* Foundation Posts List */}
+                    <FlatList
+                      data={posts}
+                      renderItem={renderPost}
+                      keyExtractor={(item) => item.id}
+                      scrollEnabled={false}
+                      removeClippedSubviews={true}
+                      initialNumToRender={5}
+                      maxToRenderPerBatch={5}
+                      windowSize={10}
+                      updateCellsBatchingPeriod={50}
+                      getItemLayout={(data, index) => ({
+                        length: 200,
+                        offset: 200 * index,
+                        index,
+                      })}
+                      ListEmptyComponent={
+                        posts.length === 0 && !loading ? (
+                          <View style={styles.emptyState}>
+                            <Text style={[styles.emptyStateText, { color: 'rgba(255, 255, 255, 0.8)' }]}>
+                              Aucune publication Fondation pour le moment
+                            </Text>
+                          </View>
+                        ) : null
+                      }
+                    />
                   </>
                 )}
               </View>
@@ -897,21 +1209,24 @@ export function UmmAyna() {
               transparent
               animationType="fade"
               onRequestClose={closeBanModal}
+              statusBarTranslucent={true}
             >
               <Pressable
                 style={styles.modalOverlay}
                 onPress={closeBanModal}
               >
-                <Animated.View
-                  entering={FadeIn}
-                  style={[
-                    styles.modalContent,
-                    {
-                      backgroundColor: 'rgba(30, 30, 47, 1)',
-                    },
-                  ]}
-                  onStartShouldSetResponder={() => true}
-                >
+                <Pressable onPress={(e) => e.stopPropagation()}>
+                  <Animated.View
+                    entering={FadeIn}
+                    exiting={FadeOut}
+                    style={[
+                      styles.modalContent,
+                      {
+                        backgroundColor: theme.colors.backgroundSecondary,
+                        borderColor: theme.colors.border || 'rgba(255, 255, 255, 0.1)',
+                      },
+                    ]}
+                  >
                   <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
                     Bannir l'utilisateur
                   </Text>
@@ -1060,6 +1375,7 @@ export function UmmAyna() {
                     </Pressable>
                   </View>
                 </Animated.View>
+                </Pressable>
               </Pressable>
             </Modal>
           </View>
@@ -1277,28 +1593,45 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontFamily: 'System',
   },
+  foundationLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: 'System',
+    marginBottom: 8,
+  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
+    padding: 20,
+    zIndex: 9999,
   },
   modalContent: {
     width: '100%',
     maxWidth: 400,
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 24,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+    zIndex: 10000,
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '600',
-    marginBottom: 16,
+    marginBottom: 12,
+    textAlign: 'center',
     fontFamily: 'System',
   },
   modalText: {
-    fontSize: 14,
+    fontSize: 16,
     marginBottom: 24,
+    textAlign: 'center',
+    lineHeight: 24,
     fontFamily: 'System',
   },
   modalSection: {
@@ -1364,15 +1697,20 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
     borderRadius: 12,
     alignItems: 'center',
+    borderWidth: 1,
   },
   modalButtonCancel: {},
   modalButtonConfirm: {},
   modalButtonText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     fontFamily: 'System',
+  },
+  buttonPressed: {
+    opacity: 0.7,
   },
 });

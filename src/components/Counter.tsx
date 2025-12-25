@@ -1,10 +1,5 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-} from 'react-native-reanimated';
 
 interface CounterProps {
   value: number;
@@ -26,16 +21,6 @@ function Digit({ place, value, height, fontSize, textColor, fontWeight }: {
   fontWeight: string | number;
 }) {
   const valueRoundedToPlace = Math.floor(value / place);
-  const animatedValue = useSharedValue(valueRoundedToPlace);
-
-  useEffect(() => {
-    const newValue = Math.floor(value / place);
-    animatedValue.value = withSpring(newValue, {
-      damping: 20,
-      stiffness: 100,
-    });
-  }, [value, place, animatedValue]);
-
   const digit = valueRoundedToPlace % 10;
 
   return (

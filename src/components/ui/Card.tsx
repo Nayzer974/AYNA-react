@@ -1,24 +1,75 @@
 import React from 'react';
-import { View, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
+import { View, Text, StyleSheet, ViewStyle, TextStyle, Pressable } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { ANIMATION_DURATION, ANIMATION_VALUES } from '@/utils/animations';
+import { spacing, borderRadius, fontSize, fontWeight, shadows } from '@/utils/designTokens';
+
+const AnimatedView = Animated.createAnimatedComponent(View);
 
 export interface CardProps {
   children: React.ReactNode;
   style?: ViewStyle;
   testID?: string;
+  onPress?: () => void;
+  pressable?: boolean;
 }
 
 /**
- * Composant Card - Conteneur de carte
+ * Composant Card - Conteneur de carte avec animations
  */
-export function Card({ children, style, testID }: CardProps) {
-  return (
-    <View
-      style={[styles.card, style]}
+export function Card({ children, style, testID, onPress, pressable = false }: CardProps) {
+  const translateY = useSharedValue(0);
+  const opacity = useSharedValue(1);
+
+  const handlePressIn = () => {
+    if (!pressable || !onPress) return;
+    translateY.value = withTiming(-2, {
+      duration: ANIMATION_DURATION.FAST,
+    });
+    opacity.value = withTiming(0.9, {
+      duration: ANIMATION_DURATION.FAST,
+    });
+  };
+
+  const handlePressOut = () => {
+    if (!pressable || !onPress) return;
+    translateY.value = withTiming(0, {
+      duration: ANIMATION_DURATION.FAST,
+    });
+    opacity.value = withTiming(1, {
+      duration: ANIMATION_DURATION.FAST,
+    });
+  };
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateY: translateY.value }],
+      opacity: opacity.value,
+    };
+  });
+
+  const cardContent = (
+    <AnimatedView
+      style={[styles.card, style, pressable && animatedStyle]}
       testID={testID}
     >
       {children}
-    </View>
+    </AnimatedView>
   );
+
+  if (pressable && onPress) {
+    return (
+      <Pressable
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+      >
+        {cardContent}
+      </Pressable>
+    );
+  }
+
+  return cardContent;
 }
 
 export interface CardHeaderProps {
@@ -103,43 +154,36 @@ export function CardFooter({ children, style }: CardFooterProps) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
+    borderRadius: borderRadius.lg,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.15)',
     backgroundColor: '#1E1E2F',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    ...shadows.sm,
   },
   header: {
     flexDirection: 'column',
-    padding: 20,
-    gap: 6,
+    padding: spacing.lg + spacing.xs,
+    gap: spacing.xs + spacing.xs,
   },
   title: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: fontSize.xl,
+    fontWeight: fontWeight.semibold,
     fontFamily: 'System',
     color: '#FFFFFF',
   },
   description: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'System',
     color: 'rgba(255, 255, 255, 0.7)',
   },
   content: {
-    padding: 20,
+    padding: spacing.lg + spacing.xs,
     paddingTop: 0,
   },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.lg + spacing.xs,
     paddingTop: 0,
   },
 });

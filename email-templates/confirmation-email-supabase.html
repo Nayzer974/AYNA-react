@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirmez votre inscription - AYNA</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #0A0F2C 0%, #1E1E2F 100%);
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: #1E1E2F;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #FFD369 0%, #FFA500 100%);
+            padding: 40px 30px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+            animation: pulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.6; }
+        }
+        
+        .logo {
+            font-size: 48px;
+            font-weight: bold;
+            color: #0A0F2C;
+            margin-bottom: 10px;
+            position: relative;
+            z-index: 1;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .header-subtitle {
+            color: #0A0F2C;
+            font-size: 14px;
+            font-weight: 500;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .content {
+            padding: 40px 30px;
+            color: #FFFFFF;
+        }
+        
+        .greeting {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #FFD369;
+        }
+        
+        .message {
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 30px;
+            line-height: 1.8;
+        }
+        
+        .button-container {
+            text-align: center;
+            margin: 40px 0;
+        }
+        
+        .confirm-button {
+            display: inline-block;
+            padding: 16px 40px;
+            background: linear-gradient(135deg, #FFD369 0%, #FFA500 100%);
+            color: #0A0F2C;
+            text-decoration: none;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 16px;
+            box-shadow: 0 4px 16px rgba(255, 211, 105, 0.4);
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .confirm-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 211, 105, 0.6);
+        }
+        
+        .alternate-link {
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .alternate-link-title {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+        
+        .alternate-link-url {
+            font-size: 12px;
+            color: #FFD369;
+            word-break: break-all;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .footer {
+            padding: 30px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.3);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .footer-text {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 10px;
+        }
+        
+        .footer-link {
+            color: #FFD369;
+            text-decoration: none;
+        }
+        
+        .footer-link:hover {
+            text-decoration: underline;
+        }
+        
+        .divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            margin: 30px 0;
+        }
+        
+        .security-note {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            text-align: center;
+            margin-top: 20px;
+            font-style: italic;
+        }
+        
+        @media only screen and (max-width: 600px) {
+            .email-container {
+                margin: 10px;
+                border-radius: 12px;
+            }
+            
+            .header {
+                padding: 30px 20px;
+            }
+            
+            .logo {
+                font-size: 36px;
+            }
+            
+            .content {
+                padding: 30px 20px;
+            }
+            
+            .greeting {
+                font-size: 20px;
+            }
+            
+            .confirm-button {
+                padding: 14px 32px;
+                font-size: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <!-- Header avec logo AYNA -->
+        <div class="header">
+            <div class="logo">AYNA</div>
+            <div class="header-subtitle">Votre compagnon spirituel</div>
+        </div>
+        
+        <!-- Contenu principal -->
+        <div class="content">
+            <h2 class="greeting">As-salâmu âlaykum</h2>
+            
+            <p class="message">
+                Bienvenue dans la communauté AYNA ! Nous sommes ravis de vous compter parmi nous.
+            </p>
+            
+            <p class="message">
+                Pour finaliser votre inscription et accéder à toutes les fonctionnalités, veuillez confirmer votre adresse email en cliquant sur le bouton ci-dessous.
+            </p>
+            
+            <!-- Bouton de confirmation -->
+            <div class="button-container">
+                <a href="{{ .ConfirmationURL }}" class="confirm-button">
+                    ✨ Confirmer mon email
+                </a>
+            </div>
+            
+            <div class="divider"></div>
+            
+            <!-- Lien alternatif -->
+            <div class="alternate-link">
+                <div class="alternate-link-title">Le bouton ne fonctionne pas ?</div>
+                <div class="alternate-link-url">{{ .ConfirmationURL }}</div>
+            </div>
+            
+            <p class="security-note">
+                ⚠️ Ce lien est valide pendant 24 heures. Si vous n'avez pas créé de compte, vous pouvez ignorer cet email.
+            </p>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p class="footer-text">
+                Avec AYNA, cultivez votre spiritualité au quotidien.
+            </p>
+            <p class="footer-text">
+                <a href="https://nurayna.com" class="footer-link">nurayna.com</a> | 
+                <a href="https://nurayna.com/support" class="footer-link">Support</a>
+            </p>
+            <p class="footer-text" style="margin-top: 15px; font-size: 12px;">
+                © 2024 AYNA. Tous droits réservés.
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+
+
+
+
+
+

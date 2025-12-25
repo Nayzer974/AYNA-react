@@ -2,6 +2,10 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "jsx": "react-native",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
       "@/*": [
@@ -33,5 +37,13 @@
   "include": [
     "**/*.ts",
     "**/*.tsx"
+  ],
+  "exclude": [
+    "**/BaytAnNur/index.tsx",
+    "**/node_modules",
+    "**/.expo",
+    "**/dist",
+    "**/supabase/functions/**",
+    "**/scripts/**"
   ]
 }

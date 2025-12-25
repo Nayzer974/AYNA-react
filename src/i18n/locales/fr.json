@@ -13,7 +13,17 @@
     "previous": "Précédent",
     "loading": "Chargement...",
     "error": "Erreur",
-    "success": "Succès"
+    "success": "Succès",
+    "verified": "Vérifié",
+    "notVerified": "Non vérifié",
+    "retry": "Réessayer",
+    "minutes": "minutes",
+    "continue": "Continuer",
+    "permissionDenied": "Permission refusée",
+    "recordingPermissionDenied": "Permission d'enregistrement refusée"
+    ,
+    "yesterdayAt": "Hier à {{time}}",
+    "daysAgo": "Il y a {{count}} jours"
   },
   "auth": {
     "login": "Se connecter",
@@ -38,6 +48,16 @@
     "genderFemale": "Femme",
     "chooseAvatar": "Choisir un avatar",
     "passwordPlaceholder": "Au moins 8 caractères",
+    "verifyEmail": "Vérifie ton email",
+    "verifyEmailMessage": "Nous avons envoyé un email de vérification à :",
+    "verifyEmailInstructions": "Cliquez sur le lien dans l'email pour vérifier votre compte. Une fois vérifié, vous serez automatiquement connecté.",
+    "resendEmail": "Renvoyer l'email",
+    "sending": "Envoi en cours...",
+    "backToLogin": "Retour à la connexion",
+    "emailSent": "Email envoyé",
+    "emailSentMessage": "Un nouvel email de vérification a été envoyé. Vérifiez votre boîte mail.",
+    "emailVerified": "Email vérifié !",
+    "emailVerifiedMessage": "Votre email a été vérifié avec succès. Redirection en cours...",
     "error": {
       "emailPasswordRequired": "Email et mot de passe requis",
       "loginFunctionUnavailable": "Fonction de connexion non disponible",
@@ -48,7 +68,10 @@
       "googleLoginFailed": "Échec de la connexion avec Google",
       "passwordMinLength": "Le mot de passe doit contenir au moins 8 caractères",
       "invalidEmail": "Format d'email invalide",
-      "signupFailed": "Échec de l'inscription"
+      "signupFailed": "Échec de l'inscription",
+      "emailRequired": "Veuillez entrer votre adresse email",
+      "sendEmailFailed": "Impossible d'envoyer l'email. Veuillez réessayer.",
+      "rateLimit": "Trop de tentatives. Veuillez réessayer plus tard."
     }
   },
   "home": {
@@ -70,26 +93,32 @@
     "theme": "Thème",
     "notifications": "Notifications",
     "privacy": "Confidentialité",
+    "analytics": "Statistiques d'utilisation",
+    "analyticsDesc": "Les statistiques nous aident à améliorer l'application. Elles sont anonymes et optionnelles.",
+    "privacyPolicy": "Politique de confidentialité",
+    "terms": "Conditions d'utilisation",
     "sound": "Son",
     "location": "Localisation",
     "synchronization": "Synchronisation",
     "about": "À propos",
     "prayerReminders": "Rappels de prière",
     "enableSound": "Activer le son",
+    "stars": "Étoiles",
+    "enableStars": "Afficher les étoiles",
     "notDefined": "Non définie",
     "updateLocation": "Mettre à jour la localisation",
+    "appName": "AYNA - Application spirituelle",
+    "version": "Version 1.0.0",
     "status": "Statut",
     "connected": "Connecté",
     "disconnected": "Déconnecté",
     "login": "Se connecter",
     "signup": "S'inscrire",
-    "logout": "Se déconnecter",
+    "logout": "Déconnecter",
     "logoutTitle": "Déconnexion",
     "logoutConfirm": "Êtes-vous sûr de vouloir vous déconnecter ?",
     "cancel": "Annuler",
     "logoutButton": "Déconnexion",
-    "appName": "AYNA - Application spirituelle",
-    "version": "Version 1.0.0",
     "permissionDenied": "Permission refusée",
     "permissionMessage": "La permission de localisation est nécessaire pour mettre à jour votre position.",
     "locationUpdated": "Localisation mise à jour: {{city}}",
@@ -104,19 +133,82 @@
     "registerUnavailable": "La fonction d'inscription n'est pas disponible",
     "registerSuccess": "Inscription réussie",
     "registerFailed": "Échec de l'inscription",
+    "changePassword": {
+      "title": "Changer le mot de passe",
+      "description": "Un email de confirmation vous sera envoyé pour changer votre mot de passe.",
+      "button": "Demander un changement de mot de passe",
+      "emailSent": "Un email de confirmation a été envoyé à {{email}}. Veuillez vérifier votre boîte mail et cliquer sur le lien pour changer votre mot de passe.",
+      "error": {
+        "sendFailed": "Erreur lors de l'envoi de l'email de confirmation. Veuillez réessayer."
+      }
+    },
     "emailVerification": {
       "title": "Vérification Email",
       "verified": "✓ Email vérifié",
       "notVerified": "⚠ Email non vérifié",
       "verifyButton": "Vérifier l'adresse email",
+      "emailSent": "Email envoyé",
+      "emailSentMessage": "Un email de vérification a été envoyé à {{email}}. Veuillez vérifier votre boîte mail et cliquer sur le lien de confirmation.",
+      "sendFailed": "Erreur lors de l'envoi de l'email de vérification. Veuillez réessayer.",
       "error": {
         "noEmail": "Email non disponible"
       }
+    },
+    "supabaseNotConfigured": "Supabase n'est pas configuré.",
+    "analyticsInsights": "Analyses & Statistiques",
+    "analyticsToggleError": "Erreur lors de la modification des paramètres",
+    "cannotOpenLink": "Impossible d'ouvrir le lien",
+    "themeCreator": "Créer un thème",
+    "widgets": "Widgets iOS/Android",
+    "homeWidgets": "Widgets Accueil",
+    "shortcuts": "Raccourcis",
+    "smartNotifications": {
+      "title": "Notifications intelligentes",
+      "enable": "Activer les notifications",
+      "enableDesc": "Recevez des rappels personnalisés basés sur vos habitudes",
+      "enableReminders": "Activer les rappels",
+      "adaptiveMode": "Mode adaptatif",
+      "from": "De",
+      "to": "à",
+      "prayerReminders": {
+        "title": "Rappels de prières",
+        "adaptiveDesc": "S'adapte à vos habitudes de prière",
+        "reminderTime": "Rappels (minutes avant)"
+      },
+      "dhikrReminders": {
+        "title": "Rappels de dhikr",
+        "adaptiveDesc": "S'adapte à vos moments préférés de dhikr"
+      },
+      "journalReminders": {
+        "title": "Rappels de journal",
+        "adaptiveDesc": "S'adapte à vos moments préférés d'écriture"
+      },
+      "suggestions": {
+        "title": "Suggestions intelligentes",
+        "enable": "Activer les suggestions",
+        "frequencyLabel": "Fréquence",
+        "frequency": {
+          "low": "Faible",
+          "medium": "Moyenne",
+          "high": "Élevée"
+        }
+      },
+      "quietHours": {
+        "title": "Heures silencieuses",
+        "enable": "Activer les heures silencieuses",
+        "desc": "Aucune notification pendant ces heures"
+      },
+      "respectPrayerTime": {
+        "title": "Respecter le temps de prière",
+        "desc": "Ne pas notifier pendant les 30 minutes autour des heures de prière"
+      }
     }
   },
+  "notifTitle": "Notifications Intelligentes",
   "profile": {
     "statistics": "Statistiques",
     "dhikr": "Dhikr",
+    "prayers": "Prières",
     "notes": "Notes",
     "days": "Jours",
     "defaultUser": "Utilisateur",
@@ -131,6 +223,65 @@
     "permissionMessage": "Nous avons besoin de l'accès à vos photos pour changer votre avatar.",
     "genderRequired": "Veuillez définir votre genre dans les paramètres pour choisir un avatar.",
     "logoutConfirm": "Êtes-vous sûr de vouloir vous déconnecter ?",
+    "bio": {
+      "title": "Biographie",
+      "add": "Ajouter une biographie",
+      "editHint": "Appuyez pour modifier",
+      "description": "Parlez-nous de vous...",
+      "placeholder": "Écrivez votre biographie ici...",
+      "saved": "Biographie enregistrée avec succès",
+      "error": {
+        "saveFailed": "Erreur lors de l'enregistrement de la biographie"
+      }
+    },
+    "accountInfo": "Informations du compte",
+    "memberSince": "Membre depuis",
+    "lastActive": "Dernière activité",
+    "language": "Langue",
+    "about": "À propos",
+    "appVersion": "Version de l'application",
+    "totalSessions": "Sessions totales",
+    "totalTime": "Temps total",
+    "minutes": "minutes",
+    "hours": "heures",
+    "accountCreated": "Compte créé",
+    "viewHijriCalendar": "Voir le calendrier Hijri",
+    "hijriCalendar": "Calendrier Hijri",
+    "todayHijri": "Aujourd'hui (Hijri)",
+    "year": "Année",
+    "month": "Mois",
+    "today": "Aujourd'hui",
+    "hijriDate": "Date Hijri",
+    "gregorianDate": "Date Grégorienne",
+    "calendarError": "Impossible de charger le calendrier. Veuillez réessayer.",
+    "calendar": {
+      "title": "Calendrier",
+      "hijriDate": "Date Hijri",
+      "gregorianDate": "Date Grégorienne",
+      "selectDate": "Sélectionner une date",
+      "today": "Aujourd'hui",
+      "loading": "Chargement du calendrier...",
+      "error": "Erreur lors du chargement du calendrier"
+    },
+    "sendFeedback": "Envoyer un avis / Signaler un bug",
+    "feedback": {
+      "title": "Envoyer un avis / Signaler un bug",
+      "type": "Type",
+      "avis": "Avis",
+      "bug": "Bug",
+      "subject": "Sujet",
+      "subjectPlaceholder": "Ex: Problème de connexion",
+      "message": "Message",
+      "messagePlaceholder": "Décrivez votre avis ou le bug rencontré...",
+      "images": "Images (optionnel)",
+      "addImage": "Ajouter une image",
+      "send": "Envoyer",
+      "success": "Votre feedback a été envoyé avec succès ! Merci pour votre contribution.",
+      "error": {
+        "required": "Veuillez remplir tous les champs obligatoires",
+        "sendFailed": "Erreur lors de l'envoi du feedback. Veuillez réessayer."
+      }
+    },
     "success": {
       "profileUpdated": "Profil mis à jour",
       "avatarUpdated": "Avatar mis à jour",
@@ -151,15 +302,27 @@
     "title": "AYNA",
     "welcomeMessage": "As-salāmu ʿalaykum! Comment puis-je vous aider aujourd'hui?",
     "inputPlaceholder": "Tapez votre message...",
-    "thinking": "AYNA réfléchit...",
+    "thinking": "AYNA est entrain d'écrire",
+    "noConversations": "Aucune conversation",
     "error": {
       "noResponse": "Désolé, je n'ai pas pu générer de réponse.",
       "serviceUnavailable": "Désolé, le service AYNA est indisponible. Vérifiez votre configuration.",
+      "startRecordingFailed": "Impossible de démarrer l'enregistrement: {{message}}",
       "transcriptionError": "Erreur de transcription",
       "transcriptionFailed": "Impossible de transcrire l'audio. Vérifiez votre connexion.",
       "stopRecordingFailed": "Impossible d'arrêter l'enregistrement",
       "recordingFailed": "Une erreur est survenue lors de l'enregistrement"
     }
+  },
+  "rateLimit": {
+    "limitReached": "Limite de messages atteinte",
+    "message": "Vous avez utilisé {{messagesUsed}} messages gratuits. Vous pourrez à nouveau utiliser le chat {{resetTime}}.",
+    "upgradeTitle": "Activez votre compte pour débloquer toutes les fonctionnalités",
+    "upgradeDescription": "Pour continuer à utiliser le chat IA et accéder à toutes les fonctionnalités premium (analyses avancées, accès illimité, etc.), activez votre compte dès maintenant.",
+    "info": "{{remaining}} messages restants. Réinitialisation {{resetTime}}",
+    "now": "maintenant",
+    "inHours": "dans {{hours}}h{{minutes}}",
+    "inMinutes": "dans {{minutes}}min"
   },
   "journal": {
     "title": "Journal",
@@ -168,16 +331,38 @@
     "noEntries": "Aucune note pour le moment",
     "challengeDay": "Jour {{day}}",
     "heartJournal": "Journal du cœur",
-    "aiAnalysis": "Analyse IA",
+    "aiAnalysis": "Analyse intelligente",
     "feelings": "Ressentis",
     "efforts": "Efforts",
     "myNotes": "Mes notes",
+    "noEntriesDescription": "Ajoutez une note pour commencer votre journal.",
+    "week": "Semaine",
+    "month": "Mois",
+    "year": "Année",
+    "all": "Tout",
+    "analyzing": "Analyse en cours...",
+    "generateAnalysis": "Analyser mes notes",
+    "summary": "Résumé",
+    "emotions": "Émotions",
+    "themes": "Thèmes",
+    "patterns": "Tendances",
+    "recommendations": "Conseils",
+    "trends": "Tendances",
+    "positive": "Positif",
+    "neutral": "Neutre",
+    "negative": "Négatif",
+    "noDataForAnalysis": "Ajoutez des notes pour générer une analyse.",
+    "noteAnalysis": "Analyse de cette note",
+    "insight": "Insight",
     "error": {
       "startRecordingFailed": "Impossible de démarrer l'enregistrement: {{message}}",
       "transcriptionError": "Erreur de transcription",
       "transcriptionFailed": "Impossible de transcrire l'audio. Vérifiez votre connexion.",
       "stopRecordingFailed": "Impossible d'arrêter l'enregistrement",
-      "recordingFailed": "Une erreur est survenue lors de l'enregistrement"
+      "recordingFailed": "Une erreur est survenue lors de l'enregistrement",
+      "analysisFailed": "Impossible de générer l'analyse.",
+      "noteAnalysisFailed": "Impossible d'analyser cette note.",
+      "deleteFailed": "Impossible de supprimer la note"
     }
   },
   "forgotPassword": {
@@ -218,6 +403,23 @@
       "resetFailed": "Une erreur est survenue lors de la réinitialisation. Veuillez réessayer."
     }
   },
+  "changePassword": {
+    "title": "Changer votre mot de passe",
+    "subtitle": "Entrez votre nouveau mot de passe ci-dessous.",
+    "newPassword": "Nouveau mot de passe",
+    "confirmPassword": "Confirmer le mot de passe",
+    "passwordPlaceholder": "Minimum 8 caractères, 1 majuscule, 1 minuscule, 1 chiffre",
+    "confirmPasswordPlaceholder": "Répétez votre nouveau mot de passe",
+    "changeButton": "Changer le mot de passe",
+    "info": "Votre mot de passe doit contenir au moins 8 caractères, une majuscule, une minuscule et un chiffre.",
+    "success": "Votre mot de passe a été changé avec succès. Veuillez vous reconnecter avec votre nouveau mot de passe.",
+    "error": {
+      "passwordRequired": "Le mot de passe est requis",
+      "passwordsDontMatch": "Les mots de passe ne correspondent pas",
+      "supabaseOnly": "Le changement de mot de passe n'est disponible qu'avec Supabase",
+      "changeFailed": "Erreur lors du changement de mot de passe. Veuillez réessayer."
+    }
+  },
   "quran": {
     "title": "Qur'an",
     "verses": "{{count}} verset",
@@ -252,11 +454,83 @@
     "profile": "Profil"
   },
   "analytics": {
-    "title": "Analytique",
+    "title": "Mon Analytics",
     "period30days": "30 jours",
     "period7days": "7 jours",
     "period24h": "24h",
-    "overview": "Vue d'ensemble",
+    "day": "Jour",
+    "week": "Semaine",
+    "month": "Mois",
+    "year": "Année",
+    "all": "Tout",
+    "overview": {
+      "title": "Vue d'ensemble",
+      "sessions": "Sessions",
+      "totalTime": "Temps total",
+      "avgSession": "Moyenne/session",
+      "topScreens": "Écrans les plus visités",
+      "actions": "Actions réalisées",
+      "progression": "Progression",
+      "thisWeek": "Cette semaine",
+      "thisMonth": "Ce mois"
+    },
+    "actions": {
+      "dhikr": "Dhikr",
+      "prayers": "Prières",
+      "notes": "Notes",
+      "khalwa": "Méditations"
+    },
+    "history": {
+      "title": "Historique détaillé",
+      "filterByType": "Filtrer par type",
+      "filterByDate": "Filtrer par date",
+      "selectDateRange": "Sélectionner une période",
+      "clearDates": "Effacer",
+      "last7Days": "7 derniers jours",
+      "last30Days": "30 derniers jours",
+      "last90Days": "90 derniers jours",
+      "all": "Tous",
+      "empty": "Aucun événement trouvé"
+    },
+    "charts": {
+      "title": "Graphiques détaillés",
+      "activity7Days": "Activité des 7 derniers jours",
+      "monthlyHeatmap": "Carte de chaleur mensuelle"
+    },
+    "insights": {
+      "title": "Insights IA personnalisés"
+    },
+    "privacy": {
+      "title": "Confidentialité et contrôle",
+      "description": "Toutes vos données restent locales et sécurisées. Aucune donnée sensible n'est envoyée à l'IA.",
+      "export": "Exporter mes données",
+      "exporting": "Export en cours...",
+      "exportMessage": "Choisissez le format d'export. Les données seront envoyées à votre adresse email.",
+      "emailRequired": "Votre adresse email est requise pour l'export.",
+      "reset": "Réinitialiser",
+      "resetting": "Réinitialisation...",
+      "resetTitle": "Réinitialiser les analytics",
+      "resetMessage": "Êtes-vous sûr de vouloir supprimer toutes vos données analytics ? Cette action est irréversible.",
+      "resetSuccess": "Vos données analytics ont été supprimées.",
+      "exportSuccess": "Vos données ont été exportées et envoyées par email. Vérifiez votre boîte de réception.",
+      "exportError": "Erreur lors de l'export."
+    },
+    "assistant": {
+      "title": "Assistant Analytics",
+      "description": "Obtenez des insights personnalisés sur votre activité et des recommandations basées sur vos données.",
+      "open": "Ouvrir l'assistant",
+      "close": "Fermer",
+      "analyze": "Générer une analyse",
+      "analyzing": "Analyse en cours...",
+      "summary": "Résumé automatique",
+      "trends": "Tendances détectées",
+      "advice": "Conseils personnalisés",
+      "suggestions": "Questions suggérées",
+      "chat": "Posez vos questions",
+      "placeholder": "Posez une question sur vos analytics...",
+      "welcome": "Bonjour ! Je suis votre assistant analytics. Comment puis-je vous aider ?",
+      "error": "Désolé, une erreur est survenue."
+    },
     "activeDays": "Jours actifs",
     "totalTime": "Temps total",
     "usageFrequency": "Fréquence d'utilisation",
@@ -264,13 +538,34 @@
     "validatedVisits": "Visites validées (≥10 secondes)",
     "usageByModule": "Utilisation par module (temps)",
     "noData": "Aucune donnée disponible",
+    "noDataDescription": "Utilisez l'application pour voir vos statistiques ici.",
     "noValidatedVisits": "Aucune visite validée pour cette période",
     "visitsUnder10Seconds": "Les visites de moins de 10 secondes ne sont pas comptabilisées",
     "loading": "Chargement...",
     "visits": "visite",
     "visits_plural": "visites",
     "sessions": "session",
-    "sessions_plural": "sessions"
+    "sessions_plural": "sessions",
+    "week": "Semaine",
+    "month": "Mois",
+    "year": "Année",
+    "all": "Tout",
+    "assistant": {
+      "title": "Assistant intelligent",
+      "description": "Découvrez des insights sur votre activité spirituelle",
+      "open": "Ouvrir",
+      "close": "Fermer",
+      "analyze": "Analyser mes données",
+      "analyzing": "Analyse en cours...",
+      "chat": "Posez une question",
+      "placeholder": "Posez une question...",
+      "welcome": "Bonjour ! Comment puis-je vous aider ?",
+      "error": "Désolé, je n'ai pas pu répondre",
+      "summary": "Résumé",
+      "trends": "Tendances",
+      "advice": "Conseils",
+      "suggestions": "Questions suggérées"
+    }
   },
   "home": {
     "title": "Accueil",
@@ -300,8 +595,663 @@
     "grantPermission": "Accorder la permission"
   },
   "nurshifa": {
-    "title": "Guérison",
-    "subtitle": "Coming soon"
+    "title": "Nur & Shifa",
+    "subtitle": "Guérison spirituelle",
+    "nurQuran": {
+      "title": "🌙✨ Nûr al-Qur'ân – La lumière guérisseuse 🌙✨",
+      "intro": "Bismillahir-Rahmanir-Rahim\n\nApproche ton cœur et ouvre ton âme. Ici commence Nûr al-Qur'ân, la lumière du Coran, souffle divin qui purifie, apaise et guérit. Chaque verset récité est une flamme douce qui dissipe les ténèbres intérieures, chaque mot est un baume pour l'esprit et le cœur.\n\nRessens la présence d'Allah à travers chaque syllabe, laisse cette lumière pénétrer tes blessures visibles et invisibles. Sois humble, sois patient, et permets à la lumière du Coran de libérer ton âme de l'anxiété, de la lourdeur et de tout mal qui t'oppresse.\n\nChaque récitation est une connexion directe avec le Guérisseur Suprême, chaque souffle un pas vers la sérénité.\nPlonge dans la lumière, et laisse Allah guérir.",
+      "intentionStart": "Intention de début",
+      "intentionEnd": "Intention de fin",
+      "categories": {
+        "deblocage": {
+          "emoji": "🟩",
+          "title": "1. DÉBLOCAGE",
+          "subtitle": "الفتح (Al-Fath)",
+          "description": "Pour retirer les nœuds intérieurs, les lourdeurs et les tensions psychiques.",
+          "intentionStart": "Ô Allah, que la lumière de ces versets ouvre les portes de mon cœur et dissipe toute lourdeur intérieure.",
+          "intentionEnd": "Que la clarté et la guidance de Ton Livre élèvent mon esprit et libèrent mon âme de ses chaînes.",
+          "1": {
+            "title": "Ash-Sharh 94 (Sourate complète)",
+            "arabic": "بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ\nأَلَمْ نَشْرَحْ لَكَ صَدْرَكَ\nوَوَضَعْنَا عَنكَ وِزْرَكَ\nالَّذِي أَنقَضَ ظَهْرَكَ\nوَرَفَعْنَا لَكَ ذِكْرَكَ\nفَإِنَّ مَعَ الْعُسْرِ يُسْرًا\nإِنَّ مَعَ الْعُسْرِ يُسْرًا\nفَإِذَا فَرَغْتَ فَانصَبْ\nوَإِلَى رَبِّكَ فَارْغَبْ",
+            "transliteration": "Bismillahir-Rahmanir-Raheem\nAlam nashrah laka sadrak\nWa wada'na 'anka wizraka\nAlladhi anqada zahrak\nWa rafa'na laka dhikrak\nFa-inna ma'al-'usri yusra\nInna ma'al-'usri yusra\nFa-itha faraghta fansab\nWa ila rabbika farghab",
+            "translation": "1. N'avons-Nous pas ouvert pour toi ta poitrine?\n\n2. Et ne t'avons-Nous pas déchargé du fardeau\n\n3. qui accablait ton dos?\n\n4. Et exalté pour toi ta renommée?\n\n5. A côté de la difficulté est, certes, une facilité!\n\n6. A côté de la difficulté, est certes, une facilité!\n\n7. Quand tu te libères, donc, lève-toi,\n\n8. et à ton Seigneur aspire."
+          },
+          "2": {
+            "title": "Ad-Duha 93 (Sourate complète)",
+            "arabic": "بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ\nوَالضُّحَى\nوَاللَّيْلِ إِذَا سَجَى\nمَا وَدَّعَكَ رَبُّكَ وَمَا قَلَى\nوَلَلْآخِرَةُ خَيْرٌ لَكَ مِنَ الْأُولَى\nوَلَسَوْفَ يُعْطِيكَ رَبُّكَ فَتَرْضَى\nأَلَمْ يَجِدْكَ يَتِيمًا فَآوَى\nوَوَجَدَكَ ضَالًّا فَهَدَى\nوَوَجَدَكَ عَائِلًا فَأَغْنَى\nفَأَمَّا الْيَتِيمَ فَلَا تَقْهَرْ\nوَأَمَّا السَّائِلَ فَلَا تَنْهَرْ\nوَأَمَّا بِنِعْمَةِ رَبِّكَ فَحَدِّثْ",
+            "transliteration": "Bismillahir-Rahmanir-Raheem\nWal-duha\nWal-layli idha saja\nMa wadda'aka rabbuka wa ma qala\nWal-akhiratu khayrun laka mina al-oola\nWa lasawfa yu'teeka rabbuka fatarḍa\nAlam yajidka yatiman fa awa\nWa wajadaka dallan fahada\nWa wajadaka 'ailan fa aghna\nFa-amma al-yatima fala taqhar\nWa amma al-saila fala tanhar\nWa amma bini'mati rabbika fa haddith",
+            "translation": "1. Par le Jour Montant!\n\n2. Et par la nuit quand elle couvre tout!\n\n3. Ton Seigneur ne t'a ni abandonné, ni détesté.\n\n4. La vie dernière t'est, certes, meilleure que la vie présente.\n\n5. Ton Seigneur t'accordera certes [Ses faveurs], et alors tu seras satisfait.\n\n6. Ne t'a-t-Il pas trouvé orphelin? Alors Il t'a accueilli!\n\n7. Ne t'a-t-Il pas trouvé égaré ? Alors Il t'a guidé.\n\n8. Ne t'a-t-Il pas trouvé pauvre? Alors Il t'a enrichi.\n\n9. Quant à l'orphelin, donc, ne le maltraite pas.\n\n10. Quant au demandeur, ne le repousse pas.\n\n11. Et quant au bienfait de ton Seigneur, proclame-le."
+          },
+          "3": {
+            "title": "Tâ-Hâ 20:68-69",
+            "arabic": "قُلْنَا لَا تَخَفْ إِنَّكَ أَنتَ ٱلْأَعْلَىٰ ٦٨\nوَأَلْقِ مَا فِى يَمِينِكَ تَلْقَفْ مَا صَنَعُوٓا۟ ۖ إِنَّمَا صَنَعُوا۟ كَيْدُ سَـٰحِرٍۢ ۖ وَلَا يُفْلِحُ ٱلسَّاحِرُ حَيْثُ أَتَىٰ ٦٩",
+            "transliteration": "Qulnā lā takhaf innaka anta al-a'lā\nWa alqi mā fī yamīnika talqaf mā ṣana'ū innamā ṣana'ū kaydu sāḥirin wa lā yufliḥu as-sāḥiru ḥaythu atā",
+            "translation": "Ta-Ha (20:68)\n\nNous lui dîmes : \"N'aie pas peur ! C'est toi qui auras le dessus.\n\nTa-Ha (20:69)\n\nJette ce qu'il y a dans ta main droite ! Cela dévorera ce qu'ils ont fabriqué. Ce qu'ils ont fabriqué n'est qu'une ruse de magicien ; et le magicien ne réussit pas, où qu'il soit.\""
+          },
+          "4": {
+            "title": "Yûnus 10:81-82",
+            "arabic": "فَلَمَّآ أَلْقَوْا۟ قَالَ مُوسَىٰ مَا جِئْتُم بِهِ ٱلسِّحْرُ ۖ إِنَّ ٱللَّهَ سَيُبْطِلُهُۥٓ ۖ إِنَّ ٱللَّهَ لَا يُصْلِحُ عَمَلَ ٱلْمُفْسِدِينَ ٨١\nوَيُحِقُّ ٱللَّهُ ٱلْحَقَّ بِكَلِمَـٰتِهِۦ وَلَوْ كَرِهَ ٱلْمُجْرِمُونَ ٨٢",
+            "transliteration": "Falammā alqaw qāla Mūsā mā ji'tum bihi as-siḥru inna Allāha sayubṭiluhu inna Allāha lā yuṣliḥu 'amala al-mufsidīn\nWa yuḥiqqu Allāhu al-ḥaqqa bi-kalimātihi wa law kariha al-mujrimūn",
+            "translation": "Jonas (10:81)\n\nLorsqu'ils jetèrent, Moïse dit: \"Ce que vous avez produit est magie! Allah l'annulera. Car Allah ne fait pas prospérer ce que font les fauteurs de désordre.\n\nJonas (10:82)\n\nEt par Ses paroles, Allah fera triompher la Vérité, quelque répulsion qu'en aient les criminels.\"",
+            "note": "Ce verset symbolise que la vérité et l'aide d'Allah brisent les obstacles et les blocages."
+          },
+          "5": {
+            "title": "Al-Anbiyâ 21:83-84 — Dua d'Ayoub (as)",
+            "arabic": "وَأَيُّوبَ إِذْ نَادَى رَبَّهُ أَنِّي مَسَّنِيَ الضُّرُّ وَأَنتَ أَرْحَمُ الرَّاحِمِينَ\nفَاسْتَجَبْنَا لَهُ فَكَشَفْنَا مَا بِهِ مِن ضُرٍّ وَآتَيْنَاهُ أَهْلَهُ وَمِثْلَهُمْ مَعَهُمْ رَحْمَةً مِنْ عِندِنَا وَذِكْرَى لِلْعَابِدِينَ",
+            "transliteration": "Wa Ayyūba idh nādā rabbahu annī massaniya al-ḍurru wa anta arḥamu ar-rāḥimīn\nFa-stajabnā lahu fakashafnā mā bihi min ḍurrin wa ātaynāhu ahlahu wa mithlahum ma'ahum raḥmatan min 'indinā wa dhikran lil-'ābidīn",
+            "translation": "\"Ayoub invoqua son Seigneur : 'Le mal m'a touché, et Tu es le plus Miséricordieux des miséricordieux.'\nNous lui avons répondu, avons ôté le mal qui l'atteignait et lui avons donné sa famille et son pareil avec eux, comme miséricorde de Nous et comme rappel pour les adorateurs.\""
+          },
+          "6": {
+            "title": "Al-Fath 48:1-3",
+            "arabic": "إِنَّا فَتَحْنَا لَكَ فَتْحًا مُبِينًا\nلِيَغْفِرَ لَكَ اللَّهُ مَا تَقَدَّمَ مِن ذَنْبِكَ وَمَا تَأَخَّرَ\nوَيُتِمَّ نِعْمَتَهُ عَلَيْكَ وَيَهْدِيَكَ صِرَاطًا مُسْتَقِيمًا",
+            "transliteration": "Innā fataḥnā laka fatḥan mubīnan\nLi-yaghfira laka Allāhu mā taqaddama min dhanbika wa mā ta'akhkhara\nWa yutimmu ni'matahu 'alayka wa yahdīka ṣirāṭan mustaqīman",
+            "translation": "\"Nous t'avons accordé une victoire manifeste,\nafin qu'Allah te pardonne tes péchés passés et à venir,\net qu'Il complète sur toi Sa grâce et te guide vers un chemin droit.\""
+          },
+          "7": {
+            "title": "Ash-Sharh 94:5-6",
+            "arabic": "فَإِنَّ مَعَ الْعُسْرِ يُسْرًا\nإِنَّ مَعَ الْعُسْرِ يُسْرًا",
+            "transliteration": "Fa-inna ma'al-'usri yusra\nInna ma'al-'usri yusra",
+            "translation": "\"Ainsi, avec la difficulté vient la facilité.\nOui, avec la difficulté vient la facilité.\""
+          }
+        },
+        "protection": {
+          "emoji": "🟩",
+          "title": "2. PROTECTION",
+          "subtitle": "الحماية (Al-Himâyah)",
+          "description": "Pour se protéger contre les maux invisibles, les peurs et les waswas.",
+          "intentionStart": "Ô Allah, que la lumière de ces paroles sacrées m'enveloppe et me protège de tout mal, visible ou caché.",
+          "intentionEnd": "Que la force et la paix de Ton Livre demeurent autour de moi, à l'abri de tout danger et inquiétude.",
+          "1": {
+            "title": "Al-Fatiha 1:1-7 (Sourate complète)",
+            "arabic": "بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ\nالْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ\nالرَّحْمَنِ الرَّحِيمِ\nمَالِكِ يَوْمِ الدِّينِ\nإِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ\nاهْدِنَا الصِّرَاطَ الْمُسْتَقِيمَ\nصِرَاطَ الَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ الْمَغْضُوبِ عَلَيْهِمْ وَلَا الضَّالِّينَ",
+            "transliteration": "Bismillahir-Rahmanir-Raheem\nAlhamdu lillahi rabbil-'alameen\nAr-Rahmanir-Raheem\nMaliki yawmid-deen\nIyyaka na'budu wa iyyaka nasta'een\nIhdinas-siratal-mustaqeem\nSiratal-ladhina an'amta 'alayhim ghayril-maghdubi 'alayhim wa laddaalleen",
+            "translation": "\"Au nom d'Allah, le Tout Miséricordieux, le Très Miséricordieux.\nLouange à Allah, Seigneur de l'univers.\nLe Tout Miséricordieux, le Très Miséricordieux.\nMaître du Jour du Jugement.\nC'est Toi que nous adorons et c'est Toi dont nous implorons le secours.\nGuide-nous dans le droit chemin,\nle chemin de ceux que Tu as comblés de faveurs, non pas de ceux qui ont encouru Ta colère, ni des égarés.\""
+          },
+          "2": {
+            "title": "Al-Baqara 2:255 — Ayat al-Kursi",
+            "arabic": "اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ ۚ لَا تَأْخُذُهُ سِنَةٌ وَلَا نَوْمٌ ۚ لَهُ مَا فِي السَّمَاوَاتِ وَمَا فِي الْأَرْضِ ۗ مَنْ ذَا الَّذِي يَشْفَعُ عِنْدَهُ إِلَّا بِإِذْنِهِ ۚ يَعْلَمُ مَا بَيْنَ أَيْدِيهِمْ وَمَا خَلْفَهُمْ ۖ وَلَا يُحِيطُونَ بِشَيْءٍ مِنْ عِلْمِهِ إِلَّا بِمَا شَاءَ ۚ وَسِعَ كُرْسِيُّهُ السَّمَاوَاتِ وَالْأَرْضَ ۖ وَلَا يَئُودُهُ حِفْظُهُمَا ۚ وَهُوَ الْعَلِيُّ الْعَظِيمُ",
+            "transliteration": "Allāhu lā ilāha illā Huwal-Hayyul-Qayyūm\nLā ta'khudhuhu sinatun wa lā nawm\nLahu mā fissamāwāti wa mā fil-arḍ\nMan dhalladhī yashfa'u 'indahu illā bi-idhnih\nYa'lamu mā baina aydīhim wa mā khalfahum\nWa lā yuḥīṭūna bishay'in min 'ilmihi illā bimā shā'\nWasi'a kursiyuhus-samāwāti wal-arḍ\nWa lā ya'ūduhu ḥifẓuhumā\nWa Huwal-'Aliyyul-'Azīm",
+            "translation": "\"Allah ! Il n'y a point de divinité en dehors de Lui, le Vivant, Celui qui subsiste par Lui-même.\nNi somnolence ni sommeil ne Le saisissent.\nÀ Lui appartient tout ce qui est dans les cieux et sur la terre.\nQui peut intercéder auprès de Lui sans Sa permission ?\nIl connaît ce qui est devant eux et ce qui est derrière eux.\nEt ils n'embrassent de Son savoir que ce qu'Il veut.\nSon Trône déborde les cieux et la terre, et leur garde ne Lui coûte aucune peine.\nIl est le Très Haut, le Très Grand.\""
+          },
+          "3": {
+            "title": "Al-Baqara 2:285-286 (versets complets)",
+            "arabic": "آمَنَ الرَّسُولُ بِمَا أُنزِلَ إِلَيْهِ مِن رَّبِّهِ وَالْمُؤْمِنُونَ ۚ كُلٌّ آمَنَ بِاللَّهِ وَمَلَائِكَتِهِ وَكُتُبِهِ وَرُسُلِهِ لَا نُفَرِّقُ بَيْنَ أَحَدٍ مِّن رُّسُلِهِ وَقَالُوا سَمِعْنَا وَأَطَعْنَا غُفْرَانَكَ رَبَّنَا وَإِلَيْكَ الْمَصِيرُ\nلَا يُكَلِّفُ اللَّهُ نَفْسًا إِلَّا وُسْعَهَا ۚ لَهَا مَا كَسَبَتْ وَعَلَيْهَا مَا اكْتَسَبَتْ ۗ رَبَّنَا لَا تُؤَاخِذْنَا إِن نَّسِينَا أَوْ أَخْطَأْنَا ۚ رَبَّنَا وَلَا تَحْمِلْ عَلَيْنَا إِصْرًا كَمَا حَمَلْتَهُ عَلَى الَّذِينَ مِن قَبْلِنَا ۚ رَبَّنَا وَلَا تُحَمِّلْنَا مَا لَا طَاقَةَ لَنَا بِهِ ۖ وَاعْفُ عَنَّا وَاغْفِرْ لَنَا وَارْحَمْنَا ۚ أَنتَ مَوْلَانَا فَانصُرْنَا عَلَى الْقَوْمِ الْكَافِرِينَ",
+            "transliteration": "Āmana ar-rasūlu bimā unzila ilayhi min rabbihi wal-mu'minūn\nKullun āmana billāhi wa malā'ikatihi wa kutubihi wa rusulihi\nLā nufarriqu bayna aḥadin min rusulihi wa qālū sami'nā wa aṭa'nā ghufrānaka rabbana wa ilaykal-masīr\nLā yukallifu Allāhu nafsan illā wus'ahā\nLahā mā kasabat wa 'alayhā mā iktasabat\nRabbana lā tu'ākhidhna in nasīnā aw akhṭa'nā\nRabbana wa lā taḥmil 'alaynā iṣran kamā ḥamaltahu 'alal-ladhīna min qablina\nRabbana wa lā tuḥammilnā mā lā ṭāqata lanā bihi\nWa'fu 'annā waghfir lanā warḥamnā\nAnta mawlānā fansurnā 'alal-qawmi-l-kāfirīn",
+            "translation": "\"Le Messager croit en ce qui a été révélé par son Seigneur, et les croyants aussi.\nChacun croit en Allah, en Ses anges, Ses livres et Ses messagers.\nIls ne font aucune distinction entre Ses messagers et disent : 'Nous avons entendu et nous avons obéi. Pardonne-nous, Seigneur, et vers Toi est le retour.'\nAllah n'impose à aucune âme une charge supérieure à sa capacité.\nElle sera récompensée pour ce qu'elle aura acquis et punie pour ce qu'elle aura mérité.\nSeigneur, ne nous punis pas si nous oublions ou commettons une erreur.\nSeigneur, ne nous impose pas un fardeau comme celui que Tu as imposé à ceux qui nous ont précédés.\nSeigneur, ne nous impose pas ce que nous ne pouvons supporter.\nPardonne-nous, accorde-nous Ton pardon et Ta miséricorde.\nTu es notre Protecteur, aide-nous donc contre le peuple mécréant.\""
+          },
+          "4": {
+            "title": "Al-Ikhlâs 112 (Sourate complète)",
+            "arabic": "قُلْ هُوَ اللَّهُ أَحَدٌ\nاللَّهُ الصَّمَدُ\nلَمْ يَلِدْ وَلَمْ يُولَدْ\nوَلَمْ يَكُن لَّهُ كُفُوًا أَحَدٌ",
+            "transliteration": "Qul Huwa Allahu Ahad\nAllahu-s-Samad\nLam yalid wa lam yūlad\nWa lam yakun lahu kufuwan ahad",
+            "translation": "\"Dis : Il est Allah, Unique.\nAllah, le Seul à être imploré pour ce que nous désirons.\nIl n'a pas engendré et n'a pas été engendré.\nEt nul n'est égal à Lui.\""
+          },
+          "5": {
+            "title": "Al-Falaq 113 (Sourate complète)",
+            "arabic": "قُلْ أَعُوذُ بِرَبِّ الْفَلَقِ\nمِن شَرِّ مَا خَلَقَ\nوَمِن شَرِّ غَاسِقٍ إِذَا وَقَبَ\nوَمِن شَرِّ النَّفَّاثَاتِ فِي الْعُقَدِ\nوَمِن شَرِّ حَاسِدٍ إِذَا حَسَدَ",
+            "transliteration": "Qul a'ūdhu birabbil-falaq\nMin sharri mā khalaq\nWa min sharri ghāsiqin idhā waqab\nWa min sharri an-naffāthāti fil-'uqad\nWa min sharri ḥāsidin idhā ḥasad",
+            "translation": "\"Dis : Je cherche refuge auprès du Seigneur de l'aube,\ncontre le mal de ce qu'Il a créé,\ncontre le mal des ténèbres quand elles s'approfondissent,\ncontre le mal de celles qui soufflent sur les nœuds,\net contre le mal de l'envieux quand il envie.\""
+          },
+          "6": {
+            "title": "An-Nâs 114 (Sourate complète)",
+            "arabic": "قُلْ أَعُوذُ بِرَبِّ النَّاسِ\nمَلِكِ النَّاسِ\nإِلَهِ النَّاسِ\nمِن شَرِّ الْوَسْوَاسِ الْخَنَّاسِ\nالَّذِي يُوَسْوِسُ فِي صُدُورِ النَّاسِ\nمِنَ الْجِنَّةِ وَالنَّاسِ",
+            "transliteration": "Qul a'ūdhu birabbin-nās\nMalikin-nās\nIlāhin-nās\nMin sharri al-waswāsi al-khannās\nAlladhī yuwaswisu fī ṣudūri-nās\nMina-l-jinnati wa-n-nās",
+            "translation": "\"Dis : Je cherche refuge auprès du Seigneur des hommes,\ndu Souverain des hommes,\ndu Dieu des hommes,\ncontre le mal du mauvais conseiller furtif,\nqui souffle le mal dans les cœurs des hommes,\nqu'il soit parmi les djinns ou parmi les hommes.\""
+          },
+          "7": {
+            "title": "Al-Mu'minûn 23:97-98",
+            "arabic": "وَقُل رَّبِّ أَعُوذُ بِكَ مِنْ هَمَزَاتِ الشَّيَاطِينِ\nوَأَعُوذُ بِكَ رَبِّ أَن يَحْضُرُونِ",
+            "transliteration": "Wa qul Rabbi a'ūdhu bika min hamazāti-sh-shayāṭīn\nWa a'ūdhu bika Rabbi an yaḥḍurūn",
+            "translation": "\"Et dis : 'Ô mon Seigneur, je cherche refuge auprès de Toi contre les insinuations des diables,\net je cherche refuge auprès de Toi, Seigneur, pour qu'ils ne me soient pas présents.'\""
+          }
+        },
+        "guerison": {
+          "emoji": "🟩",
+          "title": "3. GUÉRISON",
+          "subtitle": "الشفاء (Ash-Shifâ)",
+          "description": "Pour la maladie du corps, la fatigue, la douleur, la faiblesse.",
+          "intentionStart": "Ô Allah, que la lumière de ces versets coule en moi et restaure mon corps, mon esprit et mon cœur.",
+          "intentionEnd": "Que Ta guérison, révélée dans Tes paroles, m'enveloppe et me rende force et vitalité.",
+          "1": {
+            "title": "Al-Fatiha 1:1-7 (Sourate complète)",
+            "arabic": "بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ\nالْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ\nالرَّحْمَنِ الرَّحِيمِ\nمَالِكِ يَوْمِ الدِّينِ\nإِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ\nاهْدِنَا الصِّرَاطَ الْمُسْتَقِيمَ\nصِرَاطَ الَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ الْمَغْضُوبِ عَلَيْهِمْ وَلَا الضَّالِّينَ",
+            "transliteration": "Bismillahir-Rahmanir-Raheem\nAlhamdu lillahi rabbil-'alameen\nAr-Rahmanir-Raheem\nMaliki yawmid-deen\nIyyaka na'budu wa iyyaka nasta'een\nIhdinas-siratal-mustaqeem\nSiratal-ladhina an'amta 'alayhim ghayril-maghdubi 'alayhim wa laddaalleen",
+            "translation": "\"Au nom d'Allah, le Tout Miséricordieux, le Très Miséricordieux.\nLouange à Allah, Seigneur de l'univers.\nLe Tout Miséricordieux, le Très Miséricordieux.\nMaître du Jour du Jugement.\nC'est Toi que nous adorons et c'est Toi dont nous implorons le secours.\nGuide-nous dans le droit chemin,\nle chemin de ceux que Tu as comblés de faveurs, non pas de ceux qui ont encouru Ta colère, ni des égarés.\""
+          },
+          "2": {
+            "title": "Al-Isrâ 17:82",
+            "arabic": "وَنُنَزِّلُ مِنَ الْقُرْآنِ مَا هُوَ شِفَاءٌ وَرَحْمَةٌ لِّلْمُؤْمِنِينَ وَلَا يَزِيدُ الظَّالِمِينَ إِلَّا خَسَارًا",
+            "transliteration": "Wa nunazzilu mina-l-Qur'āni mā huwa shifā'un wa raḥmatun lil-mu'minīn wa lā yazīdu-ẓ-ẓālimīna illā khasāran",
+            "translation": "\"Et Nous faisons descendre dans le Coran ce qui est guérison et miséricorde pour les croyants, et cela ne fait qu'accroître la perte pour les injustes.\""
+          },
+          "3": {
+            "title": "Ash-Shu'arâ 26:80",
+            "arabic": "وَإِذَا مَرِضْتُ فَهُوَ يَشْفِينِ",
+            "transliteration": "Wa idhā maridtu fahuwa yashfīn",
+            "translation": "\"Et quand je tombe malade, c'est Lui qui me guérit.\""
+          },
+          "4": {
+            "title": "Fussilat 41:44",
+            "arabic": "وَلَوْ جَعَلْنَاهُ قُرْآنًا أَعْجَمِيًّا لَّقَالُوا لَوْلَا فُصِّلَتْ آيَاتُهُ أَعْجَمِيًّا وَعَرَبِيًّا قُلْ هُوَ لِلَّذِينَ آمَنُوا هُدًى وَشِفَاءٌ",
+            "transliteration": "Wa law ja'alnāhu Qur'ānan a'jamīyyan laqālū lawlā fussilat āyātuhu a'jamīyyan wa 'arabiyyan qul huwa lilladhīna āmanū hudan wa shifā'un",
+            "translation": "\"Et si Nous l'avions fait un Coran étranger, ils auraient dit : 'Pourquoi ses versets ne sont-ils pas détaillés en étranger et en arabe ?'\nDis : Il est une guidance et une guérison pour ceux qui croient.\""
+          },
+          "5": {
+            "title": "Al-Baqara 2:153",
+            "arabic": "يَا أَيُّهَا الَّذِينَ آمَنُوا اسْتَعِينُوا بِالصَّبْرِ وَالصَّلَاةِ ۚ إِنَّ اللَّهَ مَعَ الصَّابِرِينَ",
+            "transliteration": "Yā ayyuhalladhīna āmanūista'īnū biṣ-ṣabri waṣ-ṣalāh\nInna Allāha ma'a-ṣ-ṣābirīn",
+            "translation": "\"Ô vous qui croyez ! Cherchez secours dans la patience et la prière.\nCertes Allah est avec les patients.\""
+          },
+          "6": {
+            "title": "At-Tawbah 9:14",
+            "arabic": "قَـٰتِلُوهُمْ يُعَذِّبْهُمُ ٱللَّهُ بِأَيْدِيكُمْ وَيُخْزِهِمْ وَيَنصُرْكُمْ عَلَيْهِمْ وَيَشْفِ صُدُورَ قَوْمٍۢ مُّؤْمِنِينَ ١٤",
+            "transliteration": "Qātilūhum yu'aḏḏibhumu Allāhu bi-aydīkum wa yukhzihim wa yanṣurkum 'alayhim wa yashfi ṣudūra qawmin mu'minīn",
+            "translation": "Le repentir (9:14)\n\nCombattez-les. Allah ! Par vos mains, Allah les châtiera, les couvrira d'ignominie, vous donnera la victoire sur eux et guérira les poitrines d'un peuple croyant."
+          },
+          "7": {
+            "title": "Yûnus 10:57",
+            "arabic": "يَا أَيُّهَا النَّاسُ قَدْ جَاءَكُم مَّوْعِظَةٌ مِّن رَّبِّكُمْ وَشِفَاءٌ لِّمَا فِي الصُّدُورِ وَهُدًى وَرَحْمَةٌ لِّلْمُؤْمِنِينَ",
+            "transliteration": "Yā ayyuhan-nāsu qad jā'akum maw'iẓatun min rabbikum wa shifā'un limā fī ṣudūrikum wa hudan wa raḥmatun lil-mu'minīn",
+            "translation": "\"Ô hommes ! Il vous est venue une exhortation de votre Seigneur, et un remède pour ce qui est dans les cœurs, une guidance et une miséricorde pour les croyants.\""
+          }
+        },
+        "apaisement": {
+          "emoji": "🟩",
+          "title": "4. APAISER LE CŒUR",
+          "subtitle": "الراحة (Ar-Râha)",
+          "description": "Pour l'anxiété, le stress, les pensées lourdes et l'agitation intérieure.",
+          "intentionStart": "Ô Allah, que la lumière de ces versets calme les tempêtes de mon cœur et apaise mon esprit troublé.",
+          "intentionEnd": "Que Ton Livre remplisse mon être de sérénité et que chaque souffle devienne tranquillité et paix.",
+          "1": {
+            "title": "Ar-Ra'd 13:28",
+            "arabic": "الَّذِينَ آمَنُوا وَتَطْمَئِنُّ قُلُوبُهُم بِذِكْرِ اللَّهِ ۗ أَلَا بِذِكْرِ اللَّهِ تَطْمَئِنُّ الْقُلُوبُ",
+            "transliteration": "Alladhīna āmanū wa taṭma'innu qulūbuhum bi dhikri Allāh\nAlā bi dhikri Allāhi taṭma'innul-qulūb",
+            "translation": "\"Ceux qui croient et dont les cœurs trouvent la tranquillité par le rappel d'Allah.\nSachez que c'est par le rappel d'Allah que les cœurs se tranquillisent.\""
+          },
+          "2": {
+            "title": "Az-Zumar 39:53",
+            "arabic": "قُلْ يَا عِبَادِيَ الَّذِينَ أَسْرَفُوا عَلَى أَنفُسِهِمْ لَا تَقْنَطُوا مِن رَّحْمَةِ اللَّهِ ۚ إِنَّ اللَّهَ يَغْفِرُ الذُّنُوبَ جَمِيعًا ۚ إِنَّهُ هُوَ الْغَفُورُ الرَّحِيمُ",
+            "transliteration": "Qul yā 'ibādiya alladhīna asrafū 'alā anfusihim\nLā taqnṭū min raḥmatillāh\nInna Allāha yaghfirudh-dhunūba jamī'an\nInnahu Huwal-Ghafūru r-Raḥīm",
+            "translation": "\"Dis : Ô Mes serviteurs qui avez dépassé les limites envers vous-mêmes, ne désespérez pas de la miséricorde d'Allah.\nAllah pardonne tous les péchés. Il est certes le Pardonneur, le Très Miséricordieux.\""
+          },
+          "3": {
+            "title": "Al-Baqara 2:286",
+            "arabic": "لَا يُكَلِّفُ اللَّهُ نَفْسًا إِلَّا وُسْعَهَا ۚ لَهَا مَا كَسَبَتْ وَعَلَيْهَا مَا اكْتَسَبَتْ ۚ رَبَّنَا لَا تُؤَاخِذْنَا إِن نَّسِينَا أَوْأَخْطَأْنَا ۚ رَبَّنَا وَلَا تَحْمِلْ عَلَيْنَا إِصْرًا كَمَا حَمَلْتَهُ عَلَى الَّذِينَ مِن قَبْلِنَا ۚ رَبَّنَا وَلَا تُحَمِّلْنَا مَا لَا طَاقَةَ لَنَا بِهِ ۖ وَاعْفُ عَنَّا وَاغْفِرْ لَنَا وَارْحَمْنَا ۚ أَنتَ مَوْلَانَا فَانصُرْنَا عَلَى الْقَوْمِ الْكَافِرِينَ",
+            "transliteration": "Lā yukallifu Allāhu nafsan illā wus'ahā\nLahā mā kasabat wa 'alayhā mā iktasabat\nRabbana lā tu'ākhidhna in nasīnā aw akhṭa'nā\nRabbana wa lā taḥmil 'alaynā iṣran kamā ḥamaltahu 'alal-ladhīna min qablina\nRabbana wa lā tuḥammilnā mā lā ṭāqata lanā bihi\nWa'fu 'annā waghfir lanā warḥamnā\nAnta mawlānā fansurnā 'alal-qawmi-l-kāfirīn",
+            "translation": "\"Allah n'impose à aucune âme une charge supérieure à sa capacité.\nElle sera récompensée pour ce qu'elle aura acquis et punie pour ce qu'elle aura mérité.\nSeigneur, ne nous punis pas si nous oublions ou commettons une erreur.\nSeigneur, ne nous impose pas un fardeau comme celui que Tu as imposé à ceux qui nous ont précédés.\nSeigneur, ne nous impose pas ce que nous ne pouvons supporter.\nPardonne-nous, accorde-nous Ton pardon et Ta miséricorde.\nTu es notre Protecteur, aide-nous donc contre le peuple mécréant.\""
+          },
+          "4": {
+            "title": "Ad-Duha 93:3-5",
+            "arabic": "مَا وَدَّعَكَ رَبُّكَ وَمَا قَلَىٰ ٣\nوَلَلْـَٔاخِرَةُ خَيْرٌۭ لَّكَ مِنَ ٱلْأُولَىٰ ٤\nوَلَسَوْفَ يُعْطِيكَ رَبُّكَ فَتَرْضَىٰٓ ٥",
+            "transliteration": "Mā wadda'aka rabbuka wa mā qalā\nWa lal-ākhiratu khayrun laka mina al-ūlā\nWa lasawfa yu'ṭīka rabbuka fatarḍā",
+            "translation": "Le jour montant (93:3)\n\nTon Seigneur ne t'a ni abandonné, ni détesté.\n\nLe jour montant (93:4)\n\nLa vie dernière t'est, certes, meilleure que la vie présente.\n\nLe jour montant (93:5)\n\nTon Seigneur t'accordera certes [Ses faveurs], et alors tu seras satisfait."
+          },
+          "5": {
+            "title": "Ash-Sharh 94:5-6",
+            "arabic": "فَإِنَّ مَعَ الْعُسْرِ يُسْرًا\nإِنَّ مَعَ الْعُسْرِ يُسْرًا",
+            "transliteration": "Fa inna ma'al-'usri yusra\nInna ma'al-'usri yusra",
+            "translation": "\"Donc, avec la difficulté vient la facilité.\nOui, avec la difficulté vient la facilité.\""
+          },
+          "6": {
+            "title": "Al-Anbiyâ 21:87-88",
+            "arabic": "فَنَادَىٰ فِي الظُّلُمَاتِ أَن لَّا إِلَٰهَ إِلَّا أَنتَ سُبْحَانَكَ إِنِّي كُنتُ مِنَ الظَّالِمِينَ\nفَاسْتَجَبْنَا لَهُ وَنَجَّيْنَاهُ مِنَ الْغَمِّ ۚ وَكَذَٰلِكَ نُنجِي الْمُؤْمِنِينَ",
+            "transliteration": "Fanādā fi-ẓ-ẓulumāti an lā ilāha illā Anta subḥānaka innī kuntu min aẓ-ẓālimīn\nFastajabnā lahu wa najjaynāhu minal-ghammi\nWa kadhālika nunjī-l-mu'minīn",
+            "translation": "\"Il cria dans les ténèbres : 'Il n'y a point de divinité en dehors de Toi, gloire à Toi ! J'ai été du nombre des injustes.'\nAlors Nous lui répondîmes et le sauvâmes de l'angoisse.\nEt ainsi Nous sauvons les croyants.\""
+          },
+          "7": {
+            "title": "Al-Fath 48:4",
+            "arabic": "هُوَ الَّذِي أَنزَلَ السَّكِينَةَ فِي قُلُوبِ الْمُؤْمِنِينَ لِيَزْدَادُوا إِيمَانًا مَّعَ إِيمَانِهِمْ ۗ وَلِلَّهِ جُنُودُ السَّمَاوَاتِ وَالْأَرْضِ وَكَانَ اللَّهُ عَلِيمًا حَكِيمًا",
+            "transliteration": "Huwa alladhī anzalas-sakīnata fī qulūbil-mu'minīn liyazdādū īmānan ma'a īmānihim\nWa lillahi junūdu-s-samāwāti wal-arḍ\nWa kāna Allāhu 'alīman ḥakīman",
+            "translation": "\"C'est Lui qui fit descendre la tranquillité dans le cœur des croyants pour qu'ils accroissent leur foi avec leur foi.\nEt Allah possède les armées des cieux et de la terre.\nEt Allah est Omniscient et Sage.\""
+          }
+        },
+        "espoir": {
+          "emoji": "🟩",
+          "title": "5. ESPOIR & CONFIANCE",
+          "subtitle": "التوكل (At-Tawakkul)",
+          "description": "Pour le doute, la peur du futur, le manque de confiance.",
+          "intentionStart": "Ô Allah, que la lumière de ces paroles sacrées fortifie ma foi, accroisse mon espoir et ma confiance en Toi.",
+          "intentionEnd": "Que Ta guidance éclaire mon chemin et que je marche confiant sous le regard protecteur de Ton Livre.",
+          "1": {
+            "title": "At-Talâq 65:2-3",
+            "arabic": "وَمَن يَتَّقِ اللَّهَ يَجْعَل لَّهُ مَخْرَجًا\nوَيَرْزُقْهُ مِنْ حَيْثُ لَا يَحْتَسِبُ ۚ وَمَن يَتَوَكَّلْ عَلَى اللَّهِ فَهُوَ حَسْبُهُ ۚ إِنَّ اللَّهَ بَالِغُ أَمْرِهِ ۚ قَدْ جَعَلَ اللَّهُ لِكُلِّ شَيْءٍ قَدْرًا",
+            "transliteration": "Wa man yattaqillāha yaj'al lahu makhrajan\nWa yarzuqhu min ḥaythu lā yaḥtasib\nWa man yatawakkal 'alallāh fahuwa ḥasbuhu\nInna Allāha bālighu amrihi\nQad ja'alallāhu likulli shay'in qadran",
+            "translation": "\"Et quiconque craint Allah, Il lui donnera une issue.\nEt Il le pourvoira par des moyens auxquels il ne s'attendait pas.\nEt quiconque se fie à Allah, Il lui suffit.\nAllah atteint Son but.\nAllah a assigné une mesure à toute chose.\""
+          },
+          "2": {
+            "title": "Al-Ahzâb 33:3",
+            "arabic": "وَتَوَكَّلْ عَلَى اللَّهِ وَكَفَىٰ بِاللَّهِ وَكِيلًا",
+            "transliteration": "Wa tawakkal 'alallāh wa kafā billāhi wakīlan",
+            "translation": "\"Et place ta confiance en Allah. Allah suffit comme Protecteur.\""
+          },
+          "3": {
+            "title": "Âl-'Imrân 3:160",
+            "arabic": "إِن يَنصُرْكُمُ ٱللَّهُ فَلَا غَالِبَ لَكُمْ ۖ وَإِن يَخْذُلْكُمْ فَمَن ذَا ٱلَّذِى يَنصُرُكُم مِّنۢ بَعْدِهِۦ ۗ وَعَلَى ٱللَّهِ فَلْيَتَوَكَّلِ ٱلْمُؤْمِنُونَ ١٦٠",
+            "transliteration": "In yanṣurkumu Allāhu falā ghāliba lakum wa in yakhdhulkum faman dhā alladhī yanṣurukum min ba'dihi wa 'alā Allāhi falyatawakkalil-mu'minūn",
+            "translation": "La famille de 'imran (3:160)\n\nSi Allah vient à votre secours, nul ne pourra vous vaincre. S'Il vous abandonne, qui donc après Lui viendra vous secourir? C'est en Allah que les croyants doivent avoir confiance."
+          },
+          "4": {
+            "title": "Âl-'Imrân 3:139",
+            "arabic": "وَلَا تَهِنُوا وَلَا تَحْزَنُوا وَأَنْتُمُ الْأَعْلَوْنَ إِن كُنتُم مُّؤْمِنِينَ",
+            "transliteration": "Wa lā tahinū wa lā taḥzanū wa antumul-a'lawna in kuntum mu'minīn",
+            "translation": "\"Ne faiblissez pas et ne vous attristez pas.\nVous serez les plus élevés si vous êtes croyants.\""
+          },
+          "5": {
+            "title": "Al-Baqara 2:45",
+            "arabic": "وَاسْتَعِينُوا بِالصَّبْرِ وَالصَّلَاةِ ۚ وَإِنَّهَا لَكَبِيرَةٌ إِلَّا عَلَى الْخَاشِعِينَ",
+            "transliteration": "Wa ista'īnū biṣ-ṣabri waṣ-ṣalāh\nWa innahā lakabīrah illā 'alal-khāshi'īn",
+            "translation": "\"Et cherchez secours dans la patience et la prière.\nMais cela est difficile, sauf pour les humbles (qui s'inclinent devant Allah).\""
+          },
+          "6": {
+            "title": "Âl-'Imrân 3:173",
+            "arabic": "ٱلَّذِينَ قَالَ لَهُمُ ٱلنَّاسُ إِنَّ ٱلنَّاسَ قَدْ جَمَعُوا۟ لَكُمْ فَٱخْشَوْهُمْ فَزَادَهُمْ إِيمَـٰنًۭا وَقَالُوا۟ حَسْبُنَا ٱللَّهُ وَنِعْمَ ٱلْوَكِيلُ ١٧٣",
+            "transliteration": "Alladhīna qāla lahumu an-nāsu inna an-nāsa qad jama'ū lakum fa-ikhshawhum fazādahum īmānan wa qālū ḥasbunā Allāhu wa ni'ma al-wakīl",
+            "translation": "La famille de 'imran (3:173)\n\nCertes, ceux auxquels l'on disait : \"Les gens se sont rassemblés contre vous; craignez-les !\" - Cela accrut leur foi - et ils dirent : \"Allah nous suffit; et Il est notre meilleur garant !\""
+          },
+          "7": {
+            "title": "Al-Baqarah 2:286 (fin du verset)",
+            "arabic": "أَنتَ مَوْلَانَا فَانصُرْنَا عَلَى الْقَوْمِ الْكَافِرِينَ",
+            "transliteration": "Anta mawlānā fansurnā 'alal-qawmi-l-kāfirīn",
+            "translation": "\"Tu es notre Maître, accorde-nous la victoire sur les peuples mécréants.\""
+          }
+        },
+        "tristesse": {
+          "emoji": "🟩",
+          "title": "6. TRISTESSE & LOURDEUR",
+          "subtitle": "الحزن (Al-Huzn)",
+          "description": "Pour le chagrin, la dépression douce, la lourdeur émotionnelle.",
+          "intentionStart": "Ô Allah, que la lumière de ces versets allège la tristesse de mon cœur et transforme ma peine en douceur.",
+          "intentionEnd": "Que Ton Livre éclaire mon âme et m'apaise, faisant naître la joie et la paix dans mon être.",
+          "1": {
+            "title": "Ad-Duha 93:1-8",
+            "arabic": "وَالضُّحَى\nوَاللَّيْلِ إِذَا سَجَى\nمَا وَدَّعَكَ رَبُّكَ وَمَا قَلَى\nوَلَلْآخِرَةُ خَيْرٌ لَّكَ مِنَ الْأُولَى\nوَلَسَوْفَ يُعْطِيكَ رَبُّكَ فَتَرْضَى\nأَلَمْ يَجِدْكَ يَتِيمًا فَآوَى\nوَوَجَدَكَ ضَالًّا فَهَدَى\nوَوَجَدَكَ عَائِلًا فَأَغْنَى",
+            "transliteration": "Wa ḍ-ḍuḥā\nWa al-layli idhā sajā\nMā wadda'aka rabbuka wa mā qalā\nWa lal-ākhiratu khayrun laka minal-ūlā\nWa lasawfa yu'ṭīka rabbuka fatarḍā\nAlam yajidka yatīman fa-āwā\nWa wajadaka ḍāllan fahadā\nWa wajadaka 'ā'ilan fa-aghna",
+            "translation": "\"Par le jour clair et par la nuit quand elle couvre !\nTon Seigneur ne t'a ni abandonné ni détesté.\nEt l'au-delà sera meilleur pour toi que ce monde.\nTon Seigneur te donnera bientôt ce qui te satisfera.\nN'a-t-Il pas trouvé que tu étais orphelin et t'a accueilli ?\nEt Il t'a trouvé perdu et t'a guidé.\nEt Il t'a trouvé dans le besoin et t'a enrichi ?\""
+          },
+          "2": {
+            "title": "Ash-Sharh 94:1-8",
+            "arabic": "أَلَمْ نَشْرَحْ لَكَ صَدْرَكَ\nوَوَضَعْنَا عَنكَ وِزْرَكَ\nالَّذِي أَنقَضَ ظَهْرَكَ\nوَرَفَعْنَا لَكَ ذِكْرَكَ\nفَإِنَّ مَعَ الْعُسْرِ يُسْرًا\nإِنَّ مَعَ الْعُسْرِ يُسْرًا\nفَإِذَا فَرَغْتَ فَانصَبْ\nوَإِلَى رَبِّكَ فَارْغَبْ",
+            "transliteration": "Alam nashrah laka ṣadrak\nWa waḍa'nā 'anka wizraka\nAlladhī anqaḍa ẓahrak\nWa rafa'nā laka dhikrak\nFa inna ma'al-'usri yusra\nInna ma'al-'usri yusra\nFa idhā faraghta fansab\nWa ilā rabbika farghab",
+            "translation": "\"N'avons‑Nous pas ouvert pour toi ta poitrine ?\nEt avons‑Nous ôté de toi ton fardeau\nQui accablait ton dos ?\nEt avons‑Nous élevé pour toi ton renom ?\nCar avec la difficulté vient la facilité.\nOui, avec la difficulté vient la facilité.\nQuand tu es délivré, travaille à cœur dévoué.\nEt tourne-toi vers ton Seigneur avec ardeur.\""
+          },
+          "3": {
+            "title": "Yûsuf 12:86",
+            "arabic": "قَالَ إِنَّمَا أَشْكُو بَثِّي وَحُزْنِي إِلَى اللَّهِ وَأَعْلَمُ مِنَ اللَّهِ مَا لَا تَعْلَمُونَ",
+            "transliteration": "Qāla innamā ashkū baththī wa ḥuznī ilā Allāhi\nwa a'lamu mina Allāhi mā lā ta'lamūn",
+            "translation": "\"Il dit : Je ne me plains qu'à Allah de mon chagrin et de ma tristesse,\net je sais de la part d'Allah ce que vous ne savez pas.\""
+          },
+          "4": {
+            "title": "At-Tawbah 9:51",
+            "arabic": "قُل لَّن يُصِيبَنَا إِلَّا مَا كَتَبَ اللَّهُ لَنَا هُوَ مَوْلَانَا وَعَلَى اللَّهِ فَلْيَتَوَكَّلِ الْمُؤْمِنُونَ",
+            "transliteration": "Qul lan yuṣībanā illā mā kataba Allāhu lanā\nHuwa mawlānā wa 'alallāhi falyatawakkalil-mu'minūn",
+            "translation": "\"Dis : Rien ne nous atteindra sauf ce qu'Allah a écrit pour nous.\nIl est notre Protecteur. Et sur Allah que les croyants se fient.\""
+          },
+          "5": {
+            "title": "Al-Baqara 2:155-157",
+            "arabic": "وَلَنَبْلُوَنَّكُمْ بِشَيْءٍ مِنَ الْخَوْفِ وَالْجُوعِ وَنَقْصٍ مِّنَ الْأَمْوَالِ وَالْأَنْفُسِ وَالثَّمَرَاتِ ۗ وَبَشِّرِ الصَّابِرِينَ\nالَّذِينَ إِذَا أَصَابَتْهُم مُّصِيبَةٌ قَالُوا إِنَّا لِلَّهِ وَإِنَّا إِلَيْهِ رَاجِعُونَ\nأُو۟لَٰئِكَ عَلَيْهِمْ صَلَوَاتٌ مِّن رَّبِّهِمْ وَرَحْمَةٌ ۖ وَأُو۟لَٰئِكَ هُمُ الْمُهْتَدُونَ",
+            "transliteration": "Wa lanabluwannakum bishay'in minal-khawfi wal-jū'i wa naqsin minal-amwāli wal-anfusi wath-thamarāt\nWa bash-shir aṣ-ṣābirīn\nAlladhīna idhā aṣābat-hum muṣībah qālū innā lillāhi wa innā ilayhi rāji'ūn\nŪlā'ika 'alayhim ṣalawātun min rabbihim wa raḥmah\nWa ūlā'ika humul-muhtadūn",
+            "translation": "\"Nous vous éprouverons certainement par un peu de peur, de faim, de perte de biens, de vies et de fruits.\nAnnonce la bonne nouvelle aux patients,\nCeux qui, lorsqu'une épreuve les atteint, disent : 'Certes nous appartenons à Allah et c'est vers Lui que nous retournons.'\nCeux-là ont sur eux des bénédictions de leur Seigneur et Sa miséricorde.\nEt ce sont eux les bien-guidés.\""
+          },
+          "6": {
+            "title": "Al-Fajr 89:27-30",
+            "arabic": "يَا أَيَّتُهَا النَّفْسُ الْمُطْمَئِنَّةُ\nارْجِعِي إِلَىٰ رَبِّكِ رَاضِيَةً مَرْضِيَّةً\nفَادْخُلِي فِي عِبَادِي\nوَادْخُلِي جَنَّتِي",
+            "transliteration": "Yā ayyuhā an-nafsul-muṭma'innah\nIrji'ī ilā rabbiki rāḍiyatan marḍiyyah\nFadkhulī fī 'ibādī\nWa adkhulī jannatī",
+            "translation": "\"Ô toi l'âme apaisée,\nRetourne vers ton Seigneur, satisfaite et agréée.\nEntre donc parmi Mes serviteurs\nEt entre dans Mon Paradis.\""
+          },
+          "7": {
+            "title": "Maryam 19:4-6",
+            "arabic": "قَالَ رَبِّ إِنِّى وَهَنَ ٱلْعَظْمُ مِنِّى وَٱشْتَعَلَ ٱلرَّأْسُ شَيْبًۭا وَلَمْ أَكُنۢ بِدُعَآئِكَ رَبِّ شَقِيًّۭا ٤\nوَإِنِّى خِفْتُ ٱلْمَوَٰلِىَ مِن وَرَآءِى وَكَانَتِ ٱمْرَأَتِى عَاقِرًۭا فَهَبْ لِى مِن لَّدُنكَ وَلِيًّۭا ٥\nيَرِثُنِى وَيَرِثُ مِنْ ءَالِ يَعْقُوبَ ۖ وَٱجْعَلْهُ رَبِّ رَضِيًّۭا ٦",
+            "transliteration": "Qāla rabbi innī wahana al-'aẓmu minnī wa ishta'ala ar-ra'su shayban wa lam akun bidu'ā'ika rabbi shaqiyyā\nWa innī khiftu al-mawālī min warā'ī wa kānat imra'atī 'āqiran fa-hab lī min ladunka waliyyā\nYarithunī wa yarithu min āli Ya'qūb wa-j'alhu rabbi raḍiyyā",
+            "translation": "Marie (19:4)\n\net dit : \"Seigneur ! Mes os sont affaiblis et ma tête s'est enflammée de cheveux blancs. [Cependant] Je n'ai jamais été malheureux [déçu] en te priant, Seigneur !\n\nMarie (19:5)\n\nJe crains [le comportement] de mes héritiers, après moi. Et ma propre femme est stérile. Accorde-moi donc, de Ta part, un descendant.\n\nMarie (19:6)\n\nqui hérite de moi et hérite de la famille de Jacob. Et fais qu'il te soit agréable, Seigneur !\""
+          }
+        },
+        "purification": {
+          "emoji": "🟩",
+          "title": "7. PURIFICATION & CLARTÉ",
+          "subtitle": "الصفاء (As-Safâ')",
+          "description": "Pour nettoyer le cœur, enlever les doutes, les pensées négatives et la pollution intérieure.",
+          "intentionStart": "Ô Allah, que la lumière de ces paroles sacrées purifie mon cœur des doutes et des ombres, et éclaire mon esprit.",
+          "intentionEnd": "Que la pureté et la clarté de Ton Livre demeurent en moi, et que mon âme se rapproche de Toi dans la sérénité.",
+          "1": {
+            "title": "Al-Mu'minûn 23:97-98",
+            "arabic": "وَقُل رَّبِّ أَعُوذُ بِكَ مِنْ هَمَزَاتِ الشَّيَاطِينِ\nوَأَعُوذُ بِكَ رَبِّ أَن يَحْضُرُونِ",
+            "transliteration": "Wa qul rabbi a'ūdhu bika min hamazāti-sh-shayāṭīn\nWa a'ūdhu bika rabbi an yaḥḍurūn",
+            "translation": "\"Et dis : 'Ô mon Seigneur, je cherche refuge auprès de Toi contre les insinuations des diables.\nEt je cherche refuge auprès de Toi, mon Seigneur, pour qu'ils ne soient pas présents auprès de moi.'\""
+          },
+          "2": {
+            "title": "Al-A'râf 7:200",
+            "arabic": "وَإِمَّا يَنزَغَنَّكَ مِنَ الشَّيْطَانِ نَزْغٌ فَاسْتَعِذْ بِاللَّهِ ۖ إِنَّهُ سَمِيعٌ عَلِيمٌ",
+            "transliteration": "Wa immā yanzaghan-naka minash-shayṭāni nazghun fasta'idh billāh\nInnahu samī'un 'alīm",
+            "translation": "\"Et si jamais le diable te tente par une suggestion, cherche refuge auprès d'Allah.\nIl est, en vérité, Audient et Omniscient.\""
+          },
+          "3": {
+            "title": "Âl-'Imrân 3:133-135",
+            "arabic": "۞ وَسَارِعُوٓا۟ إِلَىٰ مَغْفِرَةٍۢ مِّن رَّبِّكُمْ وَجَنَّةٍ عَرْضُهَا ٱلسَّمَـٰوَٰتُ وَٱلْأَرْضُ أُعِدَّتْ لِلْمُتَّقِينَ ١٣٣\nٱلَّذِينَ يُنفِقُونَ فِى ٱلسَّرَّآءِ وَٱلضَّرَّآءِ وَٱلْكَـٰظِمِينَ ٱلْغَيْظَ وَٱلْعَافِينَ عَنِ ٱلنَّاسِ ۗ وَٱللَّهُ يُحِبُّ ٱلْمُحْسِنِينَ ١٣٤\nوَٱلَّذِينَ إِذَا فَعَلُوا۟ فَـٰحِشَةً أَوْ ظَلَمُوٓا۟ أَنفُسَهُمْ ذَكَرُوا۟ ٱللَّهَ فَٱسْتَغْفَرُوا۟ لِذُنُوبِهِمْ وَمَن يَغْفِرُ ٱلذُّنُوبَ إِلَّا ٱللَّهُ وَلَمْ يُصِرُّوا۟ عَلَىٰ مَا فَعَلُوا۟ وَهُمْ يَعْلَمُونَ ١٣٥",
+            "transliteration": "Wa sāri'ū ilā maghfiratin min rabbikum wa jannatin 'arḍuhā as-samāwātu wal-arḍ u'iddat lil-muttaqīn\nAlladhīna yunfiqūna fī as-sarrā'i waḍ-ḍarrā'i wal-kāẓimīna al-ghayẓa wal-'āfīna 'ani an-nāsi wa Allāhu yuḥibbu al-muḥsinīn\nWa alladhīna idhā fa'alū fāḥishatan aw ẓalamū anfusahum dhakarū Allāha fastaghfarū li-dhunūbihim wa man yaghfiru adh-dhunūba illā Allāhu wa lam yuṣirrū 'alā mā fa'alū wa hum ya'lamūn",
+            "translation": "La famille de 'imran (3:133)\n\nEt concourez au pardon de votre Seigneur, et à un Jardin (Paradis) large comme les cieux et la terre, préparé pour les pieux,\n\nLa famille de 'imran (3:134)\n\nqui dépensent dans l'aisance et dans l'adversité, qui dominent leur rage et pardonnent à autrui - car Allah aime les bienfaisants ;\n\nLa famille de 'imran (3:135)\n\net pour ceux qui, s'ils ont commis quelque turpitude ou causé quelque préjudice à leurs propres âmes (en désobéissant à Allah), se souviennent d'Allah et demandent pardon pour leur péchés - et qui est-ce qui pardonne les péchés sinon Allah ? - et qui ne persistent pas sciemment dans le mal qu'ils ont fait."
+          },
+          "4": {
+            "title": "Al-Baqara 2:222",
+            "arabic": "وَيَسْأَلُونَكَ عَنِ الْمَحِيضِ ۖ قُلْ هُوَ أَذًى فَاعْتَزِلُوا النِّسَاءَ فِي الْمَحِيضِ وَلَا تَقْرَبُوهُنَّ حَتَّىٰ يَطْهُرْنَ فَإِذَا تَطَهَّرْنَ فَأَتُوهُنَّ مِنْ حَيْثُ أَمَرَكُمُ اللَّهُ ۚ إِنَّ اللَّهَ يُحِبُّ التَّوَّابِينَ وَيُحِبُّ الْمُتَطَهِّرِينَ",
+            "transliteration": "Wa yas'alūnaka 'ani-l-maḥīḍ\nQul huwa adhun fa'ta'zilun-nisā'a fil-maḥīḍ\nWa lā taqrabūhunna ḥattā yaṭhurna\nFa idhā taṭahharna fa'ttūhunna min ḥaythu amarakumullāh\nInna Allāha yuḥibbu-t-tawwābīn wa yuḥibbul-mutaṭahhirīn",
+            "translation": "\"Ils t'interrogent sur les menstruations.\nDis : C'est un mal, donc éloignez-vous des femmes pendant leurs règles et ne les approchez pas jusqu'à ce qu'elles soient purifiées.\nPuis, lorsque elles sont purifiées, approchez-les selon ce qu'Allah vous a ordonné.\nAllah aime ceux qui se repentent et ceux qui se purifient.\""
+          },
+          "5": {
+            "title": "At-Taghâbun 64:11",
+            "arabic": "مَآ أَصَابَ مِن مُّصِيبَةٍ إِلَّا بِإِذْنِ ٱللَّهِ ۗ وَمَن يُؤْمِنۢ بِٱللَّهِ يَهْدِ قَلْبَهُۥ ۚ وَٱللَّهُ بِكُلِّ شَىْءٍ عَلِيمٌۭ ١١",
+            "transliteration": "Mā aṣāba min muṣībatin illā bi-idhni Allāhi wa man yu'min bi-Allāhi yahdi qalbah wa Allāhu bi-kulli shay'in 'alīm",
+            "translation": "La grande perte (64:11)\n\nNul malheur n'atteint [l'homme] que par la permission d'Allah. Et quiconque croit en Allah, [Allah] guide son cœur. Allah est Omniscient."
+          },
+          "6": {
+            "title": "Al-An'âm 6:125",
+            "arabic": "فَمَن يُرِدِ اللَّهُ أَن يَهْدِيَهُ يَشْرَحْ صَدْرَهُ لِلْإِسْلَامِ وَمَن يُرِدْ أَن يُضِلَّهُ يَجْعَلْ صَدْرَهُ ضَيِّقًا حَرَجًا كَأَنَّمَا يَصَّعَّدُ فِي السَّمَاءِ ۚ كَذَٰلِكَ يَجْعَلُ اللَّهُ الرِّجْسَ عَلَى الَّذِينَ لَا يُؤْمِنُونَ",
+            "transliteration": "Faman yuridi Allāhu an yahdiyahu yashrah ṣadrahu lil-islām\nWa man yuridi an yuḍillahu yaj'al ṣadrahu ḍayyiqan ḥarajan ka-annahā yaṣ'adu fis-samā'\nKadhālika yaj'alullāhu ar-rijsa 'alal-ladhīna lā yu'minūn",
+            "translation": "\"Quiconque Allah veut guider, Il ouvre sa poitrine à l'Islam.\nEt quiconque Il veut égarer, Il rend sa poitrine étroite et oppressée, comme s'il montait dans le ciel.\nAinsi Allah inflige l'impureté à ceux qui ne croient pas.\""
+          },
+          "7": {
+            "title": "Ash-Shams 91:7-10",
+            "arabic": "وَنَفْسٍ وَمَا سَوَّاهَا\nفَأَلْهَمَهَا فُجُورَهَا وَتَقْوَاهَا\nقَدْ أَفْلَحَ مَن زَكَّاهَا\nوَقَدْ خَابَ مَن دَسَّاهَا",
+            "transliteration": "Wa nafsin wa mā sawwāhā\nFa alhamahā fujūrahā wa taqwāhā\nQad aflaha man zakkāhā\nWa qad khāba man dassāhā",
+            "translation": "\"Par l'âme et Celui qui l'a parfaitement façonnée !\nEt lui a inspiré le mal et la piété.\nRéussira celui qui la purifie.\nEt échouera celui qui la corrompt.\""
+          }
+        }
+      }
+    },
+    "nurAfiyah": {
+      "title": "🌿✨ Nûr al-'Āfiyah – Remèdes prophétiques 🌿✨",
+      "description": "Ces remèdes sont tirés de la Sunna et du Coran, utilisés depuis des siècles pour la guérison et le bien-être. Le Prophète ﷺ nous a enseigné des moyens simples, naturels et bénis pour préserver notre santé physique et spirituelle. Pour chaque remède, vous pouvez réciter dessus des versets du Coran via la rubrique Nûr al-Qur'ân, afin d'augmenter la baraka et la puissance de guérison.",
+      "reference": "Référence",
+      "usage": "Utilisation",
+      "benefits": "Bienfait",
+      "reminder": "Pour chaque remède, vous pouvez réciter dessus les versets de Nûr al-Qur'ân afin d'augmenter la baraka et l'effet spirituel. Ces remèdes sont simples, sûrs et inspirés directement par la guidance prophétique.",
+      "categories": {
+        "corps": {
+          "emoji": "🟩",
+          "title": "1. Remèdes pour le corps / santé générale",
+          "subtitle": "But : renforcer le corps, soutenir l'immunité, prévenir la maladie",
+          "remedies": {
+            "1": {
+              "name": "Miel",
+              "reference": "Coran 16:69, Hadith Sahih",
+              "benefits": "Renforce le corps, améliore l'immunité, aide à la cicatrisation, soulage la fatigue",
+              "usage": "Consommer une petite cuillère de miel pur quotidiennement, éventuellement mélangé dans de l'eau tiède ou du lait"
+            },
+            "2": {
+              "name": "Nigelle (ḥabba as-sawda)",
+              "reference": "Hadith Sahih (Bukhari & Muslim)",
+              "benefits": "Prévention de maladies, tonique général, « remède de toute maladie sauf la mort »",
+              "usage": "Prendre quotidiennement une petite quantité de graines de nigelle, seule ou mélangée avec du miel"
+            },
+            "3": {
+              "name": "Lait",
+              "reference": "Hadith Sahih",
+              "benefits": "Nourrit le corps, renforce les os et les organes",
+              "usage": "Boire du lait frais, de préférence cru ou légèrement chauffé, matin ou soir"
+            },
+            "4": {
+              "name": "Eau pure",
+              "reference": "Coran 25:48",
+              "benefits": "Hydratation, purification corporelle, prévention des maladies",
+              "usage": "Boire régulièrement de l'eau propre et pure, à température ambiante de préférence"
+            },
+            "5": {
+              "name": "Dattes (y compris Ajwa)",
+              "reference": "Hadith Sahih",
+              "benefits": "Apporte énergie, renforce le cœur et le sang, protection contre le poison",
+              "usage": "Consommer 7 dattes Ajwa le matin à jeun pour protection et tonus"
+            }
+          }
+        },
+        "coeur": {
+          "emoji": "🟩",
+          "title": "2. Remèdes pour le cœur et l'âme / purification spirituelle",
+          "subtitle": "But : apaiser l'âme, purifier le cœur, soulager la lourdeur spirituelle ou émotionnelle",
+          "remedies": {
+            "1": {
+              "name": "Dhikr (SubhanAllah, Alhamdulillah, Allahu Akbar)",
+              "reference": "Hadith Sahih",
+              "benefits": "Paix intérieure, dissipation de l'angoisse, lumière du cœur",
+              "usage": "Répéter quotidiennement, matin et soir, à voix basse ou intérieurement, en conscience"
+            },
+            "2": {
+              "name": "Ruqyah prophétique (versets protecteurs)",
+              "reference": "Coran 17:82 — « Nous faisons descendre dans le Coran ce qui est guérison et miséricorde pour les croyants »",
+              "benefits": "Protection contre le mal invisible, apaisement de l'âme, dissipation des tensions spirituelles",
+              "usage": "Lire les versets sur soi-même, sur l'eau ou sur un objet, puis boire l'eau ou passer les mains sur le corps"
+            },
+            "3": {
+              "name": "Eau de Zamzam",
+              "reference": "Hadith Sahih",
+              "benefits": "Purification intérieure, soutien psychique, guérison spirituelle",
+              "usage": "Boire de l'eau de Zamzam quotidiennement ou lors des moments de fatigue et d'angoisse"
+            },
+            "4": {
+              "name": "Prière surérogatoire (Tahajjud)",
+              "reference": "Hadith Sahih",
+              "benefits": "Consolide la foi, soulage l'angoisse et le stress",
+              "usage": "Se lever la nuit pour prier 2 à 8 rak'ahs, méditer sur le Coran et faire ses invocations"
+            },
+            "5": {
+              "name": "Contemplation / méditation sur le Coran",
+              "reference": "Coran 2:2",
+              "benefits": "Équilibre émotionnel, clarté d'esprit, purification du cœur",
+              "usage": "Lire lentement et méditer sur le sens des versets, en conscience, quotidiennement"
+            }
+          }
+        },
+        "maux": {
+          "emoji": "🟩",
+          "title": "3. Remèdes pour les maux spécifiques",
+          "subtitle": "But : soigner des maladies particulières ou symptômes précis",
+          "remedies": {
+            "1": {
+              "name": "Hijama (ventouses)",
+              "reference": "Hadith Sahih",
+              "benefits": "Détoxification, soulagement douleurs, maux de tête, fatigue",
+              "usage": "Pratiquer selon la Sunna, par un praticien expérimenté, idéalement sur les points recommandés par le Prophète ﷺ"
+            },
+            "2": {
+              "name": "Kay (cautérisation légère)",
+              "reference": "Ibn al-Qayyim",
+              "benefits": "Soulage certaines blessures ou maux cutanés, aide à cicatriser",
+              "usage": "Faire avec précaution, sous supervision médicale ou experte, sur la zone affectée"
+            },
+            "3": {
+              "name": "Huile de nigelle",
+              "reference": "Hadith Sahih",
+              "benefits": "Affections respiratoires, infections légères",
+              "usage": "Appliquer localement ou ingérer 1/2 cuillère à café, selon le besoin"
+            },
+            "4": {
+              "name": "Camphre / Rose en inhalation",
+              "reference": "Ibn al-Qayyim",
+              "benefits": "Maladies respiratoires, congestion, nervosité",
+              "usage": "Respirer la vapeur ou inhaler l'odeur pendant quelques minutes"
+            },
+            "5": {
+              "name": "Extrait de dattes ou figues",
+              "reference": "Hadith Sahih",
+              "benefits": "Digestion, constipation, renforcement général",
+              "usage": "Consommer quotidiennement, frais ou séchés, en infusion ou nature"
+            }
+          }
+        },
+        "alimentation": {
+          "emoji": "🟩",
+          "title": "4. Alimentation thérapeutique / prévention",
+          "subtitle": "But : utiliser l'alimentation comme médecine naturelle",
+          "remedies": {
+            "1": {
+              "name": "Dattes Ajwa",
+              "reference": "Hadith Sahih",
+              "benefits": "Protection contre poison, renforcement du corps et du cœur",
+              "usage": "Manger 7 dattes le matin à jeun pour énergie et protection"
+            },
+            "2": {
+              "name": "Raisins secs",
+              "reference": "Ibn al-Qayyim",
+              "benefits": "Santé cardiaque, énergie, digestion",
+              "usage": "Consommer quotidiennement comme snack ou dans de l'eau"
+            },
+            "3": {
+              "name": "Figues",
+              "reference": "Hadith Sahih",
+              "benefits": "Prévention du cancer, digestion, purification du sang",
+              "usage": "Manger fraîches ou sèches, matin ou soir"
+            },
+            "4": {
+              "name": "Huile d'olive",
+              "reference": "Coran 24:35, Hadith Sahih",
+              "benefits": "Renforce le foie, le cœur, améliore la santé générale",
+              "usage": "Consommer 1 à 2 cuillères par jour, crue ou légèrement chauffée"
+            },
+            "5": {
+              "name": "Grains de blé",
+              "reference": "Ibn al-Qayyim",
+              "benefits": "Énergie durable, soutien nutritionnel, prévention de maladies",
+              "usage": "Bouillie ou pain complet, régulièrement"
+            }
+          }
+        },
+        "preventifs": {
+          "emoji": "🟩",
+          "title": "5. Remèdes préventifs et protection contre le mal / énergie négative",
+          "subtitle": "But : éloigner le mal, les maux invisibles, les tensions spirituelles",
+          "remedies": {
+            "1": {
+              "name": "Ruqyah prophétique",
+              "reference": "Coran 17:82 — « Nous faisons descendre dans le Coran ce qui est guérison et miséricorde pour les croyants »",
+              "benefits": "Protection contre le mal invisible, apaisement de l'âme, dissipation des tensions spirituelles",
+              "usage": "Lire les versets sur soi-même, sur l'eau ou sur un objet, puis passer les mains sur le corps ou boire l'eau"
+            },
+            "2": {
+              "name": "Eau de Zamzam",
+              "reference": "Hadith Sahih",
+              "benefits": "Purification, protection spirituelle et corporelle",
+              "usage": "Boire régulièrement, 1 à 3 verres par jour, pour renforcement et protection"
+            },
+            "3": {
+              "name": "Miswak",
+              "reference": "Hadith Sahih",
+              "benefits": "Protection contre maladies buccales, purification corporelle",
+              "usage": "Se frotter les dents quotidiennement, matin et soir"
+            },
+            "4": {
+              "name": "Dhikr avant le sommeil",
+              "reference": "Hadith Sahih",
+              "benefits": "Dissipation de peur, sécurité pendant la nuit",
+              "usage": "Répéter SubhanAllah, Alhamdulillah, Allahu Akbar, Ayat al-Kursi avant de dormir"
+            },
+            "5": {
+              "name": "Méditation sur le Coran",
+              "reference": "Coran 2:2",
+              "benefits": "Éloigne le mal, purifie le cœur, renforce la foi",
+              "usage": "Lire et méditer sur le sens des versets, quotidiennement ou dans les moments de trouble"
+            }
+          }
+        }
+      }
+    }
+  },
+  "khalwa": {
+    "title": "Bayt An Nûr",
+    "subtitle": "Mode Khalwa",
+    "welcome": {
+      "title": "Bayt An Nûr",
+      "subtitle": "Mode Khalwa",
+      "message": "Bienvenue dans Bayt An Nûr, ton refuge intérieur.\nOn va créer ensemble un moment rien que pour toi.",
+      "start": "Commencer"
+    },
+    "intention": {
+      "title": "Avant de commencer, dis-moi :",
+      "subtitle": "Quelle est ton intention pour ce moment ?",
+      "placeholder": "Ex : me calmer, lâcher une peur, remercier Allah…",
+      "validate": "Valider l'intention"
+    },
+    "divineName": {
+      "title": "Pour ce moment, je te propose de t'accompagner avec :",
+      "confirm": "Je confirme ce Nom",
+      "requestAnother": "Propose-moi un autre Nom"
+    },
+    "sound": {
+      "title": "بيت النور",
+      "subtitle": "Mode Khalwa",
+      "description": "Retraite Spirituelle",
+      "chooseAmbiance": "Choisissez votre ambiance",
+      "validate": "Valider le thème"
+    },
+    "duration": {
+      "title": "Combien de temps veux-tu rester dans Bayt An Nûr ?",
+      "titleWithDivineName": "Choisis la durée de ta khalwa :",
+      "divineNamePreview": "Pour ce moment, tu seras accompagné avec :",
+      "continue": "Continuer"
+    },
+    "breathing": {
+      "title": "Choisis ton rythme de souffle :",
+      "libre": "Souffle libre",
+      "libreDesc": "Tu respires à ton rythme, sans compter.",
+      "4-4": "Souffle 4–4",
+      "4-4Desc": "Inspire 4 secondes… expire 4 secondes.",
+      "3-6-9": "Souffle 3–6–9",
+      "3-6-9Desc": "Inspire 3… retiens 6… expire 9, pour un calme profond.",
+      "continue": "Continuer"
+    },
+    "guidance": {
+      "title": "Veux-tu que je te guide pendant la session ?",
+      "guided": "Oui, je veux un guidage d'Ayna.",
+      "guidedDesc": "Ayna parle au début + rappels toutes les X minutes.",
+      "unguided": "Non, je préfère être en silence.",
+      "unguidedDesc": "Seulement son d'ambiance + timer discret.",
+      "continue": "Continuer"
+    },
+    "preparation": {
+      "title": "Prépare-toi pour ta khalwa",
+      "hint": "Quand tu es prêt, on commence.",
+      "ready": "Je suis prêt",
+      "cancel": "Annuler / Revenir",
+      "tips": {
+        "quiet": "Mets-toi dans un endroit calme",
+        "ablutions": "Fais tes ablutions si possible",
+        "notifications": "Désactive les notifications",
+        "headphones": "L'expérience est encore plus forte avec des écouteurs ou un casque"
+      }
+    },
+    "session": {
+      "with": "Avec :",
+      "pause": "Pause",
+      "resume": "Reprendre",
+      "stop": "Arrêter",
+      "stopConfirm": "Arrêter la session",
+      "stopMessage": "Voulez-vous vraiment arrêter la session ?",
+      "stopAction": "Arrêter",
+      "cancel": "Annuler",
+      "voiceOn": "Activer la voix",
+      "voiceOff": "Désactiver la voix",
+      "breathing": {
+        "inhale": "Inspire",
+        "exhale": "Expire",
+        "hold": "Retiens",
+        "libre": "Souffle libre"
+      },
+      "guidance": {
+        "start": "Ferme doucement les yeux… Rappelle ton intention… Inspire… expire… tu es en sécurité avec Allah.",
+        "reminders": {
+          "breath": "Reste avec ton souffle.",
+          "divineName": "Rappelle le Nom : {{name}}.",
+          "presence": "Allah voit tes efforts, reste présent.",
+          "peace": "Laisse-toi porter par la paix.",
+          "safety": "Tu es dans un espace de sécurité."
+        },
+        "end": "On arrive à la fin de ce moment. Reprends conscience de ton corps, de la pièce où tu es. Remercie Allah pour ces instants. Quand tu seras prêt, tu pourras ouvrir les yeux."
+      }
+    },
+    "completion": {
+      "title": "Ta session dans Bayt An Nûr est terminée",
+      "message": "Prends un instant pour dire Alhamdulillah pour ce moment.\n\nSi tu veux, tu peux noter en un mot comment tu te sens maintenant.",
+      "placeholder": "Je me sens…",
+      "finish": "Terminer",
+      "restart": "Relancer une session",
+      "viewStats": "Voir mes statistiques"
+    }
   },
   "asma": {
     "title": "Les 99 noms d'Allah",
@@ -312,7 +1262,7 @@
     "mySessions": "Mes sessions",
     "mySession": "Ma session",
     "publicSessions": "Sessions publiques",
-    "activeSessions": "Sessions actives",
+    "activeSessions": "Sessions mondiales",
     "createSession": "Créer une session",
     "createPrivateSession": "Créer une session privée",
     "createPublicSession": "Créer une session publique",
@@ -321,7 +1271,7 @@
     "participants": "Participants",
     "target": "Objectif",
     "current": "Actuel",
-    "noSessions": "Aucune session active",
+    "noSessions": "Aucune session mondiale",
     "noSessionSelected": "Aucune session sélectionnée",
     "viewMySessions": "Voir mes sessions",
     "loading": "Chargement...",
@@ -374,6 +1324,24 @@
     "emailSent": "Email envoyé",
     "emailSentMessage": "Un nouvel email de vérification a été envoyé à votre adresse.",
     "sendFailed": "Impossible d'envoyer l'email de vérification"
+  },
+  "subscription": {
+    "active": "Abonné",
+    "required": "Cette fonctionnalité nécessite un compte premium.",
+    "requiredMessage": "Cette fonctionnalité nécessite un compte premium.\n\nPour accéder au chat IA et profiter pleinement de toutes les fonctionnalités avancées, veuillez activer votre compte premium dès maintenant.\n\nAYNA Premium vous offre un accès complet aux outils IA : analyses avancées, accès illimité et fonctionnalités exclusives pour améliorer votre expérience et tirer le meilleur parti de l’intelligence artificielle.",
+    "zakaatMessage": "Mais AYNA Premium, ce n’est pas seulement un accès à des outils performants. C’est également un acte de solidarité. Plus de 10 % des fonds récoltés par l’activation des comptes premium sont reversés à des associations humanitaires sous forme de Zakaat, afin de soutenir directement les plus démunis. En activant votre compte, vous contribuez à un projet où tout le monde y gagne : vous bénéficiez de l’IA avancée et, en même temps, vous participez à une action concrète pour aider ceux qui en ont le plus besoin.\n\nActivez votre compte premium pour débloquer toutes les fonctionnalités et rejoindre un projet fondé sur le partage, l’entraide et la bienveillance. Votre contribution fait une réelle différence, et chaque activation est un pas vers un monde plus solidaire.\n\nPour continuer à utiliser le chat IA et profiter pleinement des fonctionnalités premium, activez votre compte dès maintenant et faites partie de cette initiative qui combine technologie et solidarité.",
+    "activate": "Activer mon compte",
+    "loading": "Chargement...",
+    "sessionExpired": "Session expirée. Veuillez vous reconnecter.",
+    "noActivationLink": "Aucun lien d'activation reçu.",
+    "cannotOpenLink": "Impossible d'ouvrir le lien d'activation.",
+    "error": "Erreur lors de la création du lien d'activation"
+    ,
+    "thankYou": {
+      "title": "Merci pour votre confiance 🤍",
+      "subtitle": "Votre abonnement change plus que votre expérience.",
+      "body": "Merci d’avoir activé AYNA Premium. Votre contribution de 7,99 € par mois ne débloque pas seulement des fonctionnalités avancées : elle soutient directement des actions humanitaires concrètes.\n\nUne partie de votre abonnement est reversée à des associations qui viennent en aide aux plus démunis. Grâce à vous, des familles reçoivent un soutien essentiel, des repas sont distribués, et des projets solidaires voient le jour.\n\nEn rejoignant AYNA Premium, vous améliorez votre expérience et vous participez à un mouvement de partage, de bienveillance et d’entraide. Votre geste compte. Votre geste aide. Votre geste change des vies."
+    }
   }
 }
 

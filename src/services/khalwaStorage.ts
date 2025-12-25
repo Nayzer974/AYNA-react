@@ -35,6 +35,41 @@ export interface KhalwaStats {
   longestStreakDays: number;
 }
 
+interface DbKhalwaSession {
+  id: string;
+  user_id: string;
+  intention?: string | null;
+  divine_name_id: string;
+  divine_name_arabic: string;
+  divine_name_transliteration: string;
+  sound_ambiance: string;
+  duration_minutes: number | string;
+  breathing_type: BreathingType;
+  guided: boolean;
+  feeling?: string | null;
+  completed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface LocalKhalwaSession extends KhalwaSessionData {
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface KhalwaStatsRPC {
+  total_sessions: number | string;
+  total_minutes: number | string;
+  avg_duration: number | string;
+  most_used_divine_name: string | null;
+  most_used_breathing_type: string | null;
+  most_used_sound: string | null;
+  sessions_this_week: number | string;
+  sessions_this_month: number | string;
+  longest_streak_days: number | string;
+}
+
 const STORAGE_KEY = 'khalwa_sessions';
 
 /**
@@ -47,6 +82,21 @@ export async function saveKhalwaSession(
 ): Promise<string | null> {
   // TOUJOURS sauvegarder localement d'abord
   const localId = await saveKhalwaSessionLocal(userId, sessionData);
+  
+  // Tracker l'événement analytics immédiatement (même si hors ligne, il sera synchronisé plus tard)
+  if (sessionData.completed !== false) {
+    try {
+      const { trackEvent } = await import('./analytics');
+      trackEvent('khalwa_session_completed', {
+        duration: sessionData.duration,
+        divine_name_id: sessionData.divineName.id,
+        breathing_type: sessionData.breathingType,
+        guided: sessionData.guided,
+      }).catch(() => {});
+    } catch (error) {
+      // Erreur silencieuse
+    }
+  }
   
   // Vérifier si on est en ligne
   const online = await isOnline();
@@ -67,7 +117,7 @@ export async function saveKhalwaSession(
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     
     if (sessionError || !session) {
-      console.warn('Aucune session Supabase active. Sauvegarde locale uniquement.');
+      // Aucune session Supabase active. Sauvegarde locale uniquement.
       // Ajouter à la queue pour synchronisation ultérieure
       await addToSyncQueue({
         type: 'khalwa_session',
@@ -82,7 +132,7 @@ export async function saveKhalwaSession(
     const { data: { user: supabaseUser }, error: userError } = await supabase.auth.getUser();
     
     if (userError || !supabaseUser?.id) {
-      console.error('Erreur lors de la récupération de l\'utilisateur Supabase:', userError);
+      // Erreur silencieuse en production
       // Ajouter à la queue pour synchronisation ultérieure
       await addToSyncQueue({
         type: 'khalwa_session',
@@ -114,13 +164,9 @@ export async function saveKhalwaSession(
       .single();
 
     if (error) {
-      console.error('Erreur lors de la sauvegarde de la session:', error);
-      // Si c'est une erreur RLS, donner plus de détails
+      // Erreur silencieuse en production
       if (error.code === '42501') {
-        console.error('❌ Erreur RLS - Vérifiez que :');
-        console.error('  1. Les politiques RLS sont correctement configurées (exécutez fix-all-rls-and-missing-tables.sql)');
-        console.error('  2. L\'utilisateur est bien authentifié dans Supabase');
-        console.error('  3. L\'ID utilisateur correspond à auth.uid()');
+        // Erreur RLS - Vérifiez les politiques RLS
       }
       // Ajouter à la queue pour synchronisation ultérieure
       await addToSyncQueue({
@@ -131,11 +177,26 @@ export async function saveKhalwaSession(
       return localId;
     }
 
+    // Si sauvegarde Supabase réussie, tracker l'événement analytics
+    if (data?.id && sessionData.completed !== false) {
+      try {
+        const { trackEvent } = await import('./analytics');
+        trackEvent('khalwa_session_completed', {
+          duration: sessionData.duration,
+          divine_name_id: sessionData.divineName.id,
+          breathing_type: sessionData.breathingType,
+          guided: sessionData.guided,
+        }).catch(() => {});
+      } catch (error) {
+        // Erreur silencieuse
+      }
+    }
+
     // Si sauvegarde Supabase réussie, on peut supprimer la version locale
     // (mais on garde une copie pour les stats locales)
     return data?.id || localId;
-  } catch (error: any) {
-    console.error('Erreur lors de la sauvegarde de la session:', error);
+  } catch (error: unknown) {
+    // Erreur silencieuse en production
     // Ajouter à la queue pour synchronisation ultérieure
     await addToSyncQueue({
       type: 'khalwa_session',
@@ -167,7 +228,7 @@ async function saveKhalwaSessionLocal(
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(localSessions));
     return newSession.id;
   } catch (error) {
-    console.error('Erreur lors de la sauvegarde locale:', error);
+    // Erreur silencieuse en production
     return null;
   }
 }
@@ -202,10 +263,10 @@ export async function loadKhalwaSessions(
     if (error) {
       // Si la table n'existe pas encore, utiliser AsyncStorage
       if (error.message?.includes('does not exist') || error.code === '42P01' || error.message?.includes('relation')) {
-        console.warn('La table khalwa_sessions n\'existe pas encore. Utilisation d\'AsyncStorage.');
+        // Table non disponible, utilisation d'AsyncStorage
         return loadKhalwaSessionsLocal(userId, limit);
       }
-      console.error('Erreur lors du chargement des sessions:', error);
+      // Erreur silencieuse en production
       // Essayer quand même AsyncStorage en fallback
       return loadKhalwaSessionsLocal(userId, limit);
     }
@@ -219,8 +280,8 @@ export async function loadKhalwaSessions(
 
     // Si aucune session dans Supabase, essayer AsyncStorage (pour migration)
     return loadKhalwaSessionsLocal(userId, limit);
-  } catch (error: any) {
-    console.error('Erreur lors du chargement des sessions:', error);
+  } catch (error: unknown) {
+    // Erreur silencieuse en production
     return loadKhalwaSessionsLocal(userId, limit);
   }
 }
@@ -234,16 +295,16 @@ async function loadKhalwaSessionsLocal(
 ): Promise<KhalwaSessionData[]> {
   try {
     const stored = await AsyncStorage.getItem(STORAGE_KEY);
-    const localSessions = stored ? JSON.parse(stored) : [];
+    const localSessions: LocalKhalwaSession[] = stored ? JSON.parse(stored) : [];
     const userSessions = localSessions
-      .filter((s: any) => s.userId === userId && s.completed !== false)
-      .sort((a: any, b: any) => 
+      .filter((s) => s.userId === userId && s.completed !== false)
+      .sort((a, b) => 
         new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
       );
 
     return limit ? userSessions.slice(0, limit) : userSessions;
   } catch (error) {
-    console.error('Erreur lors du chargement local:', error);
+    // Erreur silencieuse en production
     return [];
   }
 }
@@ -251,7 +312,7 @@ async function loadKhalwaSessionsLocal(
 /**
  * Transformer une session de la base de données en objet KhalwaSessionData
  */
-function transformSessionFromDB(dbSession: any): KhalwaSessionData {
+function transformSessionFromDB(dbSession: DbKhalwaSession): KhalwaSessionData {
   return {
     id: dbSession.id,
     intention: dbSession.intention,
@@ -260,6 +321,7 @@ function transformSessionFromDB(dbSession: any): KhalwaSessionData {
       arabic: dbSession.divine_name_arabic,
       transliteration: dbSession.divine_name_transliteration,
       meaning: '', // Pas stocké en DB, sera récupéré depuis khalwaData si nécessaire
+      meaningEn: '', // Pas stocké en DB, sera récupéré depuis khalwaData si nécessaire
       description: ''
     },
     soundAmbiance: dbSession.sound_ambiance,
@@ -290,7 +352,7 @@ export async function getKhalwaStats(userId: string): Promise<KhalwaStats | null
     });
 
     if (!error && data && data.length > 0) {
-      const stats = data[0];
+      const stats = data[0] as KhalwaStatsRPC;
       return {
         totalSessions: Number(stats.total_sessions) || 0,
         totalMinutes: Number(stats.total_minutes) || 0,
@@ -306,14 +368,14 @@ export async function getKhalwaStats(userId: string): Promise<KhalwaStats | null
 
     // Si la fonction RPC n'existe pas ou échoue, charger les sessions depuis Supabase et calculer
     if (error && (error.message?.includes('function') || error.code === '42883' || error.message?.includes('does not exist'))) {
-      console.warn('La fonction RPC get_khalwa_stats n\'existe pas. Calcul depuis les sessions Supabase...');
+      // Fonction RPC non disponible, calcul depuis les sessions
       // Charger toutes les sessions depuis Supabase et calculer les stats
       const sessions = await loadKhalwaSessions(userId);
       return calculateStatsFromSessions(sessions);
     }
 
     // Autre erreur, essayer de charger depuis Supabase quand même
-    console.warn('Erreur RPC, calcul depuis les sessions Supabase:', error);
+    // Erreur RPC, calcul depuis les sessions
     const sessions = await loadKhalwaSessions(userId);
     if (sessions.length > 0) {
       return calculateStatsFromSessions(sessions);
@@ -321,16 +383,16 @@ export async function getKhalwaStats(userId: string): Promise<KhalwaStats | null
 
     // Fallback sur AsyncStorage
     return getKhalwaStatsLocal(userId);
-  } catch (error: any) {
-    console.error('Erreur lors du chargement des statistiques:', error);
+  } catch (error: unknown) {
+    // Erreur silencieuse en production
     // Essayer de charger depuis Supabase
     try {
       const sessions = await loadKhalwaSessions(userId);
       if (sessions.length > 0) {
         return calculateStatsFromSessions(sessions);
       }
-    } catch (e) {
-      console.error('Erreur lors du chargement des sessions:', e);
+    } catch (_e: unknown) {
+      // Erreur silencieuse en production
     }
     // Dernier recours : AsyncStorage
     return getKhalwaStatsLocal(userId);
@@ -470,8 +532,8 @@ function calculateStatsFromSessions(sessions: KhalwaSessionData[]): KhalwaStats 
 async function getKhalwaStatsLocal(userId: string): Promise<KhalwaStats | null> {
   try {
     const stored = await AsyncStorage.getItem(STORAGE_KEY);
-    const localSessions = stored ? JSON.parse(stored) : [];
-    const userSessions = localSessions.filter((s: any) => s.userId === userId && s.completed !== false);
+    const localSessions: LocalKhalwaSession[] = stored ? JSON.parse(stored) : [];
+    const userSessions = localSessions.filter((s) => s.userId === userId && s.completed !== false);
 
     if (userSessions.length === 0) {
       return {
@@ -488,7 +550,7 @@ async function getKhalwaStatsLocal(userId: string): Promise<KhalwaStats | null> 
     }
 
     const totalSessions = userSessions.length;
-    const totalMinutes = userSessions.reduce((sum: number, s: any) => sum + (s.duration || 0), 0);
+    const totalMinutes = userSessions.reduce((sum: number, s) => sum + (s.duration || 0), 0);
     const avgDuration = totalMinutes / totalSessions;
 
     // Calculer les plus utilisés
@@ -496,7 +558,7 @@ async function getKhalwaStatsLocal(userId: string): Promise<KhalwaStats | null> 
     const breathingCounts: Record<string, number> = {};
     const soundCounts: Record<string, number> = {};
 
-    userSessions.forEach((s: any) => {
+    userSessions.forEach((s) => {
       const nameId = s.divineName?.id || '';
       const breathing = s.breathingType || '';
       const sound = s.soundAmbiance || '';
@@ -521,18 +583,18 @@ async function getKhalwaStatsLocal(userId: string): Promise<KhalwaStats | null> 
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    const sessionsThisWeek = userSessions.filter((s: any) => {
+    const sessionsThisWeek = userSessions.filter((s) => {
       const sessionDate = new Date(s.createdAt || 0);
       return sessionDate >= weekAgo;
     }).length;
 
-    const sessionsThisMonth = userSessions.filter((s: any) => {
+    const sessionsThisMonth = userSessions.filter((s) => {
       const sessionDate = new Date(s.createdAt || 0);
       return sessionDate >= monthAgo;
     }).length;
 
     // Calculer la série (simplifié)
-    const sortedSessions = [...userSessions].sort((a: any, b: any) => 
+    const sortedSessions = [...userSessions].sort((a, b) => 
       new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
     );
 
@@ -540,7 +602,7 @@ async function getKhalwaStatsLocal(userId: string): Promise<KhalwaStats | null> 
     let currentStreak = 0;
     let lastDate: Date | null = null;
 
-    sortedSessions.forEach((s: any) => {
+    sortedSessions.forEach((s) => {
       const sessionDate = new Date(s.createdAt || 0);
       const sessionDay = new Date(sessionDate.getFullYear(), sessionDate.getMonth(), sessionDate.getDate());
 
@@ -575,7 +637,7 @@ async function getKhalwaStatsLocal(userId: string): Promise<KhalwaStats | null> 
       longestStreakDays
     };
   } catch (error) {
-    console.error('Erreur lors du calcul des statistiques locales:', error);
+    // Erreur silencieuse en production
     return null;
   }
 }
