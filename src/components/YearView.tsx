@@ -5,7 +5,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import { getEventsForHijriDate } from '@/utils/calendarEvents';
-import { getAllNotes, formatDateForStorage } from '@/services/calendarNotes';
+import { getAllNotes, formatDateForStorage } from '@/services/storage/calendarNotes';
 
 interface CalendarDay {
   gregorianDay: number;

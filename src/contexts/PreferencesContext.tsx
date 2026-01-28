@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { loadUserPreferences, saveUserPreferences, UserPreferences } from '@/services/personalization';
+import { loadUserPreferences, saveUserPreferences, UserPreferences } from '@/services/system/personalization';
 
 interface PreferencesContextType {
   preferences: UserPreferences;
@@ -13,10 +13,11 @@ const PreferencesContext = createContext<PreferencesContextType | undefined>(und
 
 const defaultPreferences: UserPreferences = {
   starsEnabled: true,
-  notificationsEnabled: false, // Désactivées par défaut - l'utilisateur doit les activer dans les paramètres
-  prayerReminders: false, // Désactivées par défaut
-  challengeReminders: false, // Désactivées par défaut
+  notificationsEnabled: true,
+  prayerReminders: true,
+  challengeReminders: true,
   analyticsConsent: false, // GDPR: Opt-in by default (no consent until explicitly given)
+  hapticsEnabled: true, // Haptic feedback enabled by default
 };
 
 export function PreferencesProvider({ children }: { children: ReactNode }) {
@@ -45,7 +46,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   const updatePreferences = async (updates: Partial<UserPreferences>) => {
     const newPreferences = { ...preferences, ...updates };
     setPreferences(newPreferences);
-    
+
     try {
       await saveUserPreferences(updates);
     } catch (error) {
@@ -82,9 +83,9 @@ export function usePreferences(): PreferencesContextType {
     console.warn('usePreferences used outside PreferencesProvider, using default values');
     return {
       preferences: defaultPreferences,
-      updatePreferences: async () => {},
+      updatePreferences: async () => { },
       starsEnabled: true,
-      setStarsEnabled: async () => {},
+      setStarsEnabled: async () => { },
     };
   }
   return context;

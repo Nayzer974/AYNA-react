@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Platform } from 'react-native';
-import { getCurrentLocation, watchPosition, LocationData, isGPSHeadingReliable } from '@/services/location.service';
+import { getCurrentLocation, watchPosition, LocationData, isGPSHeadingReliable } from '@/services/system/location.service';
 
 export interface UseLocationReturn {
   location: LocationData | null;

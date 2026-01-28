@@ -25,7 +25,9 @@ export default {
         "ACCESS_COARSE_LOCATION",
         "POST_NOTIFICATIONS",
         "RECORD_AUDIO",
-        "CAMERA"
+        "CAMERA",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ],
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
@@ -39,6 +41,24 @@ export default {
               scheme: "ayna",
               host: "dhikr",
               pathPrefix: "/invite"
+            }
+          ],
+          category: ["BROWSABLE", "DEFAULT"]
+        },
+        // Universal Links / App Links pour nurayna.com
+        {
+          action: "VIEW",
+          autoVerify: true,
+          data: [
+            {
+              scheme: "https",
+              host: "nurayna.com",
+              pathPrefix: "/dhikr/invite"
+            },
+            {
+              scheme: "https",
+              host: "nurayna.com",
+              pathPrefix: "/auth/callback"
             }
           ],
           category: ["BROWSABLE", "DEFAULT"]
@@ -67,15 +87,17 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.ayna.app",
+      associatedDomains: ["applinks:nurayna.com"],
       jsEngine: "hermes",
       infoPlist: {
         NSLocationWhenInUseUsageDescription: "Cette app a besoin de votre localisation pour calculer la direction de la Qibla.",
         NSLocationAlwaysUsageDescription: "Cette app a besoin de votre localisation pour calculer la direction de la Qibla.",
         NSPhotoLibraryUsageDescription: "Cette app a besoin d'accéder à vos photos pour changer votre avatar.",
         NSPhotoLibraryAddUsageDescription: "Cette app a besoin d'accéder à vos photos pour changer votre avatar.",
-        NSCameraUsageDescription: "Cette app a besoin d'accéder à l'appareil photo pour prendre une photo de profil.",
+        NSPhotoLibraryUsageDescription: "Cette app a besoin d'accéder à vos photos pour changer votre avatar.",
+        NSPhotoLibraryAddUsageDescription: "Cette app a besoin d'accéder à vos photos pour changer votre avatar.",
+        NSCameraUsageDescription: "Cette app a besoin d'accéder l'appareil photo pour prendre une photo de profil.",
         NSMicrophoneUsageDescription: "Cette app a besoin du micro pour enregistrer des messages vocaux.",
-        NSUserNotificationsUsageDescription: "Cette app a besoin de notifications pour vous rappeler les heures de prière et vos moments spirituels.",
         CFBundleURLTypes: [
           {
             CFBundleURLSchemes: ["ayna"],
@@ -93,15 +115,16 @@ export default {
       "expo-sensors",
       "expo-audio",
       "expo-asset",
-      "expo-image-picker",
-      [
-        "expo-notifications",
-        {
-          icon: "./assets/icon.png",
-          color: "#0A0F2C",
-          sounds: []
-        }
-      ]
+      "expo-image-picker"
+      // Sentry temporarily disabled for production build
+      // Re-enable after configuring auth token
+      // [
+      //   "@sentry/react-native",
+      //   {
+      //     "organization": "ayna",
+      //     "project": "ayna-mobile",
+      //   }
+      // ]
     ],
     extra: {
       eas: {

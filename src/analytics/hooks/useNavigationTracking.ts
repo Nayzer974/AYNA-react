@@ -6,7 +6,7 @@
  */
 
 import { useRef } from 'react';
-import { NavigationState, Route, PartialState } from '@react-navigation/native';
+import { NavigationState, Route } from '@react-navigation/native';
 import { analytics } from '../Analytics';
 
 const DEBOUNCE_MS = 500;
@@ -15,15 +15,12 @@ const DEBOUNCE_MS = 500;
  * Extract current route from navigation state
  * Handles nested navigators (Stack, Tab, etc.)
  */
-function getCurrentRoute(state: NavigationState | PartialState<NavigationState> | undefined): Route<string> | undefined {
+function getCurrentRoute(state: NavigationState | undefined): Route<string> | undefined {
   if (!state || typeof state.index !== 'number') {
     return undefined;
   }
 
   const route = state.routes[state.index];
-  if (!route) {
-    return undefined;
-  }
 
   // If route has nested state, recurse
   if (route.state) {
@@ -44,7 +41,7 @@ export function useNavigationTracking() {
   const lastTrackedRef = useRef<number>(0);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  return (state: NavigationState | PartialState<NavigationState> | undefined) => {
+  return (state: NavigationState | undefined) => {
     // Clear any pending debounce
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);

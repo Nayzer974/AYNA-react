@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Calendar, Clock, Flame, TrendingUp } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GalaxyBackground } from '@/components/GalaxyBackground';
-import { getKhalwaStats, loadKhalwaSessions, KhalwaStats as KhalwaStatsType, KhalwaSessionData } from '@/services/khalwaStorage';
+import { getKhalwaStats, loadKhalwaSessions, KhalwaStats as KhalwaStatsType, KhalwaSessionData } from '@/services/storage/khalwaStorage';
 import { divineNames } from '@/data/khalwaData';
 import { soundAmbiances } from '@/data/khalwaData';
 

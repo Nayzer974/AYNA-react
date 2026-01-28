@@ -1,41 +1,48 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, InteractionManager, ScrollView, Platform, PanResponder } from 'react-native';
 import { TouchableOpacity } from 'react-native';
+import { TouchableOpacityWithSound } from '@/components/ui/TouchableOpacityWithSound';
 import { useDimensions } from '@/hooks/useDimensions';
 import { useResponsive } from '@/hooks/useResponsive';
+import { useHomeLayout } from '@/hooks/useHomeLayout';
 import { Image } from 'expo-image';
 import { useNavigation } from '@react-navigation/native';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getDhikrOfDay, getMultipleDhikr } from '@/services/dhikr';
+import { getDhikrOfDay, getMultipleDhikr } from '@/services/content/dhikr';
+import { getActiveDhikrSessions } from '@/services/content/dhikrSessions';
+import { getCurrentDuahIndex } from '@/services/system/autoWorldSessionManager';
+import { getAuthenticDhikrByIndex } from '@/data/authenticDhikr';
+import { getTodayPrayerTimes } from '@/services/content/PrayerTimeManager';
+import { dhikrDatabase } from '@/data/dhikrDatabase';
+import { getDuahRabanahByIndex } from '@/data/duahRabanah';
 import { Carousel } from '@/components/Carousel';
-import { getQiblaByCoords } from '@/services/hijri';
-import { MessageCircle } from 'lucide-react-native';
+import { getQiblaByCoords } from '@/services/content/prayerServices';
+import { MessageCircle, Share2, Circle as CircleIcon, X } from 'lucide-react-native';
+import { Share, Modal } from 'react-native';
 // Notifications désactivées - expo-notifications supprimé
 import { analytics } from '@/analytics';
 import Svg, { Circle, Path, Line, Ellipse, G, Rect } from 'react-native-svg';
 import * as Location from 'expo-location';
 import { Magnetometer } from 'expo-sensors';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming, withSpring, withRepeat, withSequence } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming, withSpring, withRepeat, withSequence, FadeIn, SlideInDown, SlideInUp } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GalaxyBackground } from '@/components/GalaxyBackground';
 import { EmailVerificationModal } from '@/components/EmailVerificationModal';
 import { PrayerTimesCardSlide } from '@/components/PrayerTimesCardSlide';
-import { CalendrierBottomSheet } from '@/components/CalendrierBottomSheet';
+
+import { SalatNabiModal } from '@/components/SalatNabiModal';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEmailVerificationReminder } from '@/hooks/useEmailVerificationReminder';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
 import { storage } from '@/utils/storage';
 import { usePulse } from '@/hooks/usePulse';
-import { SPRING_CONFIGS, ANIMATION_DURATION } from '@/utils/animations';
-import { getShortcuts, type Shortcut } from '@/services/shortcuts';
+import { SPRING_CONFIGS } from '@/utils/animations';
+import { getShortcuts, type Shortcut } from '@/services/system/shortcuts';
 import { Skeleton } from '@/components/ui';
 import { createAccessibilityProps } from '@/utils/accessibility';
-import { useHapticFeedback } from '@/hooks/useHapticFeedback';
-import { useFadeIn } from '@/hooks/useFadeIn';
-import { useSlideIn } from '@/hooks/useSlideIn';
-import { usePressScale } from '@/hooks/useScale';
 
 
 /**
@@ -47,6 +54,7 @@ import { usePressScale } from '@/hooks/useScale';
  * - Carte "Dhikr du jour"
  * - Icônes circulaires pour navigation (AYNA au centre, 6 modules autour)
  */
+// Refreshed by fix script
 export function Home() {
   const navigation = useNavigation();
   const { user } = useUser();
@@ -54,107 +62,33 @@ export function Home() {
   const { t } = useTranslation();
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useDimensions();
   const { isTablet, adaptiveValue } = useResponsive();
-  
+
   const isAuthenticated = Boolean(user?.id);
   const hasName = Boolean(isAuthenticated && user?.name && user.name.trim().length > 0);
-  
-  const [dhikrList, setDhikrList] = useState<Array<{ arabic: string; translation: string }>>([]);
+
+  const [dhikrList, setDhikrList] = useState<Array<{ arabic: string; translation: string; type?: 'dua' | 'dhikr' }>>([]);
   const [currentDhikrIndex, setCurrentDhikrIndex] = useState(0);
+
   const [isLoadingDhikr, setIsLoadingDhikr] = useState(true);
-  const [buttonSize, setButtonSize] = useState(56);
-  const [containerSize, setContainerSize] = useState(300);
-  const [radius, setRadius] = useState(100);
+
+  // Utiliser le hook layout optimisé
+  const { buttonSize, containerSize, radius, getPosition } = useHomeLayout();
+
   const [qibla, setQibla] = useState<number | null>(null);
   const [sensorQibla, setSensorQibla] = useState<number | null>(null);
   const [shortcuts, setShortcuts] = useState<Shortcut[]>([]);
   const [showEmailVerificationModal, setShowEmailVerificationModal] = useState(false);
   const [showPrayerModal, setShowPrayerModal] = useState(false);
-  
-  // Shared value pour le scroll (pour le bottom sheet)
-  const scrollY = useSharedValue(0);
-  
-  // Référence pour ouvrir le calendrier depuis la page
-  const openCalendarRef = useRef<(() => void) | null>(null);
-  
-  // PanResponder pour détecter le swipe vers le haut sur la page d'accueil
-  const swipeUpResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        // Détecter uniquement les swipes vers le haut (dy négatif)
-        return gestureState.dy < -10 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        // Si le swipe vers le haut est assez fort, ouvrir le calendrier
-        if (gestureState.dy < -20 || gestureState.vy < -0.5) {
-          if (openCalendarRef.current) {
-            openCalendarRef.current();
-          }
-        }
-      },
-    })
-  ).current;
+  const [showSalatNabiModal, setShowSalatNabiModal] = useState(false);
 
-  // Animation pulse pour le bouton AYNA central - optimisée pour performance
-  const centerButtonPulse = usePulse({ minScale: 0.98, maxScale: 1.02, duration: 2000, repeat: true });
-  
-  // Haptic feedback pour les interactions
-  const haptic = useHapticFeedback();
-  
-  // Animations d'entrée staggerées pour rendre la page plus vivante
-  const logoFadeIn = useFadeIn({ delay: 0, duration: ANIMATION_DURATION.NORMAL });
-  const greetingSlideIn = useSlideIn({ direction: 'down', delay: 100, useSpring: true });
-  const cardSlideIn = useSlideIn({ direction: 'up', delay: 200, useSpring: true });
-  const iconsFadeIn = useFadeIn({ delay: 300, duration: ANIMATION_DURATION.SLOW });
-  
-  // Animation scale pour les boutons au press (6 boutons périphériques)
-  const centerButtonScale = usePressScale();
-  const peripheralButtonScales = Array.from({ length: 6 }, () => usePressScale());
 
-  // Calculer la taille des boutons et le rayon selon la taille de l'écran (mémorisé)
-  const { buttonSize: calculatedButtonSize, containerSize: calculatedContainerSize, radius: calculatedRadius } = useMemo(() => {
-    const screenHeight = SCREEN_HEIGHT;
-    const screenWidth = SCREEN_WIDTH;
-    
-    // Calculer l'espace disponible en tenant compte de tous les éléments
-    // SafeArea top: ~44px, Logo: ~80px, Salutation: ~60px, Carte: ~200px, Marges: ~40px
-    const reservedSpace = 424;
-    const availableHeight = screenHeight - reservedSpace;
-    
-    // Taille des boutons adaptative selon l'espace disponible
-    let newButtonSize = 64;
-    if (availableHeight > 400) {
-      newButtonSize = 72;
-    } else if (availableHeight > 320) {
-      newButtonSize = 64;
-    } else if (availableHeight > 250) {
-      newButtonSize = 56;
-    } else {
-      newButtonSize = 48;
-    }
-    
-    // Taille du conteneur adaptée à l'espace disponible
-    const maxContainerByHeight = availableHeight * 0.95;
-    const maxContainerByWidth = screenWidth * 0.9;
-    const maxContainerSize = Math.min(maxContainerByHeight, maxContainerByWidth);
-    const minContainerSize = 220;
-    const calculatedContainerSize = Math.max(minContainerSize, Math.min(maxContainerSize, 380));
-    
-    // Rayon pour les boutons périphériques
-    const calculatedRadius = (calculatedContainerSize / 2) - (newButtonSize / 2) - 4;
-    
-    return {
-      buttonSize: newButtonSize,
-      containerSize: calculatedContainerSize,
-      radius: Math.max(80, calculatedRadius)
-    };
-  }, [SCREEN_WIDTH, SCREEN_HEIGHT]);
 
-  useEffect(() => {
-    setButtonSize(calculatedButtonSize);
-    setContainerSize(calculatedContainerSize);
-    setRadius(calculatedRadius);
-  }, [calculatedButtonSize, calculatedContainerSize, calculatedRadius]);
+  // Swipe responder removed
+
+
+
+  // Animation pulse pour le bouton AYNA central
+  const centerButtonPulse = usePulse({ minScale: 0.95, maxScale: 1.05, duration: 1500, repeat: true });
 
   // Utiliser le hook pour gérer le rappel quotidien de vérification d'email
   const { shouldShowReminder, markReminderShown } = useEmailVerificationReminder();
@@ -172,46 +106,118 @@ export function Home() {
     markReminderShown();
   }, [markReminderShown]);
 
-  // Charger 3 dhikr pour le carrousel (différé après interactions)
+  // Charger 1 dua rabana et 1 dhikr par jour
   useEffect(() => {
     // Afficher des valeurs par défaut immédiatement
-    setDhikrList([
-      { arabic: 'لَا إِلَٰهَ إِلَّا اللَّهُ', translation: "Il n'y a de divinité qu'Allah" },
-      { arabic: 'سُبْحَانَ اللَّهِ', translation: 'Gloire à Allah' },
-      { arabic: 'الْحَمْدُ لِلَّهِ', translation: 'Louange à Allah' }
-    ]);
-    
-    // Charger immédiatement pour éviter les latences
-    const loadDhikr = async () => {
-      try {
-        setIsLoadingDhikr(true);
-        const dhikrArray = await getMultipleDhikr(3, i18n.language || 'fr');
-        
-        if (dhikrArray && dhikrArray.length > 0) {
-          const formatted = dhikrArray.map(d => ({
-            arabic: d.text || '',
-            translation: d.translation || ''
-          }));
-          setDhikrList(formatted);
-        }
-      } catch (error) {
-        // Erreur silencieuse en production
-      } finally {
-        setIsLoadingDhikr(false);
+    const currentDayIndex = getCurrentDuahIndex();
+    const duahRabanah = getDuahRabanahByIndex(currentDayIndex);
+    const dhikr = dhikrDatabase[currentDayIndex % dhikrDatabase.length];
+
+    const initialList = [
+      {
+        arabic: duahRabanah.arabic,
+        translation: duahRabanah.translation,
+        type: 'dua' as const
+      },
+      {
+        arabic: dhikr.arabic,
+        translation: dhikr.translation,
+        type: 'dhikr' as const
       }
-    };
-    
-    loadDhikr();
+    ];
+    setDhikrList(initialList);
+
+    InteractionManager.runAfterInteractions(() => {
+      const loadDailyContent = async () => {
+        try {
+          setIsLoadingDhikr(true);
+
+          // Vérifier si on est jeudi après isha jusqu'à vendredi après duhr
+          const now = new Date();
+          const dayOfWeek = now.getDay(); // 0 = dimanche, 4 = jeudi, 5 = vendredi
+          let isSalatNabiTime = false;
+
+          if (dayOfWeek === 4 || dayOfWeek === 5) {
+            try {
+              const timings = await getTodayPrayerTimes();
+              if (timings) {
+                const ishaTime = timings.Isha;
+                const duhrTime = timings.Dhuhr;
+                const [ishaHours, ishaMinutes] = ishaTime.split(':').map(Number);
+                const [duhrHours, duhrMinutes] = duhrTime.split(':').map(Number);
+                const nowHours = now.getHours();
+                const nowMinutes = now.getMinutes();
+                const nowTotalMinutes = nowHours * 60 + nowMinutes;
+                const ishaTotalMinutes = ishaHours * 60 + ishaMinutes;
+                const duhrTotalMinutes = duhrHours * 60 + duhrMinutes;
+
+                // Jeudi après isha
+                if (dayOfWeek === 4 && nowTotalMinutes >= ishaTotalMinutes) {
+                  isSalatNabiTime = true;
+                }
+                // Vendredi jusqu'à après duhr
+                if (dayOfWeek === 5 && nowTotalMinutes <= duhrTotalMinutes) {
+                  isSalatNabiTime = true;
+                }
+              }
+            } catch (error) {
+              // Erreur silencieuse
+            }
+          }
+
+          // Vérifier et afficher le modal Salat nabi si nécessaire
+          if (isSalatNabiTime) {
+            try {
+              // Créer une clé basée sur la période (jeudi soir ou vendredi matin)
+              const periodKey = dayOfWeek === 4
+                ? `salat_nabi_${now.getFullYear()}_${now.getMonth()}_${now.getDate()}_thursday`
+                : `salat_nabi_${now.getFullYear()}_${now.getMonth()}_${now.getDate()}_friday`;
+
+              const hasSeenThisPeriod = await AsyncStorage.getItem(periodKey);
+              if (!hasSeenThisPeriod) {
+                setShowSalatNabiModal(true);
+              }
+            } catch (error) {
+              // Erreur silencieuse
+            }
+          }
+
+          // Obtenir le dua rabana et le dhikr du jour
+          const dayIndex = getCurrentDuahIndex();
+          const dailyDuahRabanah = getDuahRabanahByIndex(dayIndex);
+          const dailyDhikr = dhikrDatabase[dayIndex % dhikrDatabase.length];
+
+          const dailyList = [
+            {
+              arabic: dailyDuahRabanah.arabic,
+              translation: dailyDuahRabanah.translation,
+              type: 'dua' as const
+            },
+            {
+              arabic: dailyDhikr.arabic,
+              translation: dailyDhikr.translation,
+              type: 'dhikr' as const
+            }
+          ];
+
+          setDhikrList(dailyList);
+        } catch (error) {
+          // Erreur silencieuse en production
+        } finally {
+          setIsLoadingDhikr(false);
+        }
+      };
+
+      loadDailyContent();
+    });
   }, []);
 
 
-  // Charger la direction Qibla (chargement différé pour ne pas bloquer l'UI)
+  // Charger la direction Qibla (différé après interactions)
   useEffect(() => {
     let mounted = true;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    
-    // Utiliser un timeout court au lieu de InteractionManager pour éviter les latences
-    timer = setTimeout(() => {
+
+    InteractionManager.runAfterInteractions(() => {
       const loadQibla = async () => {
         try {
           const { status } = await Location.requestForegroundPermissionsAsync();
@@ -225,7 +231,7 @@ export function Home() {
             location.coords.latitude,
             location.coords.longitude
           );
-          
+
           if (mounted && data?.direction) {
             setQibla(data.direction);
           }
@@ -235,11 +241,10 @@ export function Home() {
       };
 
       loadQibla();
-    }, 100);
+    });
 
     return () => {
       mounted = false;
-      if (timer) clearTimeout(timer);
     };
   }, []);
 
@@ -258,11 +263,11 @@ export function Home() {
 
         subscription = Magnetometer.addListener((data: { x: number; y: number; z: number }) => {
           if (!mounted) return;
-          
+
           const { x, y } = data;
           let heading = Math.atan2(y, x) * (180 / Math.PI);
           heading = (heading + 360) % 360;
-          
+
           setSensorQibla(heading);
         });
       } catch (error) {
@@ -280,11 +285,10 @@ export function Home() {
     };
   }, []);
 
-  // ✅ OPTIMISÉ : Mémoriser handleLogoPress avec haptic feedback
+  // ✅ OPTIMISÉ : Mémoriser handleLogoPress
   const handleLogoPress = useCallback(() => {
-    haptic.light();
     navigation.navigate('AsmaUlHusna' as never);
-  }, [navigation, haptic]);
+  }, [navigation]);
 
   // Configuration des nœuds avec leurs angles (0° = haut, sens horaire) - mémorisé
   const nodes = useMemo(() => [
@@ -296,53 +300,7 @@ export function Home() {
     { name: t('home.modules.dairatAnNur'), angle: 240, route: 'DairatAnNur', icon: 'dairat' }
   ], [t]);
 
-  // Fonction pour calculer la position depuis l'angle (en pixels) - mémorisée
-  // Garantit que toutes les icônes (sauf Sabila'Nûr et Umm'Ayna) ont exactement la même distance du centre
-  // Bayt An Nûr (0°) et Salât (180°) doivent avoir exactement la même distance d'AYNA
-  const getPosition = useCallback((angleDeg: number) => {
-    // Convertir angle en radians : 0° = haut, donc soustraire 90° pour aligner avec math standard
-    const angleRad = ((angleDeg - 90) * Math.PI) / 180;
-    
-    // Centre du conteneur en pixels - exactement au centre
-    const centerX = containerSize / 2;
-    const centerY = containerSize / 2;
-    
-    // Rayon de base en pixels - utilisé pour Bayt An Nûr (0°), Nur & Shifa (120°), Salât (180°), Da'Irat (240°)
-    // Ce rayon garantit EXACTEMENT la même distance du centre pour toutes ces icônes
-    let radiusPx = radius;
-    
-    // Augmenter le rayon pour Sabila'Nûr (300°) et Umm'Ayna (60°) pour les rapprocher des côtés
-    if (angleDeg === 300 || angleDeg === 60) {
-      radiusPx = radius * 1.35;
-      // Limiter pour éviter de sortir du conteneur
-      radiusPx = Math.min(radiusPx, (containerSize / 2) * 0.9);
-    }
-    
-    // Calculer la position en pixels depuis le centre avec le rayon uniforme
-    // Pour Bayt An Nûr (0°) et Salât (180°), le rayon est identique, donc la distance est identique
-    let xPx = centerX + (radiusPx * Math.cos(angleRad));
-    let yPx = centerY + (radiusPx * Math.sin(angleRad));
-    
-    // Pour Salât (180°), baisser légèrement l'icône
-    if (angleDeg === 180) {
-      const offsetY = radiusPx * 0.1; // 10% du rayon vers le bas
-      yPx = yPx + offsetY;
-    }
-    
-    // Convertir en pourcentage pour le positionnement absolu
-    const x = (xPx / containerSize) * 100;
-    const y = (yPx / containerSize) * 100;
-    
-    // Clamp les valeurs pour garantir qu'elles restent dans [0, 100]
-    return { 
-      x: Math.max(0, Math.min(100, x)), 
-      y: Math.max(0, Math.min(100, y)),
-      // Retourner aussi les valeurs en pixels pour vérification
-      xPx,
-      yPx,
-      radiusPx
-    };
-  }, [containerSize, radius]);
+
 
   // ✅ OPTIMISÉ : Composants SVG mémorisés AVANT le composant Home
   const BaytAnNurIcon = React.memo(({ size }: { size: number }) => (
@@ -396,13 +354,13 @@ export function Home() {
   const SalatIcon = React.memo(({ size, angle }: { size: number; angle: number }) => {
     const { user } = useUser();
     const currentTheme = getTheme(user?.theme || 'default');
-    
+
     const rotation = useSharedValue(angle);
-    
+
     useEffect(() => {
       rotation.value = withTiming(angle, { duration: 100 });
     }, [angle, rotation]);
-    
+
     const animatedStyle = useAnimatedStyle(() => {
       'worklet'; // ✅ Forcer worklet pour performance
       return {
@@ -426,8 +384,8 @@ export function Home() {
     );
   }, (prevProps, nextProps) => {
     // Comparaison personnalisée pour éviter les re-renders inutiles
-    return prevProps.size === nextProps.size && 
-           Math.abs(prevProps.angle - nextProps.angle) < 1; // Tolérance de 1 degré
+    return prevProps.size === nextProps.size &&
+      Math.abs(prevProps.angle - nextProps.angle) < 1; // Tolérance de 1 degré
   });
 
   // ✅ OPTIMISÉ : Mémoriser renderIcon
@@ -451,249 +409,247 @@ export function Home() {
   }, [sensorQibla, qibla]);
 
   return (
-    <View 
-      style={styles.wrapper}
-      {...swipeUpResponder.panHandlers}
-    >
-      {/* Background avec gradient et étoiles */}
+    <View style={styles.wrapper}>
+      {/* Background avec gradient et étoiles - pointerEvents="none" pour ne pas bloquer les touches */}
       <LinearGradient
         colors={[theme.colors.background, theme.colors.backgroundSecondary]}
         style={StyleSheet.absoluteFill}
+        pointerEvents="none"
       />
-      <GalaxyBackground starCount={50} minSize={1} maxSize={2} themeId={user?.theme} />
-      
-      <SafeAreaView 
+      <GalaxyBackground starCount={100} minSize={1} maxSize={2} themeId={user?.theme} />
+
+      <SafeAreaView
         style={styles.container}
         edges={['top', 'bottom']}
       >
         <View
           style={styles.scrollView}
-      >
+        >
           <View style={styles.scrollContent}>
-        <View style={styles.content}>
-          {/* Logo AYNA et "99 noms d'Allah" en haut */}
-          <Animated.View style={[styles.logoSection, logoFadeIn.animatedStyle]}>
-            <Pressable
-              onPress={handleLogoPress}
-              style={({ pressed }) => [
-                styles.logoContainer,
-                { borderColor: theme.colors.accent },
-                pressed && styles.logoPressed
-              ]}
-            >
-              <Image
-                source={require('../../assets/images/ayna.png')}
-                style={styles.logo}
-                contentFit="contain"
-                cachePolicy="memory-disk"
-                transition={200}
-                priority="high"
-                recyclingKey="ayna-logo"
-              />
-            </Pressable>
-            <Text style={[styles.asmaText, { color: theme.colors.text }]}>
-              {t('home.asma99')}
-            </Text>
-          </Animated.View>
-
-          {/* Salutation */}
-          <Animated.View style={[styles.greetingSection, greetingSlideIn.animatedStyle]}>
-            <Text style={[styles.greeting, { color: theme.colors.text }]}>
-              {t('home.greeting')}
-            </Text>
-            {hasName && (
-              <Text 
-                style={[styles.username, { color: theme.colors.text }]}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                {user!.name}
-              </Text>
-            )}
-          </Animated.View>
-
-          {/* Carte Dhikr Carrousel */}
-          <Animated.View 
-            style={[
-              styles.card, 
-              { backgroundColor: theme.colors.backgroundSecondary },
-              cardSlideIn.animatedStyle
-            ]}
-          >
-            {isLoadingDhikr ? (
-              <View style={styles.dhikrContent}>
-                <Skeleton width="80%" height={24} style={{ marginBottom: 8 }} />
-                <Skeleton width="60%" height={16} />
+            <View style={styles.content}>
+              {/* Logo AYNA et "99 noms d'Allah" en haut */}
+              <View style={styles.logoSection}>
+                <Pressable
+                  onPress={handleLogoPress}
+                  style={({ pressed }) => [
+                    styles.logoContainer,
+                    { borderColor: theme.colors.accent },
+                    pressed && styles.logoPressed
+                  ]}
+                >
+                  <Image
+                    source={require('../../assets/images/ayna.png')}
+                    style={styles.logo}
+                    contentFit="contain"
+                    cachePolicy="memory-disk"
+                    transition={200}
+                    priority="high"
+                    recyclingKey="ayna-logo"
+                  />
+                </Pressable>
+                <Text style={[styles.asmaText, { color: theme.colors.text }]}>
+                  {t('home.asma99')}
+                </Text>
               </View>
-            ) : dhikrList.length > 0 ? (
-              <Carousel
-                data={dhikrList}
-                renderItem={(item) => (
-                  <View style={styles.dhikrContent}>
-                    <Text style={[styles.dhikrArabic, { color: theme.colors.text }]}>
-                      {item.arabic}
-                    </Text>
-                    {item.translation && i18n.language !== 'ar' && (
-                      <Text style={[styles.dhikrTranslation, { color: theme.colors.textSecondary }]}>
-                        {item.translation}
-                      </Text>
-                    )}
-                  </View>
-                )}
-                itemWidth={Math.min(SCREEN_WIDTH - 64, 476)}
-                onIndexChange={setCurrentDhikrIndex}
-                onItemPress={(item) => {
-                  // Naviguer vers DairatAnNur avec le dhikr sélectionné
-                  (navigation as any).navigate('DairatAnNur', {
-                    createSession: true,
-                    dhikrText: item.arabic,
-                    targetCount: 99,
-                  });
-                }}
-                showIndicators={true}
-                indicatorActiveColor={theme.colors.accent}
-                indicatorInactiveColor="rgba(255, 255, 255, 0.3)"
-              />
-            ) : null}
-          </Animated.View>
 
-
-          {/* Icônes circulaires - Layout optimisé avec centrage parfait */}
-          <Animated.View 
-            style={[
-              styles.iconsContainer, 
-              { width: containerSize, height: containerSize },
-              iconsFadeIn.animatedStyle
-            ]} 
-            pointerEvents="box-none"
-          >
-            {/* Bouton central AYNA - Centré exactement au centre du conteneur */}
-            <Animated.View 
-              style={[
-                styles.centerButtonContainer,
-                {
-                  marginLeft: -(buttonSize * 1.3) / 2,
-                  marginTop: -(buttonSize * 1.3) / 2, // Centrer parfaitement
-                }
-              ]}
-            >
-              <Animated.View style={centerButtonPulse.animatedStyle} pointerEvents="box-none">
-                <Animated.View style={centerButtonScale.animatedStyle}>
-                  <TouchableOpacity
-                    onPress={useCallback(() => {
-                      haptic.medium();
-                      navigation.navigate('Chat' as never);
-                    }, [navigation, haptic])}
-                    onPressIn={centerButtonScale.handlePressIn}
-                    onPressOut={centerButtonScale.handlePressOut}
-                    activeOpacity={0.7}
-                    style={[
-                      styles.centerButton,
-                      {
-                        width: buttonSize * 1.3,
-                        height: buttonSize * 1.3,
-                        borderColor: 'rgba(255, 255, 255, 0.2)',
-                      },
-                    ]}
+              {/* Salutation */}
+              <View style={styles.greetingSection}>
+                <Text style={[styles.greeting, { color: theme.colors.text }]}>
+                  {t('home.greeting')}
+                </Text>
+                {hasName && (
+                  <Text
+                    style={[styles.username, { color: theme.colors.text }]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
                   >
-                    <MessageCircle 
-                      size={buttonSize * 0.5} 
-                      color="white" 
-                      strokeWidth={2}
-                    />
-                  </TouchableOpacity>
-                </Animated.View>
-              </Animated.View>
-              <Text style={[styles.centerLabel, { color: theme.colors.text }]}>
-                AYNA
-              </Text>
-            </Animated.View>
+                    {user!.name}
+                  </Text>
+                )}
+              </View>
 
-            {/* Boutons périphériques - Positionnés avec pourcentages pour centrage parfait */}
-            {nodes.map((node, index) => {
-              const { x, y } = getPosition(node.angle);
-              // Convertir les pourcentages en pixels et centrer parfaitement
-              const leftPx = (x / 100) * containerSize - buttonSize / 2;
-              const topPx = (y / 100) * containerSize - buttonSize / 2;
-              // L'icône Salât doit toujours être au-dessus de la navbar
-              const isSalat = node.icon === 'salat';
-              
-              // ✅ OPTIMISÉ : handlePress mémorisé avec toutes les dépendances et haptic feedback
-              const buttonScale = peripheralButtonScales[index];
-              const handlePress = useCallback(() => {
-                haptic.light();
-                if (node.action === 'modal') {
-                  setShowPrayerModal(true);
-                } else if (node.route) {
-                  navigation.navigate(node.route as never);
-                }
-              }, [node.action, node.route, navigation, haptic]);
-              
-              return (
-                <View
-                  key={node.name}
+              {/* Carte Dhikr Carrousel */}
+              <Animated.View
+                style={[styles.card, { backgroundColor: theme.colors.backgroundSecondary }]}
+                entering={FadeIn.delay(500).duration(600)}
+              >
+                {isLoadingDhikr ? (
+                  <View style={styles.dhikrContent}>
+                    <Skeleton width="80%" height={24} style={{ marginBottom: 8 }} />
+                    <Skeleton width="60%" height={16} />
+                  </View>
+                ) : dhikrList.length > 0 ? (
+                  <Carousel
+                    data={dhikrList}
+                    renderItem={(item) => (
+                      <View style={styles.dhikrContent}>
+                        {item.type && (
+                          <Text style={[styles.dhikrType, { color: theme.colors.accent, marginBottom: 8, fontSize: 12, fontWeight: '600' }]}>
+                            {item.type === 'dua' ? "📖 Du'a Rabana" : '📿 Dhikr'}
+                          </Text>
+                        )}
+                        <Text style={[styles.dhikrArabic, { color: theme.colors.text }]}>
+                          {item.arabic}
+                        </Text>
+                        {item.translation && i18n.language !== 'ar' && (
+                          <Text style={[styles.dhikrTranslation, { color: theme.colors.textSecondary }]}>
+                            {item.translation}
+                          </Text>
+                        )}
+                      </View>
+                    )}
+                    itemWidth={Math.min(SCREEN_WIDTH - 64, 476)}
+                    onIndexChange={setCurrentDhikrIndex}
+                    onItemPress={() => {
+                      // Naviguer vers DairatAnNur avec le dhikr sélectionné
+                      const selectedDhikr = dhikrList[currentDhikrIndex];
+                      if (selectedDhikr) {
+                        // Formater le dhikr en JSON comme dans les sessions
+                        const dhikrText = JSON.stringify({
+                          arabic: selectedDhikr.arabic,
+                          translation: selectedDhikr.translation,
+                        });
+                        (navigation as any).navigate('DairatAnNur', {
+                          createSession: true,
+                          dhikrText: dhikrText,
+                          targetCount: 99,
+                        });
+                      }
+                    }}
+                    showIndicators={true}
+                    indicatorActiveColor={theme.colors.accent}
+                    indicatorInactiveColor="rgba(255, 255, 255, 0.3)"
+                  />
+                ) : null}
+              </Animated.View>
+
+
+              {/* Icônes circulaires - Layout optimisé avec centrage parfait */}
+              <View style={[styles.iconsContainer, { width: containerSize, height: containerSize }]}>
+                {/* Bouton central AYNA - Centré exactement au centre du conteneur */}
+                <Animated.View
                   style={[
-                    styles.peripheralButtonContainer,
+                    styles.centerButtonContainer,
                     {
-                      left: leftPx,
-                      top: topPx,
-                      // zIndex élevé pour être au-dessus de la zone de swipe du calendrier
-                      zIndex: isSalat ? 100 : 10,
-                      elevation: isSalat ? 100 : 10,
+                      marginLeft: -(buttonSize * 1.3) / 2,
+                      marginTop: -(buttonSize * 1.3) / 2, // Centrer parfaitement
                     }
                   ]}
-                  pointerEvents="box-none"
+                  entering={FadeIn.delay(700).duration(600).springify()}
                 >
-                  <Animated.View style={buttonScale.animatedStyle}>
-                    <TouchableOpacity
-                      onPress={handlePress}
-                      onPressIn={buttonScale.handlePressIn}
-                      onPressOut={buttonScale.handlePressOut}
+                  <Animated.View style={centerButtonPulse.animatedStyle}>
+                    <TouchableOpacityWithSound
+                      onPress={useCallback(() => {
+                        InteractionManager.runAfterInteractions(() => {
+                          navigation.navigate('Chat' as never);
+                        });
+                      }, [navigation])}
                       activeOpacity={0.7}
                       style={[
-                        styles.peripheralButton,
+                        styles.centerButton,
                         {
-                          width: buttonSize,
-                          height: buttonSize,
+                          width: buttonSize * 1.3,
+                          height: buttonSize * 1.3,
                           borderColor: 'rgba(255, 255, 255, 0.2)',
                         },
                       ]}
-                      {...createAccessibilityProps(
-                        node.name,
-                        `Double-tap pour ${node.action === 'modal' ? 'ouvrir' : 'naviguer vers'} ${node.name}`,
-                        'button'
-                      )}
                     >
-                      {renderIcon(node.icon, buttonSize * 0.5)}
-                    </TouchableOpacity>
+                      <MessageCircle
+                        size={buttonSize * 0.5}
+                        color="white"
+                        strokeWidth={2}
+                      />
+                    </TouchableOpacityWithSound>
                   </Animated.View>
-                  <Text 
-                    style={[
-                      styles.peripheralLabel, 
-                      { color: theme.colors.text },
-                      isSalat && styles.salatLabel
-                    ]}
-                    numberOfLines={2}
-                    ellipsizeMode="tail"
-                  >
-                    {node.name}
+                  <Text style={[styles.centerLabel, { color: theme.colors.text }]}>
+                    AYNA
                   </Text>
-                </View>
-              );
-            })}
-          </Animated.View>
+                </Animated.View>
+
+                {/* Boutons périphériques - Positionnés avec pourcentages pour centrage parfait */}
+                {nodes.map((node, index) => {
+                  const { x, y } = getPosition(node.angle);
+                  // Convertir les pourcentages en pixels et centrer parfaitement
+                  let leftPx = (x / 100) * containerSize - buttonSize / 2;
+                  let topPx = (y / 100) * containerSize - buttonSize / 2;
+                  // L'icône Salât doit toujours être au-dessus de la navbar
+                  const isSalat = node.icon === 'salat';
+
+                  // Pour Salat, s'assurer qu'elle ne dépasse pas 85% de la hauteur du conteneur
+                  // pour laisser de l'espace pour la navbar
+                  if (isSalat) {
+                    const maxTopPx = containerSize * 0.85 - buttonSize / 2;
+                    if (topPx > maxTopPx) {
+                      topPx = maxTopPx;
+                    }
+                  }
+
+                  // ✅ OPTIMISÉ : handlePress mémorisé avec toutes les dépendances
+                  const handlePress = useCallback(() => {
+                    if (node.action === 'modal') {
+                      setShowPrayerModal(true);
+                    } else if (node.route) {
+                      InteractionManager.runAfterInteractions(() => {
+                        navigation.navigate(node.route as never);
+                      });
+                    }
+                  }, [node.action, node.route, navigation]);
+
+                  return (
+                    <View
+                      key={node.name}
+                      style={[
+                        styles.peripheralButtonContainer,
+                        {
+                          left: leftPx,
+                          top: topPx,
+                          // zIndex élevé pour Salât pour qu'elle soit au-dessus de la navbar
+                          zIndex: isSalat ? 100 : 10,
+                          elevation: isSalat ? 100 : 10,
+                        }
+                      ]}
+                    >
+                      <TouchableOpacityWithSound
+                        onPress={handlePress}
+                        activeOpacity={0.7}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        style={[
+                          styles.peripheralButton,
+                          {
+                            width: buttonSize,
+                            height: buttonSize,
+                            borderColor: 'rgba(255, 255, 255, 0.2)',
+                          },
+                        ]}
+                        {...createAccessibilityProps(
+                          node.name,
+                          `Double-tap pour ${node.action === 'modal' ? 'ouvrir' : 'naviguer vers'} ${node.name}`,
+                          'button'
+                        )}
+                      >
+                        {renderIcon(node.icon, buttonSize * 0.5)}
+                      </TouchableOpacityWithSound>
+                      <Text
+                        style={[
+                          styles.peripheralLabel,
+                          { color: theme.colors.text },
+                          isSalat && styles.salatLabel
+                        ]}
+                        numberOfLines={2}
+                        ellipsizeMode="tail"
+                      >
+                        {node.name}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
             </View>
           </View>
         </View>
       </SafeAreaView>
 
-      {/* Bottom Sheet Calendrier */}
-      <CalendrierBottomSheet 
-        scrollY={scrollY} 
-        onSwipeUp={(openFn) => {
-          openCalendarRef.current = openFn;
-        }}
-      />
+
 
       {/* Carte des heures de prière qui slide depuis le bas */}
       <PrayerTimesCardSlide
@@ -706,7 +662,26 @@ export function Home() {
         visible={showEmailVerificationModal}
         onClose={handleCloseEmailModal}
       />
-    </View>
+
+      {/* Modal Salat nabi */}
+      <SalatNabiModal
+        visible={showSalatNabiModal}
+        onClose={async () => {
+          try {
+            const now = new Date();
+            const dayOfWeek = now.getDay();
+            const periodKey = dayOfWeek === 4
+              ? `salat_nabi_${now.getFullYear()}_${now.getMonth()}_${now.getDate()}_thursday`
+              : `salat_nabi_${now.getFullYear()}_${now.getMonth()}_${now.getDate()}_friday`;
+            await AsyncStorage.setItem(periodKey, 'true');
+          } catch (error) {
+            // Erreur silencieuse
+          }
+          setShowSalatNabiModal(false);
+        }}
+      />
+
+    </View >
   );
 }
 
@@ -797,6 +772,13 @@ const styles = StyleSheet.create({
     fontFamily: 'System',
     marginBottom: 10,
   },
+  dhikrType: {
+    fontSize: 12,
+    fontWeight: '600',
+    fontFamily: 'System',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
   dhikrLoader: {
     marginVertical: 12,
   },
@@ -825,6 +807,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 300,
     maxHeight: 400,
+    zIndex: 50,
+    elevation: 50,
   },
   centerButtonContainer: {
     position: 'absolute',
@@ -832,8 +816,7 @@ const styles = StyleSheet.create({
     left: '50%',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10, // Au-dessus de la zone de swipe
-    elevation: 10,
+    zIndex: 10,
   },
   centerButton: {
     borderRadius: 999,

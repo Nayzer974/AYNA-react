@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { DhikrWidgetData } from '@/services/widgetManager';
+import { DhikrWidgetData } from '@/services/system/widgetManager';
 import { getTheme } from '@/data/themes';
 import { Heart } from 'lucide-react-native';
 

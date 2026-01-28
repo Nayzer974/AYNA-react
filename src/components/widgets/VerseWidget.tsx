@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { VerseWidgetData } from '@/services/widgetManager';
+import { VerseWidgetData } from '@/services/system/widgetManager';
 import { getTheme } from '@/data/themes';
 import { BookOpen } from 'lucide-react-native';
 

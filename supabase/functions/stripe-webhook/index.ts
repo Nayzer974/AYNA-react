@@ -15,6 +15,166 @@ import Stripe from 'https://esm.sh/stripe@14.21.0?target=deno';
 
 const STRIPE_SECRET_KEY = Deno.env.get('STRIPE_SECRET_KEY');
 const STRIPE_WEBHOOK_SECRET = Deno.env.get('STRIPE_WEBHOOK_SECRET');
+const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY');
+const BREVO_SENDER_EMAIL = Deno.env.get('BREVO_SENDER_EMAIL') || 'noreply@nurayna.com';
+const BREVO_SENDER_NAME = Deno.env.get('BREVO_SENDER_NAME') || 'AYNA';
+
+// Fonction pour envoyer l'email de remerciement
+async function sendActivationThankYouEmail(
+  email: string,
+  name: string | undefined,
+  activationDate: string,
+  expirationDate: string
+) {
+  if (!BREVO_API_KEY) {
+    console.log('[stripe-webhook] BREVO_API_KEY not configured, skipping email');
+    return;
+  }
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('fr-FR', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+  };
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bienvenue dans AYNA Premium</title>
+</head>
+<body style="margin: 0; padding: 0; background: linear-gradient(135deg, #0a0f1a 0%, #1a1f2e 50%, #0d1117 100%); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="min-height: 100vh;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <table role="presentation" width="100%" style="max-width: 600px; margin: 0 auto;">
+          
+          <!-- Header -->
+          <tr>
+            <td align="center" style="padding-bottom: 32px;">
+              <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #c9a227 0%, #f4d03f 50%, #c9a227 100%); border-radius: 50%; margin: 0 auto 16px; text-align: center; line-height: 80px;">
+                <span style="font-size: 36px;">🌙</span>
+              </div>
+              <h1 style="color: #c9a227; font-size: 28px; font-weight: 700; margin: 0; letter-spacing: 4px;">AYNA</h1>
+              <p style="color: rgba(255,255,255,0.6); font-size: 12px; margin: 8px 0 0; letter-spacing: 2px; text-transform: uppercase;">Premium Activated</p>
+            </td>
+          </tr>
+          
+          <!-- Card -->
+          <tr>
+            <td>
+              <table role="presentation" width="100%" style="background: rgba(30, 35, 50, 0.95); border-radius: 24px; border: 1px solid rgba(201, 162, 39, 0.2);">
+                <tr>
+                  <td style="padding: 40px;">
+                    
+                    <p style="color: #ffffff; font-size: 18px; margin: 0 0 8px; font-weight: 600;">${name ? `Assalamu alaykum ${name},` : 'Assalamu alaykum,'}</p>
+                    <h2 style="color: #c9a227; font-size: 24px; font-weight: 700; margin: 0 0 24px;">Merci pour votre confiance !</h2>
+                    
+                    <p style="color: rgba(255,255,255,0.8); font-size: 15px; line-height: 1.7; margin: 0 0 32px;">Votre compte AYNA Premium est maintenant actif. Vous avez désormais accès à toutes les fonctionnalités avancées de l'application.</p>
+                    
+                    <!-- Détails -->
+                    <div style="background: rgba(201, 162, 39, 0.08); border: 1px solid rgba(201, 162, 39, 0.2); border-radius: 16px; padding: 24px; margin-bottom: 32px;">
+                      <h3 style="color: #c9a227; font-size: 14px; font-weight: 600; margin: 0 0 20px; text-transform: uppercase; letter-spacing: 1px;">Détails de votre abonnement</h3>
+                      
+                      <table role="presentation" width="100%">
+                        <tr>
+                          <td style="padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                            <span style="color: rgba(255,255,255,0.6); font-size: 13px;">Type d'abonnement</span>
+                          </td>
+                          <td style="padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.1); text-align: right;">
+                            <span style="color: #c9a227; font-size: 14px; font-weight: 600;">Premium</span>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                            <span style="color: rgba(255,255,255,0.6); font-size: 13px;">Date d'activation</span>
+                          </td>
+                          <td style="padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.1); text-align: right;">
+                            <span style="color: #ffffff; font-size: 14px; font-weight: 500;">${formatDate(activationDate)}</span>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 12px 0;">
+                            <span style="color: rgba(255,255,255,0.6); font-size: 13px;">Date de renouvellement</span>
+                          </td>
+                          <td style="padding: 12px 0; text-align: right;">
+                            <span style="color: #ffffff; font-size: 14px; font-weight: 600;">${formatDate(expirationDate)}</span>
+                          </td>
+                        </tr>
+                      </table>
+                    </div>
+                    
+                    <!-- Avantages -->
+                    <h3 style="color: #ffffff; font-size: 16px; font-weight: 600; margin: 0 0 16px;">Vos avantages Premium</h3>
+                    <table role="presentation" width="100%" style="margin-bottom: 32px;">
+                      <tr><td style="padding: 8px 0;"><span style="color: #c9a227; margin-right: 12px;">✦</span><span style="color: rgba(255,255,255,0.85); font-size: 14px;">Chat IA illimité avec AYNA</span></td></tr>
+                      <tr><td style="padding: 8px 0;"><span style="color: #c9a227; margin-right: 12px;">✦</span><span style="color: rgba(255,255,255,0.85); font-size: 14px;">Analyses spirituelles avancées</span></td></tr>
+                      <tr><td style="padding: 8px 0;"><span style="color: #c9a227; margin-right: 12px;">✦</span><span style="color: rgba(255,255,255,0.85); font-size: 14px;">Accès à toutes les fonctionnalités</span></td></tr>
+                      <tr><td style="padding: 8px 0;"><span style="color: #c9a227; margin-right: 12px;">✦</span><span style="color: rgba(255,255,255,0.85); font-size: 14px;">Support prioritaire</span></td></tr>
+                    </table>
+                    
+                    <!-- Zakaat -->
+                    <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 12px; padding: 20px; margin-bottom: 32px;">
+                      <p style="color: #22c55e; font-size: 14px; font-weight: 600; margin: 0 0 12px;">🤲 Votre contribution fait la différence</p>
+                      <p style="color: rgba(255,255,255,0.7); font-size: 13px; line-height: 1.6; margin: 0;">Une partie de votre abonnement est reversée à des associations humanitaires sous forme de Zakaat. Merci de participer à cette initiative solidaire.</p>
+                    </div>
+                    
+                    <p style="color: rgba(255,255,255,0.8); font-size: 15px; line-height: 1.7; margin: 0 0 8px; font-style: italic;">Qu'Allah vous bénisse et vous guide dans votre cheminement spirituel.</p>
+                    <p style="color: #c9a227; font-size: 15px; font-weight: 600; margin: 24px 0 0;">L'équipe AYNA</p>
+                    
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td align="center" style="padding-top: 32px;">
+              <p style="color: rgba(255,255,255,0.4); font-size: 12px; margin: 0;">Cet email a été envoyé suite à l'activation de votre compte AYNA Premium.</p>
+              <p style="color: rgba(255,255,255,0.3); font-size: 11px; margin: 8px 0 0;">© ${new Date().getFullYear()} AYNA. All rights reserved.</p>
+            </td>
+          </tr>
+          
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  try {
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'api-key': BREVO_API_KEY,
+      },
+      body: JSON.stringify({
+        sender: { name: BREVO_SENDER_NAME, email: BREVO_SENDER_EMAIL },
+        to: [{ email, name: name || undefined }],
+        subject: 'Bienvenue dans AYNA Premium 🌙',
+        htmlContent,
+      }),
+    });
+
+    if (response.ok) {
+      console.log('[stripe-webhook] ✅ Thank you email sent to:', email);
+    } else {
+      const error = await response.text();
+      console.error('[stripe-webhook] Failed to send email:', error);
+    }
+  } catch (err) {
+    console.error('[stripe-webhook] Error sending email:', err);
+  }
+}
 
 serve(async (req) => {
   // IMPORTANT: Webhooks Stripe n'ont PAS besoin d'authentification JWT
@@ -199,6 +359,28 @@ serve(async (req) => {
 
         console.log('[stripe-webhook] ✅ Subscription activated for user:', userId);
         console.log('[stripe-webhook] ✅ Upsert result:', JSON.stringify(upsertData, null, 2));
+
+        // Envoyer l'email de remerciement
+        // Récupérer les infos utilisateur depuis la base de données
+        const { data: userData } = await supabaseAdmin
+          .from('users')
+          .select('name, email')
+          .eq('id', userId)
+          .single();
+
+        const userEmail = userData?.email || session.customer_email;
+        const userName = userData?.name;
+
+        if (userEmail) {
+          console.log('[stripe-webhook] Sending thank you email to:', userEmail);
+          await sendActivationThankYouEmail(
+            userEmail,
+            userName,
+            new Date().toISOString(),
+            expiresAt
+          );
+        }
+
         break;
       }
 

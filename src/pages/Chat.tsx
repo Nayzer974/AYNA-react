@@ -15,15 +15,15 @@ import Animated, {
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Send, MessageCircle, Mic, ArrowLeft, Menu, Smile } from 'lucide-react-native';
+import { Send, MessageCircle, Mic, ArrowLeft, Menu, Smile, Ear, MessageSquare, Moon } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
-import { sendToAyna, type ChatMessage } from '@/services/ayna';
+import { sendToAyna, type ChatMessage } from '@/services/content/ayna';
 import { storage } from '@/utils/storage';
 import { requestRecordingPermissionsAsync, AudioModule } from 'expo-audio';
 import type { AudioRecorder } from 'expo-audio';
 // import * as FileSystem from 'expo-file-system'; // Temporairement désactivé si le package n'est pas installé
-import { sttTranscribe } from '@/services/voice';
-import { trackPageView, trackEvent } from '@/services/analytics';
+import { sttTranscribe } from '@/services/system/voice';
+import { trackPageView, trackEvent } from '@/services/analytics/analytics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GalaxyBackground } from '@/components/GalaxyBackground';
 import { useTranslation } from 'react-i18next';
@@ -40,16 +40,27 @@ import {
   saveCurrentConversationId,
   loadCurrentConversationId,
   type Conversation,
-} from '@/services/chatStorage';
-import { checkRateLimit } from '@/services/rateLimiting';
-import { getSubscriptionStatus } from '@/services/subscription';
+} from '@/services/storage/chatStorage';
+import { checkRateLimit } from '@/services/system/rateLimiting';
+import { getSubscriptionStatus } from '@/services/system/subscription';
 
 export interface Message {
   id: string;
   text: string;
   sender: 'user' | 'ayna';
   timestamp: Date;
+  liked?: boolean;
 }
+
+// Modes de conversation AYNA
+type ChatMode = 'auto' | 'ecoute' | 'discussion' | 'rappel';
+
+const CHAT_MODES: { id: ChatMode; name: string; nameAr: string; nameEn: string; icon: any; color: string; description: string }[] = [
+  { id: 'auto', name: 'Automatique', nameAr: 'تلقائي', nameEn: 'Automatic', icon: MessageCircle, color: '#888', description: 'AYNA détecte le mode' },
+  { id: 'ecoute', name: 'Écoute', nameAr: 'استماع', nameEn: 'Listening', icon: Ear, color: '#4CAF50', description: 'Présence et soutien' },
+  { id: 'discussion', name: 'Discussion', nameAr: 'حوار', nameEn: 'Discussion', icon: MessageSquare, color: '#2196F3', description: 'Échange libre' },
+  { id: 'rappel', name: 'Rappel spirituel', nameAr: 'تذكير روحي', nameEn: 'Spiritual reminder', icon: Moon, color: '#9C27B0', description: 'Guidance douce' },
+];
 
 function TypingDots({ color }: { color: string }) {
   const d1 = useSharedValue(0);
@@ -103,7 +114,7 @@ export function Chat() {
   const theme = getTheme(user?.theme || 'default');
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  
+
   // Gestion d'erreur pour éviter les erreurs de bundle
   const [hasError, setHasError] = useState(false);
 
@@ -127,6 +138,8 @@ export function Chat() {
   const [showPaywall, setShowPaywall] = useState(false);
   const [rateLimitData, setRateLimitData] = useState<{ resetAt: Date | null; messagesUsed: number } | null>(null);
   const [rateLimitInfo, setRateLimitInfo] = useState<{ remainingMessages: number; resetAt: Date | null } | null>(null);
+  const [chatMode, setChatMode] = useState<ChatMode>('auto');
+  const [showModeSelector, setShowModeSelector] = useState(false);
   const shouldScrollToEndRef = useRef(true);
   const lastMessageCountRef = useRef(0);
   const inputRef = useRef<TextInput>(null);
@@ -208,7 +221,7 @@ export function Chat() {
             sender: m.sender,
             timestamp: m.timestamp.toISOString(),
           })));
-          
+
           const conversation: Conversation = {
             id: conversationId,
             title,
@@ -218,16 +231,16 @@ export function Chat() {
               sender: m.sender,
               timestamp: m.timestamp.toISOString(),
             })),
-            createdAt: currentConversationId 
+            createdAt: currentConversationId
               ? (await loadConversation(currentConversationId, user?.id))?.createdAt || new Date().toISOString()
               : new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           };
-          
+
           await saveConversation(conversation, user?.id);
           await saveCurrentConversationId(conversationId, user?.id);
           setCurrentConversationId(conversationId);
-          
+
           // Mettre à jour la liste localement (évite reload/merge en boucle sur iOS)
           setConversations(prev => {
             const next = [...prev];
@@ -266,16 +279,16 @@ export function Chat() {
   useEffect(() => {
     const currentMessageCount = messages.length;
     const previousMessageCount = lastMessageCountRef.current;
-    
+
     // Seulement scroller si on a ajouté des messages ET si on doit scroller
     if (currentMessageCount > previousMessageCount && shouldScrollToEndRef.current) {
       // Petit délai pour laisser le rendu se terminer
       const timeoutId = setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
+        flatListRef.current?.scrollToEnd({ animated: true });
       }, 150);
-      
+
       lastMessageCountRef.current = currentMessageCount;
-      
+
       return () => clearTimeout(timeoutId);
     } else {
       lastMessageCountRef.current = currentMessageCount;
@@ -306,13 +319,32 @@ export function Chat() {
         content: m.text,
       }));
 
+      // Ajouter l'instruction de mode si ce n'est pas automatique
+      if (chatMode !== 'auto') {
+        const modeInstructions: Record<ChatMode, string> = {
+          auto: '',
+          ecoute: '[MODE ÉCOUTE ACTIVÉ] Tu es en mode écoute. Priorité à la présence. Phrases courtes. Pas de conseils ni citations religieuses. Accueille l\'émotion sans corriger.',
+          discussion: '[MODE DISCUSSION ACTIVÉ] Tu es en mode discussion libre. Échange naturel et bienveillant. Questions ouvertes sans pression. Pas de discours long ni moralisateur.',
+          rappel: '[MODE RAPPEL SPIRITUEL ACTIVÉ] Tu es en mode rappel spirituel doux. Tu proposes, n\'imposes jamais. Maximum 1 verset OU 1 hadith court. Relie le rappel au vécu.',
+        };
+
+        // Insérer l'instruction de mode au début du dernier message utilisateur
+        if (history.length > 0) {
+          const lastUserIndex = history.length - 1;
+          history[lastUserIndex] = {
+            ...history[lastUserIndex],
+            content: modeInstructions[chatMode] + '\n\n' + history[lastUserIndex].content,
+          };
+        }
+      }
+
       // Envoyer à AYNA avec la langue de l'utilisateur
       const userLanguage = i18n.language || 'fr';
       const response = await sendToAyna(history, userLanguage, user?.id);
-      
+
       // Apprendre des préférences de l'utilisateur
       if (user?.id) {
-        const { learnFromConversation } = await import('@/services/aiPersonalized');
+        const { learnFromConversation } = await import('@/services/ai/aiPersonalized');
         learnFromConversation(user.id, inputText, response.content).catch(() => {
           // Erreur silencieuse
         });
@@ -326,7 +358,7 @@ export function Chat() {
       };
 
       setMessages(prev => [...prev, aynaMessage]);
-      
+
       // Tracker l'événement
       trackEvent('chat_message_sent', {
         message_length: inputText.trim().length,
@@ -334,8 +366,8 @@ export function Chat() {
       });
     } catch (error: any) {
       console.error('[Chat] Error sending message:', error);
-      
-      // Gérer l'erreur de rate limiting
+
+      // Gérer l'erreur de rate limiting (utilisateur non abonné)
       if (error.message === 'RATE_LIMIT_EXCEEDED' && error.rateLimitData) {
         // ⚠️ Ne pas activer hasError ici, sinon on affiche l'écran d'erreur et on cache le PaywallModal
         setHasError(false);
@@ -348,13 +380,28 @@ export function Chat() {
         setMessages(prev => prev.slice(0, -1));
         return;
       }
-      
+
+      // Gérer l'erreur de rate limiting Ollama (429)
+      if (error.message === 'OLLAMA_RATE_LIMIT' || error.isOllamaRateLimit || error.status === 429) {
+        setHasError(true);
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          text: t('chat.error.ollamaRateLimit') || 'L\'IA est temporairement surchargée. Veuillez patienter quelques instants avant de réessayer.',
+          sender: 'ayna',
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, errorMessage]);
+        // Retirer le message utilisateur qui n'a pas pu être envoyé
+        setMessages(prev => prev.slice(0, -1));
+        return;
+      }
+
       // Pour les autres erreurs, on active l'état d'erreur UI
       setHasError(true);
-      
+
       // Gérer l'erreur de subscription
       let errorText = '';
-      
+
       // Extraire le message d'erreur
       if (error.message) {
         errorText = error.message;
@@ -365,7 +412,7 @@ export function Chat() {
       } else {
         errorText = t('chat.error.serviceUnavailable');
       }
-      
+
       // Messages d'erreur spécifiques
       if (errorText === 'SUBSCRIPTION_REQUIRED') {
         errorText = t('subscription.required') || 'This feature requires an active account.';
@@ -373,6 +420,8 @@ export function Chat() {
         errorText = 'Veuillez vous connecter pour utiliser cette fonctionnalité.';
       } else if (errorText.includes('Configuration serveur manquante')) {
         errorText = 'Erreur de configuration serveur. Veuillez contacter le support.';
+      } else if (errorText.includes('Erreur Ollama: 429') || errorText.includes('429')) {
+        errorText = t('chat.error.ollamaRateLimit') || 'L\'IA est temporairement surchargée. Veuillez patienter quelques instants avant de réessayer.';
       } else if (errorText.includes('Erreur lors de l\'appel à Ollama Cloud')) {
         // Garder le message original qui est déjà informatif
         // Ne rien changer
@@ -385,7 +434,7 @@ export function Chat() {
           errorText = t('chat.error.serviceUnavailable');
         }
       }
-      
+
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         text: errorText,
@@ -431,10 +480,10 @@ export function Chat() {
   // Format reset time for banner
   const formatResetTime = useCallback((date: Date | null): string => {
     if (!date) return t('rateLimit.now') || 'maintenant';
-    
+
     const now = new Date();
     const diff = date.getTime() - now.getTime();
-    
+
     if (diff <= 0) {
       return t('rateLimit.now') || 'maintenant';
     }
@@ -455,13 +504,12 @@ export function Chat() {
     return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
   }, []);
 
-  // Mémoriser le rendu des messages avec composant optimisé et animations staggerées
-  const renderMessage = useCallback(({ item: message, index }: { item: Message; index: number }) => (
+  // Mémoriser le rendu des messages avec composant optimisé
+  const renderMessage = useCallback(({ item: message }: { item: Message }) => (
     <MessageItem
       message={message}
       theme={theme}
       formatTime={formatTime}
-      index={index}
     />
   ), [theme, formatTime]);
 
@@ -470,7 +518,7 @@ export function Chat() {
   const ListFooterComponent = useMemo(() => {
     if (!loading) return null;
     return (
-      <Animated.View 
+      <Animated.View
         style={styles.loadingContainer}
         entering={FadeInDown.duration(300)}
       >
@@ -524,10 +572,10 @@ export function Chat() {
         timestamp: new Date(),
       },
     ]);
-    
+
     setCurrentConversationId(null);
     await saveCurrentConversationId(null, user?.id);
-    
+
     trackEvent('chat_new_conversation');
   };
 
@@ -550,7 +598,7 @@ export function Chat() {
     try {
       // Supprimer la conversation
       await deleteConversation(conversationId, user?.id);
-      
+
       // Si c'est la conversation actuelle, réinitialiser
       if (currentConversationId === conversationId) {
         setCurrentConversationId(null);
@@ -564,11 +612,11 @@ export function Chat() {
           },
         ]);
       }
-      
+
       // Recharger les conversations
       const loadedConversations = await loadConversations(user?.id || undefined, true);
       setConversations(loadedConversations);
-      
+
       trackEvent('chat_conversation_deleted');
     } catch (error) {
       console.error('[Chat] Erreur suppression conversation:', error);
@@ -578,7 +626,7 @@ export function Chat() {
   const menuItems: StaggeredMenuItem[] = conversations.map(conv => ({
     id: conv.id,
     title: conv.title,
-    subtitle: conv.messages.length > 0 
+    subtitle: conv.messages.length > 0
       ? conv.messages[conv.messages.length - 1].text.substring(0, 50) + '...'
       : undefined,
     timestamp: new Date(conv.updatedAt),
@@ -627,17 +675,17 @@ export function Chat() {
         if (recordingRef.current) {
           setRecording(false);
           setIsTranscribing(true);
-          
+
           try {
             await recordingRef.current.stop();
             const uri = recordingRef.current.uri;
-            
+
             if (uri) {
               // Transcrire l'audio
               try {
                 const transcribedText = await sttTranscribe(uri);
                 setInputText(prev => (prev ? prev + ' ' + transcribedText : transcribedText));
-                
+
                 // Note: Le fichier temporaire sera nettoyé automatiquement par le système
               } catch (transcribeError: any) {
                 Alert.alert(
@@ -663,221 +711,257 @@ export function Chat() {
 
   return (
     <View style={styles.wrapper}>
-        <LinearGradient
-          colors={[theme.colors.background, theme.colors.backgroundSecondary]}
-          style={StyleSheet.absoluteFill}
-        />
-        <GalaxyBackground starCount={100} minSize={1} maxSize={2} />
-        
-        <SafeAreaView 
-          style={styles.container}
-          edges={['top']}
-        >
-        <KeyboardAvoidingView
-        style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      <LinearGradient
+        colors={[theme.colors.background, theme.colors.backgroundSecondary]}
+        style={StyleSheet.absoluteFill}
+      />
+      <GalaxyBackground starCount={100} minSize={1} maxSize={2} />
+
+      <SafeAreaView
+        style={styles.container}
+        edges={['top']}
       >
-        {/* Header */}
-        <View style={[styles.header, { backgroundColor: theme.colors.backgroundSecondary }]}>
-          <Pressable
-            onPress={() => navigation.navigate('Main' as never)}
-            style={({ pressed }) => [
-              styles.backButton,
-              pressed && styles.headerButtonPressed,
-            ]}
-          >
-            <ArrowLeft size={20} color={theme.colors.text} />
-            <Text style={[styles.backButtonText, { color: theme.colors.text }]}>
-              {t('common.back')}
-            </Text>
-          </Pressable>
-          <View style={styles.headerContent}>
-            <MessageCircle size={24} color={theme.colors.accent} />
-            <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-              {t('chat.title')}
-            </Text>
-          </View>
-          <View style={styles.headerActions}>
+        <KeyboardAvoidingView
+          style={styles.keyboardView}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        >
+          {/* Header */}
+          <View style={[styles.header, { backgroundColor: theme.colors.backgroundSecondary }]}>
             <Pressable
-              onPress={() => setShowMenu(true)}
+              onPress={() => navigation.navigate('Main' as never)}
               style={({ pressed }) => [
-                styles.headerButton,
+                styles.backButton,
                 pressed && styles.headerButtonPressed,
               ]}
             >
-              <Menu size={20} color={theme.colors.text} />
+              <ArrowLeft size={20} color={theme.colors.text} />
+              <Text style={[styles.backButtonText, { color: theme.colors.text }]}>
+                {t('common.back')}
+              </Text>
             </Pressable>
-          </View>
-        </View>
-
-        {/* Rate Limit Banner */}
-        {rateLimitInfo && rateLimitInfo.remainingMessages >= 0 && (
-          <View style={[styles.rateLimitBanner, { backgroundColor: theme.colors.accent + '15', borderBottomColor: theme.colors.accent + '30' }]}>
-            <View style={styles.rateLimitContent}>
-              <Text style={[styles.rateLimitText, { color: theme.colors.text }]}>
-                {t('rateLimit.info', {
-                  remaining: rateLimitInfo.remainingMessages,
-                  resetTime: formatResetTime(rateLimitInfo.resetAt)
-                }) || `${rateLimitInfo.remainingMessages} messages restants. Réinitialisation ${formatResetTime(rateLimitInfo.resetAt)}`}
+            <View style={styles.headerContent}>
+              <MessageCircle size={24} color={theme.colors.accent} />
+              <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
+                {t('chat.title')}
               </Text>
             </View>
+            <View style={styles.headerActions}>
+              <Pressable
+                onPress={() => setShowMenu(true)}
+                style={({ pressed }) => [
+                  styles.headerButton,
+                  pressed && styles.headerButtonPressed,
+                ]}
+              >
+                <Menu size={20} color={theme.colors.text} />
+              </Pressable>
+            </View>
           </View>
-        )}
 
-        {/* Messages */}
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={keyExtractor}
-          style={styles.messagesContainer}
-          contentContainerStyle={[
-            styles.messagesContent,
-            Platform.OS === 'ios' && { paddingBottom: 100 }
-          ]}
-          showsVerticalScrollIndicator={false}
-          removeClippedSubviews={true}
-          initialNumToRender={10}
-          maxToRenderPerBatch={5}
-          windowSize={10}
-          updateCellsBatchingPeriod={50}
-          inverted={false}
-          ListFooterComponent={ListFooterComponent}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="interactive"
-          onContentSizeChange={() => {
-            // Scroller vers le bas seulement si on était déjà en bas
-            if (shouldScrollToEndRef.current) {
-              setTimeout(() => {
-                flatListRef.current?.scrollToEnd({ animated: true });
-              }, 100);
-            }
-          }}
-          onScrollBeginDrag={() => {
-            // L'utilisateur scroll manuellement, ne pas forcer le scroll auto
-            shouldScrollToEndRef.current = false;
-          }}
-          onScroll={(event) => {
-            // Détecter si l'utilisateur est proche du bas (dans les 100px)
-            const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-            const distanceFromEnd = contentSize.height - layoutMeasurement.height - contentOffset.y;
-            
-            // Si l'utilisateur est proche du bas (moins de 100px), réactiver le scroll auto
-            if (distanceFromEnd < 100) {
+          {/* Mode Selector */}
+          <View style={[styles.modeSelectorContainer, { backgroundColor: theme.colors.backgroundSecondary + 'CC' }]}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.modeSelectorScroll}
+            >
+              {CHAT_MODES.map((mode) => {
+                const isActive = chatMode === mode.id;
+                const IconComponent = mode.icon;
+                const modeName = i18n.language === 'ar' ? mode.nameAr : i18n.language === 'en' ? mode.nameEn : mode.name;
+                return (
+                  <Pressable
+                    key={mode.id}
+                    onPress={() => setChatMode(mode.id)}
+                    style={[
+                      styles.modeButton,
+                      { borderColor: isActive ? mode.color : (theme.colors as any).border || theme.colors.textSecondary + '40' },
+                      isActive && { backgroundColor: mode.color + '20' },
+                    ]}
+                  >
+                    <IconComponent
+                      size={16}
+                      color={isActive ? mode.color : theme.colors.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.modeButtonText,
+                        { color: isActive ? mode.color : theme.colors.textSecondary },
+                      ]}
+                    >
+                      {modeName}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {/* Rate Limit Banner - Only for non-subscribed users */}
+          {rateLimitInfo && rateLimitInfo.remainingMessages >= 0 && (
+            <View style={[styles.rateLimitBanner, { backgroundColor: theme.colors.accent + '15', borderBottomColor: theme.colors.accent + '30' }]}>
+              <View style={styles.rateLimitContent}>
+                <Text style={[styles.rateLimitText, { color: theme.colors.text }]}>
+                  {t('rateLimit.info', {
+                    remaining: rateLimitInfo.remainingMessages,
+                    resetTime: formatResetTime(rateLimitInfo.resetAt)
+                  }) || `${rateLimitInfo.remainingMessages} messages restants. Réinitialisation ${formatResetTime(rateLimitInfo.resetAt)}`}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Messages */}
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={keyExtractor}
+            style={styles.messagesContainer}
+            contentContainerStyle={styles.messagesContent}
+            showsVerticalScrollIndicator={false}
+            removeClippedSubviews={true}
+            initialNumToRender={10}
+            maxToRenderPerBatch={5}
+            windowSize={10}
+            updateCellsBatchingPeriod={50}
+            inverted={false}
+            ListFooterComponent={ListFooterComponent}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            onContentSizeChange={() => {
+              // Scroller vers le bas seulement si on était déjà en bas
+              if (shouldScrollToEndRef.current) {
+                setTimeout(() => {
+                  flatListRef.current?.scrollToEnd({ animated: true });
+                }, 100);
+              }
+            }}
+            onScrollBeginDrag={() => {
+              // L'utilisateur scroll manuellement, ne pas forcer le scroll auto
+              shouldScrollToEndRef.current = false;
+            }}
+            onScroll={(event) => {
+              // Détecter si l'utilisateur est proche du bas (dans les 100px)
+              const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+              const distanceFromEnd = contentSize.height - layoutMeasurement.height - contentOffset.y;
+
+              // Si l'utilisateur est proche du bas (moins de 100px), réactiver le scroll auto
+              if (distanceFromEnd < 100) {
+                shouldScrollToEndRef.current = true;
+              }
+            }}
+            onEndReachedThreshold={0.5}
+            onEndReached={() => {
+              // L'utilisateur est arrivé en bas, réactiver le scroll auto
               shouldScrollToEndRef.current = true;
-            }
-          }}
-          onEndReachedThreshold={0.5}
-          onEndReached={() => {
-            // L'utilisateur est arrivé en bas, réactiver le scroll auto
-            shouldScrollToEndRef.current = true;
-          }}
-        />
-
-        {/* Input */}
-        <View style={[
-          styles.inputContainer, 
-          { 
-            backgroundColor: theme.colors.backgroundSecondary,
-            paddingBottom: Platform.OS === 'ios' ? 0 : 12,
-          }
-        ]}>
-          <Pressable
-            onPress={toggleVoiceRecording}
-            disabled={isTranscribing || loading}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={({ pressed }) => [
-              styles.voiceButton,
-              {
-                backgroundColor: recording
-                  ? '#EF4444'
-                  : isTranscribing
-                  ? theme.colors.accent
-                  : 'rgba(255, 255, 255, 0.08)',
-              },
-              (pressed || isTranscribing || loading) && styles.voiceButtonPressed,
-            ]}
-          >
-            {isTranscribing ? (
-              <ActivityIndicator size="small" color={recording ? 'white' : theme.colors.background} />
-            ) : (
-              <Mic size={20} color={recording ? 'white' : '#FFFFFF'} />
-            )}
-          </Pressable>
-          
-          <TextInput
-            ref={inputRef}
-            style={[
-              styles.input,
-              Platform.OS === 'ios' && {
-                color: '#FFFFFF',
-                fontSize: 16,
-                fontWeight: '400',
-              },
-              Platform.OS !== 'ios' && { color: '#FFFFFF' }
-            ]}
-            placeholder={t('chat.inputPlaceholder')}
-            placeholderTextColor="rgba(255, 255, 255, 0.5)"
-            value={inputText}
-            onChangeText={setInputText}
-            multiline
-            maxLength={1000}
-            editable={!loading && !isTranscribing}
-            onSubmitEditing={handleSend}
-            textAlignVertical="top"
-            selectionColor="#FFD369"
-            cursorColor="#FFFFFF"
-            autoCorrect={true}
-            autoCapitalize="sentences"
-            underlineColorAndroid="transparent"
-            onFocus={() => {
-              // Scroller vers le bas quand l'input est focus pour le rendre visible
-              setTimeout(() => {
-                flatListRef.current?.scrollToEnd({ animated: true });
-              }, 300);
             }}
           />
-          <Pressable
-            onPress={handleSend}
-            disabled={!inputText.trim() || loading || isTranscribing}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={({ pressed }) => [
-              styles.sendButton,
-              {
-                backgroundColor: inputText.trim() && !loading && !isTranscribing ? theme.colors.accent : 'rgba(255, 255, 255, 0.08)',
-              },
-              pressed && styles.sendButtonPressed,
-            ]}
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color="#0A0F2C" />
-            ) : (
-              <Send size={20} color={inputText.trim() && !isTranscribing ? '#0A0F2C' : '#FFFFFF'} />
-            )}
-          </Pressable>
-        </View>
-      </KeyboardAvoidingView>
 
-      {/* Menu des conversations */}
-      <StaggeredMenu
-        visible={showMenu}
-        items={menuItems}
-        onClose={() => setShowMenu(false)}
-        theme={theme}
-        emptyMessage={t('chat.noConversations') || 'Aucune conversation'}
-        onNewConversation={handleNewChat}
-        showNewConversationButton={true}
+          {/* Input */}
+          <View style={[
+            styles.inputContainer,
+            {
+              backgroundColor: theme.colors.backgroundSecondary,
+              paddingBottom: Platform.OS === 'ios' ? 0 : 12,
+            }
+          ]}>
+            <Pressable
+              onPress={toggleVoiceRecording}
+              disabled={isTranscribing || loading}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={({ pressed }) => [
+                styles.voiceButton,
+                {
+                  backgroundColor: recording
+                    ? '#EF4444'
+                    : isTranscribing
+                      ? theme.colors.accent
+                      : 'rgba(255, 255, 255, 0.08)',
+                },
+                (pressed || isTranscribing || loading) && styles.voiceButtonPressed,
+              ]}
+            >
+              {isTranscribing ? (
+                <ActivityIndicator size="small" color={recording ? 'white' : theme.colors.background} />
+              ) : (
+                <Mic size={20} color={recording ? 'white' : '#FFFFFF'} />
+              )}
+            </Pressable>
+
+            <TextInput
+              ref={inputRef}
+              style={[
+                styles.input,
+                Platform.OS === 'ios' && {
+                  color: '#FFFFFF',
+                  fontSize: 16,
+                  fontWeight: '400',
+                },
+                Platform.OS !== 'ios' && { color: '#FFFFFF' }
+              ]}
+              placeholder={t('chat.inputPlaceholder')}
+              placeholderTextColor="rgba(255, 255, 255, 0.5)"
+              value={inputText}
+              onChangeText={setInputText}
+              multiline
+              maxLength={1000}
+              editable={!loading && !isTranscribing}
+              onSubmitEditing={handleSend}
+              textAlignVertical="top"
+              selectionColor="#FFD369"
+              cursorColor="#FFFFFF"
+              autoCorrect={true}
+              autoCapitalize="sentences"
+              underlineColorAndroid="transparent"
+              onFocus={() => {
+                // Scroller vers le bas quand l'input est focus pour le rendre visible
+                setTimeout(() => {
+                  flatListRef.current?.scrollToEnd({ animated: true });
+                }, 300);
+              }}
+            />
+            <Pressable
+              onPress={handleSend}
+              disabled={!inputText.trim() || loading || isTranscribing}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={({ pressed }) => [
+                styles.sendButton,
+                {
+                  backgroundColor: inputText.trim() && !loading && !isTranscribing ? theme.colors.accent : 'rgba(255, 255, 255, 0.08)',
+                },
+                pressed && styles.sendButtonPressed,
+              ]}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color="#0A0F2C" />
+              ) : (
+                <Send size={20} color={inputText.trim() && !isTranscribing ? '#0A0F2C' : '#FFFFFF'} />
+              )}
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+
+        {/* Menu des conversations */}
+        <StaggeredMenu
+          visible={showMenu}
+          items={menuItems}
+          onClose={() => setShowMenu(false)}
+          theme={theme}
+          emptyMessage={t('chat.noConversations') || 'Aucune conversation'}
+          onNewConversation={handleNewChat}
+          showNewConversationButton={true}
+        />
+      </SafeAreaView>
+
+      {/* Paywall Modal */}
+      <PaywallModal
+        visible={showPaywall}
+        onClose={() => setShowPaywall(false)}
+        resetAt={rateLimitData?.resetAt || null}
+        messagesUsed={rateLimitData?.messagesUsed || 0}
       />
-    </SafeAreaView>
-    
-    {/* Paywall Modal */}
-    <PaywallModal
-      visible={showPaywall}
-      onClose={() => setShowPaywall(false)}
-      resetAt={rateLimitData?.resetAt || null}
-      messagesUsed={rateLimitData?.messagesUsed || 0}
-    />
     </View>
   );
 }
@@ -907,10 +991,6 @@ const styles = StyleSheet.create({
   },
   keyboardView: {
     flex: 1,
-  },
-  messagesContainer: {
-    flex: 1,
-    paddingBottom: Platform.OS === 'ios' ? 0 : 0,
   },
   header: {
     paddingHorizontal: 16,
@@ -958,14 +1038,13 @@ const styles = StyleSheet.create({
   },
   messagesContainer: {
     flex: 1,
-    paddingBottom: Platform.OS === 'ios' ? 80 : 0,
   },
   messagesContent: {
     padding: 16,
-    paddingBottom: 8,
+    paddingBottom: 16,
   },
   messageContainer: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   userMessage: {
     alignItems: 'flex-end',
@@ -1023,7 +1102,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 8,
     paddingBottom: Platform.OS === 'ios' ? 8 : 12,
-    borderTopWidth: 0,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.05)',
     gap: 8,
     zIndex: 10,
   },
@@ -1123,5 +1203,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'System',
     fontWeight: '600',
+  },
+  // Mode Selector Styles
+  modeSelectorContainer: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  modeSelectorScroll: {
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  modeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+  },
+  modeButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+    fontFamily: 'System',
   },
 });

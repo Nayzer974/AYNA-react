@@ -18,16 +18,16 @@ import { ArrowLeft, Heart, MessageCircle, Trash2, Ban, ShieldCheck } from 'lucid
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
-import Animated, { FadeInDown, FadeIn, FadeOut, withSpring, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeIn, withSpring, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { GalaxyBackground } from '@/components/GalaxyBackground';
 import { BackButton } from '@/components/BackButton';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
-import { supabase, isCurrentUserAdmin } from '@/services/supabase';
+import { supabase, isCurrentUserAdmin } from '@/services/auth/supabase';
 import { APP_CONFIG } from '@/config';
 import { logger } from '@/utils/logger';
 
-export interface Post {
+interface Post {
   id: string;
   userId: string;
   userName: string;
@@ -289,7 +289,7 @@ export function UmmAyna() {
     // Vérifier si l'utilisateur est banni (optionnel, ne bloque pas si la fonction n'existe pas)
     if (APP_CONFIG.useSupabase && supabase) {
       try {
-        const supabaseModule = await import('@/services/supabase').catch(() => null);
+        const supabaseModule = await import('@/services/auth/supabase').catch(() => null);
         const checkUserBanStatus = supabaseModule?.checkUserBanStatus;
         if (checkUserBanStatus && typeof checkUserBanStatus === 'function') {
           const banStatus = await checkUserBanStatus();
@@ -1209,24 +1209,21 @@ export function UmmAyna() {
               transparent
               animationType="fade"
               onRequestClose={closeBanModal}
-              statusBarTranslucent={true}
             >
               <Pressable
                 style={styles.modalOverlay}
                 onPress={closeBanModal}
               >
-                <Pressable onPress={(e) => e.stopPropagation()}>
-                  <Animated.View
-                    entering={FadeIn}
-                    exiting={FadeOut}
-                    style={[
-                      styles.modalContent,
-                      {
-                        backgroundColor: theme.colors.backgroundSecondary,
-                        borderColor: theme.colors.border || 'rgba(255, 255, 255, 0.1)',
-                      },
-                    ]}
-                  >
+                <Animated.View
+                  entering={FadeIn}
+                  style={[
+                    styles.modalContent,
+                    {
+                      backgroundColor: 'rgba(30, 30, 47, 1)',
+                    },
+                  ]}
+                  onStartShouldSetResponder={() => true}
+                >
                   <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
                     Bannir l'utilisateur
                   </Text>
@@ -1375,7 +1372,6 @@ export function UmmAyna() {
                     </Pressable>
                   </View>
                 </Animated.View>
-                </Pressable>
               </Pressable>
             </Modal>
           </View>
@@ -1601,37 +1597,26 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-    zIndex: 9999,
+    padding: 16,
   },
   modalContent: {
     width: '100%',
     maxWidth: 400,
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 24,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 10,
-    zIndex: 10000,
   },
   modalTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '600',
-    marginBottom: 12,
-    textAlign: 'center',
+    marginBottom: 16,
     fontFamily: 'System',
   },
   modalText: {
-    fontSize: 16,
+    fontSize: 14,
     marginBottom: 24,
-    textAlign: 'center',
-    lineHeight: 24,
     fontFamily: 'System',
   },
   modalSection: {
@@ -1697,20 +1682,15 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
-    borderWidth: 1,
   },
   modalButtonCancel: {},
   modalButtonConfirm: {},
   modalButtonText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     fontFamily: 'System',
-  },
-  buttonPressed: {
-    opacity: 0.7,
   },
 });

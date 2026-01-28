@@ -12,10 +12,10 @@ import { GalaxyBackground } from '@/components/GalaxyBackground';
 import { getAvatarsByGender, type Avatar } from '@/data/avatars';
 import { Image } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { trackPageView, trackEvent } from '@/services/analytics';
+import { trackPageView, trackEvent } from '@/services/analytics/analytics';
 import { isValidEmail, isValidPassword, isValidName, sanitizeText } from '@/utils/validation';
 import { useRateLimit, RATE_LIMIT_CONFIGS } from '@/utils/rateLimiter';
-import { logSignupAttempt, logRateLimitExceeded } from '@/services/securityLogger';
+import { logSignupAttempt, logRateLimitExceeded } from '@/services/analytics/securityLogger';
 
 /**
  * Page d'inscription

@@ -5,7 +5,7 @@
  * grégorien et Hijri en comparant avec l'API AlAdhan officielle.
  */
 
-import { gregorianToHijri, hijriToGregorian } from '@/services/hijriConverter';
+import { gregorianToHijri, hijriToGregorian } from '@/services/content/aladhan';
 
 export interface ValidationResult {
   date: string;
@@ -50,7 +50,7 @@ export async function validateGregorianDate(
   try {
     // Conversion Grégorien → Hijri
     const hijriDate = await gregorianToHijri(year, month, day);
-    
+
     if (!hijriDate) {
       result.error = 'Impossible de convertir en date Hijri';
       return result;
@@ -111,7 +111,7 @@ export async function validateMonth(
 
   // Valider les jours critiques d'abord (1er, 15, dernier)
   const criticalDays = [1, 15, daysInMonth];
-  
+
   for (const day of criticalDays) {
     const result = await validateGregorianDate(year, month, day);
     results.push(result);
@@ -150,13 +150,13 @@ export async function validateImportantDates(): Promise<ValidationResult[]> {
     // Ramadan 2025 (approximatif)
     { year: 2025, month: 3, day: 1 }, // Début Ramadan approximatif
     { year: 2025, month: 3, day: 30 }, // Fin Ramadan approximatif
-    
+
     // Aïd al-Fitr 2025 (approximatif)
     { year: 2025, month: 4, day: 1 },
-    
+
     // Aïd al-Adha 2025 (approximatif)
     { year: 2025, month: 6, day: 6 },
-    
+
     // Aujourd'hui
     {
       year: new Date().getFullYear(),

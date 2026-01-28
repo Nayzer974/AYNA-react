@@ -9,7 +9,7 @@
 
 import { useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { setupNetworkListener, startAutoSync, getSyncStatus } from '@/services/syncService';
+import { setupNetworkListener, startAutoSync, getSyncStatus } from '@/services/storage/syncService';
 
 export function useAutoSync() {
   const unsubscribeRef = useRef<(() => void) | null>(null);

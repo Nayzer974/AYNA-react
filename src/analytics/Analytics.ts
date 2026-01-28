@@ -506,6 +506,14 @@ class Analytics {
   }
 
   /**
+   * Get current user consent status
+   * @returns True if user has consented to analytics, false otherwise
+   */
+  getConsent(): boolean {
+    return this.consent;
+  }
+
+  /**
    * Handle consent revocation - clear queue and reset state
    */
   private async handleConsentRevoked(): Promise<void> {

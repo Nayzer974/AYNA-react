@@ -2,20 +2,20 @@
  * PaywallModal Component
  * 
  * Modal affichée quand l'utilisateur non abonné atteint la limite de messages
- * (5 messages toutes les 5 heures)
+ * (15 messages toutes les 10 heures)
  */
 
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, Linking, ScrollView } from 'react-native';
-import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
-import { X, Sparkles } from 'lucide-react-native';
+import { X, Sparkles, Gift } from 'lucide-react-native';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
 import { useTranslation } from 'react-i18next';
-import { requestActivationLinkWithSession } from '@/services/subscription';
+import { requestActivationLinkWithSession } from '@/services/system/subscription';
 import { useSessionRestored } from '@/hooks/useSessionRestored';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GiftCodeModal } from './GiftCodeModal';
 
 interface PaywallModalProps {
   visible: boolean;
@@ -34,6 +34,7 @@ export function PaywallModal({ visible, onClose, resetAt, messagesUsed, mode = '
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showGiftCodeModal, setShowGiftCodeModal] = useState(false);
 
   const handleActivate = async () => {
     if (!session?.access_token) {
@@ -106,11 +107,7 @@ export function PaywallModal({ visible, onClose, resetAt, messagesUsed, mode = '
           },
         ]}
       >
-        <Animated.View 
-          style={[styles.modal, { backgroundColor: theme.colors.backgroundSecondary }]}
-          entering={SlideInDown.springify().damping(15)}
-          exiting={SlideOutDown.duration(200)}
-        >
+        <View style={[styles.modal, { backgroundColor: theme.colors.backgroundSecondary }]}>
           {/* Header */}
           <View style={styles.header}>
             <Pressable onPress={onClose} style={styles.closeButton}>
@@ -183,24 +180,6 @@ export function PaywallModal({ visible, onClose, resetAt, messagesUsed, mode = '
               {t('rateLimit.upgradeDescription') || 'Profitez d\'un accès illimité au chat IA, aux analyses avancées et à toutes les fonctionnalités premium.'}
             </Text>
 
-            {/* Section Carte Cadeau */}
-            <View
-              style={[
-                styles.giftCardSection,
-                {
-                  borderColor: theme.colors.accent + '40',
-                  backgroundColor: theme.colors.accent + '10',
-                },
-              ]}
-            >
-              <Text style={[styles.giftCardTitle, { color: theme.colors.text }]}>
-                {t('subscription.giftCard.title') || '💳 Carte cadeau ou code promo'}
-              </Text>
-              <Text style={[styles.giftCardText, { color: theme.colors.textSecondary }]}>
-                {t('subscription.giftCard.description') || 'Vous avez une carte cadeau ou un code promotionnel ? Vous pourrez l\'appliquer directement sur la page de paiement.'}
-              </Text>
-            </View>
-
             {error && (
               <Text style={[styles.errorText, { color: '#ef4444' }]}>
                 {error}
@@ -239,9 +218,32 @@ export function PaywallModal({ visible, onClose, resetAt, messagesUsed, mode = '
                   : (t('subscription.activate') || 'Activer mon compte')}
               </Text>
             </Pressable>
+
+            {/* Bouton Code Cadeau */}
+            <Pressable
+              onPress={() => setShowGiftCodeModal(true)}
+              style={[
+                styles.giftCodeButton,
+                {
+                  borderColor: theme.colors.accent + '50',
+                },
+              ]}
+            >
+              <Gift size={18} color={theme.colors.accent} style={{ marginRight: 8 }} />
+              <Text style={[styles.giftCodeButtonText, { color: theme.colors.accent }]}>
+                {t('giftCode.useCode') || 'Utiliser un code cadeau'}
+              </Text>
+            </Pressable>
           </View>
-        </Animated.View>
+        </View>
       </View>
+
+      {/* Modal Code Cadeau */}
+      <GiftCodeModal
+        visible={showGiftCodeModal}
+        onClose={() => setShowGiftCodeModal(false)}
+        onSuccess={onClose}
+      />
     </Modal>
   );
 }
@@ -393,22 +395,19 @@ const styles = StyleSheet.create({
     fontFamily: 'System',
     letterSpacing: 0.5,
   },
-  giftCardSection: {
-    borderWidth: 1,
+  giftCodeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
     borderRadius: 12,
-    padding: 16,
-    marginTop: 16,
-    marginBottom: 20,
+    borderWidth: 1.5,
+    marginTop: 12,
   },
-  giftCardTitle: {
-    fontSize: 16,
+  giftCodeButtonText: {
+    fontSize: 15,
     fontWeight: '600',
-    marginBottom: 8,
-    fontFamily: 'System',
-  },
-  giftCardText: {
-    fontSize: 14,
-    lineHeight: 20,
     fontFamily: 'System',
   },
 });

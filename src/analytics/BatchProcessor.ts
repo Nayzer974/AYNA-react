@@ -9,7 +9,7 @@
 import { AppState, AppStateStatus } from 'react-native';
 import { AnalyticsProvider, AnalyticsConfig, DEFAULT_CONFIG, AnalyticsEvent } from './types';
 import { EventQueue } from './EventQueue';
-import { isOnline } from '@/services/syncService';
+import { isOnline } from '@/services/storage/syncService';
 
 interface BackoffState {
   attemptCount: number;

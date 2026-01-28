@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Modal, Alert, ScrollView, TouchableOpacity } from 'react-native';
-// Animated supprimé pour améliorer les performances
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Modal, Alert, ScrollView } from 'react-native';
+import Animated, { FadeIn, SlideInDown, SlideInUp } from 'react-native-reanimated';
 import { X, Check, Compass } from 'lucide-react-native';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
-import { getPrayerTimesByCoords } from '@/services/hijri';
+import { getPrayerTimesByCoords } from '@/services/content/prayerServices';
 import * as Location from 'expo-location';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -28,7 +28,7 @@ const prayerTimes = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
 const createEnteringAnimation = (index: number) => {
   // S'assurer que index est un nombre valide
   const safeIndex = Number.isFinite(index) && index >= 0 ? Math.floor(index) : 0;
-  
+
   // Utiliser des valeurs littérales uniquement - pas de calculs dynamiques
   // Garantir que toutes les valeurs sont des nombres
   const duration = 200;
@@ -52,7 +52,7 @@ export function PrayerTimesCardSlide({ visible, onClose }: PrayerTimesCardSlideP
   const [error, setError] = useState<string | null>(null);
   const [completedPrayers, setCompletedPrayers] = useState<Set<string>>(new Set());
   const isAuthenticated = Boolean(user?.id);
-  
+
   // Ref pour vérifier si le composant est monté (éviter setState après unmount)
   const isMountedRef = useRef(true);
 
@@ -69,7 +69,7 @@ export function PrayerTimesCardSlide({ visible, onClose }: PrayerTimesCardSlideP
       const key = getStorageKey();
       const stored = await AsyncStorage.getItem(key);
       if (!isMountedRef.current) return; // Ne pas setState si démonté
-      
+
       if (stored) {
         const prayers = JSON.parse(stored);
         if (isMountedRef.current) {
@@ -81,7 +81,7 @@ export function PrayerTimesCardSlide({ visible, onClose }: PrayerTimesCardSlideP
         }
       }
     } catch (error) {
-      // Erreur silencieuse en production
+      console.error('Erreur lors du chargement des prières complétées:', error);
       if (isMountedRef.current) {
         setCompletedPrayers(new Set());
       }
@@ -96,7 +96,7 @@ export function PrayerTimesCardSlide({ visible, onClose }: PrayerTimesCardSlideP
       const prayersArray = Array.from(prayers);
       await AsyncStorage.setItem(key, JSON.stringify(prayersArray));
     } catch (error) {
-      // Erreur silencieuse en production
+      console.error('Erreur lors de la sauvegarde des prières complétées:', error);
     }
   }, [getStorageKey]);
 
@@ -111,18 +111,18 @@ export function PrayerTimesCardSlide({ visible, onClose }: PrayerTimesCardSlideP
 
     const now = new Date();
     const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    
+
     // Comparer les heures au format HH:MM
     const currentParts = currentTime.split(':').map(Number);
     const prayerParts = prayerTime.split(':').map(Number);
-    
+
     if (currentParts.length !== 2 || prayerParts.length !== 2) return false;
     if (!Number.isFinite(currentParts[0]) || !Number.isFinite(currentParts[1])) return false;
     if (!Number.isFinite(prayerParts[0]) || !Number.isFinite(prayerParts[1])) return false;
-    
+
     const currentTotalMinutes = currentParts[0] * 60 + currentParts[1];
     const prayerTotalMinutes = prayerParts[0] * 60 + prayerParts[1];
-    
+
     // Gérer le cas spécial de Fajr (première prière de la journée)
     // Si on est après Isha (dernière prière), on ne peut pas cocher Fajr car c'est le Fajr d'hier
     if (prayerName === 'Fajr' && timings['Isha']) {
@@ -135,14 +135,14 @@ export function PrayerTimesCardSlide({ visible, onClose }: PrayerTimesCardSlideP
         }
       }
     }
-    
+
     // Pour toutes les autres prières, on peut cocher si l'heure actuelle >= heure de la prière
     return currentTotalMinutes >= prayerTotalMinutes;
   }, [timings]);
 
   const togglePrayer = useCallback(async (prayerName: string) => {
     if (!isMountedRef.current) return; // Ne pas traiter si démonté
-    
+
     // Permettre de voir les prières même sans authentification
     // Mais ne pas permettre de les cocher sans être connecté
     if (!isAuthenticated || !user?.id) {
@@ -158,17 +158,17 @@ export function PrayerTimesCardSlide({ visible, onClose }: PrayerTimesCardSlideP
       );
       return;
     }
-    
+
     // Vérifier si la prière était déjà complétée AVANT la mise à jour
     const wasCompleted = completedPrayers.has(prayerName);
-    
+
     if (!isMountedRef.current) return; // Vérifier à nouveau avant setState
-    
+
     setCompletedPrayers(prev => {
       if (!isMountedRef.current) return prev; // Ne pas modifier si démonté
-      
+
       const next = new Set(prev);
-      
+
       if (wasCompleted) {
         // Décochée - ne rien faire pour les stats
         next.delete(prayerName);
@@ -178,16 +178,16 @@ export function PrayerTimesCardSlide({ visible, onClose }: PrayerTimesCardSlideP
       }
       // Sauvegarder immédiatement (mais de manière asynchrone pour ne pas bloquer)
       saveCompletedPrayers(next).catch(err => {
-        // Erreur silencieuse en production
+        console.error('Erreur lors de la sauvegarde:', err);
       });
       return next;
     });
-    
+
     // Appeler incrementUserPrayer APRÈS la mise à jour de l'état local
     if (!wasCompleted && incrementUserPrayer && isMountedRef.current) {
       try {
         incrementUserPrayer(1);
-        
+
         // Enregistrer l'activité pour les notifications intelligentes
         const now = new Date();
         const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -196,7 +196,7 @@ export function PrayerTimesCardSlide({ visible, onClose }: PrayerTimesCardSlideP
           time: currentTime,
         });
       } catch (error) {
-        // Erreur silencieuse en production
+        console.error('Erreur lors de l\'enregistrement de l\'activité:', error);
       }
     }
   }, [isAuthenticated, user?.id, canCheckPrayer, timings, completedPrayers, saveCompletedPrayers, incrementUserPrayer, recordActivity]);
@@ -205,18 +205,18 @@ export function PrayerTimesCardSlide({ visible, onClose }: PrayerTimesCardSlideP
     if (!isMountedRef.current) {
       return;
     }
-    
+
     try {
       setLoading(true);
       setError(null);
 
       const { status } = await Location.requestForegroundPermissionsAsync();
-      
+
       if (!isMountedRef.current) {
         setLoading(false);
         return;
       }
-      
+
       if (status !== 'granted') {
         setError(t('settings.permissionDenied') || 'Permission de localisation refusée');
         setLoading(false);
@@ -224,17 +224,17 @@ export function PrayerTimesCardSlide({ visible, onClose }: PrayerTimesCardSlideP
       }
 
       const location = await Location.getCurrentPositionAsync({});
-      
+
       if (!isMountedRef.current) {
         setLoading(false);
         return;
       }
-      
+
       const response = await getPrayerTimesByCoords(
         location.coords.latitude,
         location.coords.longitude
       );
-      
+
       if (!isMountedRef.current) {
         setLoading(false);
         return;
@@ -255,7 +255,7 @@ export function PrayerTimesCardSlide({ visible, onClose }: PrayerTimesCardSlideP
         setLoading(false);
       }
     } catch (err: any) {
-      // Erreur silencieuse en production
+      console.error('[PrayerTimesCardSlide] Error loading prayer times:', err);
       if (isMountedRef.current) {
         setError(err.message || 'Erreur lors du chargement des heures de prière');
         setLoading(false);
@@ -271,27 +271,27 @@ export function PrayerTimesCardSlide({ visible, onClose }: PrayerTimesCardSlideP
   useEffect(() => {
     // Marquer le composant comme monté
     isMountedRef.current = true;
-    
+
     if (visible) {
       // Réinitialiser les états quand le modal s'ouvre
       setLoading(true);
       setError(null);
       setTimings(null); // Réinitialiser les timings
-      
+
       // Appeler les fonctions de chargement
       loadPrayerTimes().catch(err => {
-        // Erreur silencieuse en production
+        console.error('[PrayerTimesCardSlide] Error in loadPrayerTimes:', err);
         if (isMountedRef.current) {
           setError('Erreur lors du chargement des heures de prière');
           setLoading(false);
         }
       });
-      
+
       loadCompletedPrayers().catch(err => {
-        // Erreur silencieuse en production
+        console.error('[PrayerTimesCardSlide] Error in loadCompletedPrayers:', err);
       });
     }
-    
+
     // Cleanup
     return () => {
       // Ne marquer comme démonté que si le modal n'est plus visible
@@ -308,23 +308,21 @@ export function PrayerTimesCardSlide({ visible, onClose }: PrayerTimesCardSlideP
     try {
       // Ne pas fermer si on est en train de charger
       if (loading) {
-        // Ignorer la fermeture pendant le chargement
+        console.log('[PrayerTimesCardSlide] Ignoring close during loading');
         return;
       }
       onClose();
     } catch (error) {
-      // Erreur silencieuse en production
+      console.error('Erreur lors de la fermeture du modal:', error);
     }
   }, [onClose, loading]);
 
   const handleQiblaPress = useCallback(() => {
     handleClose();
-    // Petit délai pour laisser le modal se fermer avant la navigation
-    setTimeout(() => {
-      if (isMountedRef.current) {
-        navigation.navigate('QiblaPage' as never);
-      }
-    }, 100);
+    // Navigation immédiate pour meilleure performance
+    if (isMountedRef.current) {
+      navigation.navigate('QiblaPage' as never);
+    }
   }, [handleClose, navigation]);
 
   // Filtrer les prières valides
@@ -332,6 +330,7 @@ export function PrayerTimesCardSlide({ visible, onClose }: PrayerTimesCardSlideP
     if (!timings) return [];
     return prayerTimes.filter(key => timings[key]);
   }, [timings]);
+
 
   // Ne pas retourner null conditionnellement - cela change l'ordre des Hooks
   // À la place, toujours rendre le Modal mais le cacher avec visible={false}
@@ -345,30 +344,25 @@ export function PrayerTimesCardSlide({ visible, onClose }: PrayerTimesCardSlideP
     >
       <View style={styles.container}>
         {/* Backdrop */}
-        <Pressable 
+        <Pressable
           style={styles.backdrop}
           onPress={handleClose}
-          hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
         />
 
         {/* Carte qui slide depuis le bas */}
-        <View
+        <Animated.View
+          entering={visible ? SlideInUp.duration(300) : undefined}
           style={[styles.card, { backgroundColor: theme.colors.backgroundSecondary || '#1E1E2F' }]}
         >
           <SafeAreaView edges={['bottom']} style={styles.safeArea}>
             {/* Header */}
-            <View style={styles.header} pointerEvents="box-none">
+            <View style={styles.header}>
               <Text style={[styles.title, { color: theme.colors.text }]}>
                 {t('home.prayerTimes') || 'Heures de prière'}
               </Text>
-              <TouchableOpacity 
-                onPress={handleClose} 
-                style={styles.closeButton}
-                activeOpacity={0.7}
-                hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
-              >
+              <Pressable onPress={handleClose} style={styles.closeButton}>
                 <X size={24} color={theme.colors.text} />
-              </TouchableOpacity>
+              </Pressable>
             </View>
 
             {/* Content avec ScrollView pour iPhone mini */}
@@ -414,102 +408,103 @@ export function PrayerTimesCardSlide({ visible, onClose }: PrayerTimesCardSlideP
                       {validPrayerTimes.map((key, index) => {
                         const time = timings[key];
                         if (!time) return null;
-                      
-                      const prayerName = t(`prayer.${key.toLowerCase()}`);
-                      const isCompleted = completedPrayers.has(key);
-                      const canCheck = canCheckPrayer(key);
-                      const canToggle = isAuthenticated && canCheck;
-                      
-                      // Utiliser le helper pour créer l'animation avec des valeurs garanties
-                      const safeIndex = Number.isFinite(index) && index >= 0 ? Math.floor(index) : 0;
-                      // Animations supprimées pour améliorer les performances
-                      const enteringAnimation = undefined;
-                      
-                      return (
-                        <View
-                          key={key}
-                        >
-                          <Pressable
-                            onPress={() => canToggle && togglePrayer(key)}
-                            disabled={!canToggle}
-                            style={[
-                              styles.prayerTimeRow, 
-                              { 
-                                borderBottomColor: 'rgba(255, 255, 255, 0.08)',
-                              }
-                            ]}
-                          >
-                            <View style={styles.prayerTimeLeft}>
-                              <Text 
-                                style={[styles.prayerTimeLabel, { color: theme.colors.text }]}
-                                numberOfLines={2}
-                              >
-                                {prayerName}
-                              </Text>
-                            </View>
-                            <View style={styles.prayerTimeRight}>
-                              <Text style={[styles.prayerTimeValue, { color: theme.colors.accent || '#4A90E2' }]}>
-                                {time}
-                              </Text>
-                              {/* Checkbox - seulement si l'heure est passée */}
-                              {canCheck && (
-                                <View
-                                  style={[
-                                    styles.checkbox,
-                                    {
-                                      backgroundColor: isCompleted ? (theme.colors.accent || '#4A90E2') : 'transparent',
-                                      borderColor: isCompleted ? (theme.colors.accent || '#4A90E2') : (theme.colors.accent || '#4A90E2'),
-                                    }
-                                  ]}
-                                >
-                                  {isCompleted && (
-                                    <Check size={14} color={theme.colors.background || '#FFFFFF'} />
-                                  )}
-                                </View>
-                              )}
-                            </View>
-                          </Pressable>
-                        </View>
-                      );
-                    })}
-                  </View>
 
-                  {/* Bouton Boussole Qibla */}
-                  <View 
-                    style={styles.qiblaButtonContainer}
-                  >
-                    <Pressable
-                      onPress={handleQiblaPress}
-                      style={({ pressed }) => [
-                        styles.qiblaButton,
-                        pressed && styles.qiblaButtonPressed
-                      ]}
+                        const prayerName = t(`prayer.${key.toLowerCase()}`);
+                        const isCompleted = completedPrayers.has(key);
+                        const canCheck = canCheckPrayer(key);
+                        const canToggle = isAuthenticated && canCheck;
+
+                        // Utiliser le helper pour créer l'animation avec des valeurs garanties
+                        const safeIndex = Number.isFinite(index) && index >= 0 ? Math.floor(index) : 0;
+                        const enteringAnimation = visible ? createEnteringAnimation(safeIndex) : undefined;
+
+                        return (
+                          <Animated.View
+                            key={key}
+                            entering={enteringAnimation}
+                          >
+                            <Pressable
+                              onPress={() => canToggle && togglePrayer(key)}
+                              disabled={!canToggle}
+                              style={[
+                                styles.prayerTimeRow,
+                                {
+                                  borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+                                }
+                              ]}
+                            >
+                              <View style={styles.prayerTimeLeft}>
+                                <Text
+                                  style={[styles.prayerTimeLabel, { color: theme.colors.text }]}
+                                  numberOfLines={2}
+                                >
+                                  {prayerName}
+                                </Text>
+                              </View>
+                              <View style={styles.prayerTimeRight}>
+                                <Text style={[styles.prayerTimeValue, { color: theme.colors.accent || '#4A90E2' }]}>
+                                  {time}
+                                </Text>
+                                {/* Checkbox - seulement si l'heure est passée */}
+                                {canCheck && (
+                                  <View
+                                    style={[
+                                      styles.checkbox,
+                                      {
+                                        backgroundColor: isCompleted ? (theme.colors.accent || '#4A90E2') : 'transparent',
+                                        borderColor: isCompleted ? (theme.colors.accent || '#4A90E2') : (theme.colors.accent || '#4A90E2'),
+                                      }
+                                    ]}
+                                  >
+                                    {isCompleted && (
+                                      <Check size={14} color={theme.colors.background || '#FFFFFF'} />
+                                    )}
+                                  </View>
+                                )}
+                              </View>
+                            </Pressable>
+                          </Animated.View>
+                        );
+                      })}
+                    </View>
+
+                    {/* Bouton Boussole Qibla */}
+                    <Animated.View
+                      entering={visible ? SlideInUp.duration(300).delay(250) : undefined}
+                      style={styles.qiblaButtonContainer}
                     >
-                      <LinearGradient
-                        colors={[
-                          (theme.colors.accent || '#4A90E2') + '20', 
-                          (theme.colors.accent || '#4A90E2') + '10'
+                      <Pressable
+                        onPress={handleQiblaPress}
+                        style={({ pressed }) => [
+                          styles.qiblaButton,
+                          pressed && styles.qiblaButtonPressed
                         ]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.qiblaButtonGradient}
                       >
-                        <View style={styles.qiblaButtonContent}>
-                          <View style={[styles.qiblaIconContainer, { backgroundColor: (theme.colors.accent || '#4A90E2') + '40' }]}>
-                            <Compass size={24} color={theme.colors.accent || '#4A90E2'} />
+                        <LinearGradient
+                          colors={[
+                            (theme.colors.accent || '#4A90E2') + '20',
+                            (theme.colors.accent || '#4A90E2') + '10'
+                          ]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.qiblaButtonGradient}
+                        >
+                          <View style={styles.qiblaButtonContent}>
+                            <View style={[styles.qiblaIconContainer, { backgroundColor: (theme.colors.accent || '#4A90E2') + '40' }]}>
+                              <Compass size={24} color={theme.colors.accent || '#4A90E2'} />
+                            </View>
+                            <View style={styles.qiblaButtonTextContainer}>
+                              <Text style={[styles.qiblaButtonText, { color: theme.colors.text || '#FFFFFF' }]}>
+                                {t('qibla.title') || 'Trouver la Qibla'}
+                              </Text>
+                              <Text style={[styles.qiblaButtonSubtext, { color: theme.colors.textSecondary || '#999' }]}>
+                                {t('qibla.subtitle') || 'Boussole directionnelle'}
+                              </Text>
+                            </View>
                           </View>
-                          <View style={styles.qiblaButtonTextContainer}>
-                            <Text style={[styles.qiblaButtonText, { color: theme.colors.text || '#FFFFFF' }]}>
-                              {t('qibla.title') || 'Trouver la Qibla'}
-                            </Text>
-                            <Text style={[styles.qiblaButtonSubtext, { color: theme.colors.textSecondary || '#999' }]}>
-                              {t('qibla.subtitle') || 'Boussole directionnelle'}
-                            </Text>
-                          </View>
-                        </View>
-                      </LinearGradient>
-                    </Pressable>
-                  </View>
+                        </LinearGradient>
+                      </Pressable>
+                    </Animated.View>
                   </>
                 ) : (
                   <View style={styles.errorContainer}>
@@ -527,7 +522,7 @@ export function PrayerTimesCardSlide({ visible, onClose }: PrayerTimesCardSlideP
               )}
             </ScrollView>
           </SafeAreaView>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -581,13 +576,7 @@ const styles = StyleSheet.create({
     fontFamily: 'System',
   },
   closeButton: {
-    padding: 8,
-    minWidth: 40,
-    minHeight: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000,
-    elevation: 1000,
+    padding: 4,
   },
   loadingContainer: {
     paddingVertical: 40,

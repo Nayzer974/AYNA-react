@@ -406,8 +406,8 @@ export const intentionToNameMapping: Record<string, string[]> = {
   'protection': ['al-hafiz', 'al-wali', 'al-muhaymin']
 };
 
-// Types de respiration
-export type BreathingType = 'libre' | '4-4' | '3-6-9';
+// Types de respiration - Simplifié : seulement le mode libre (normal)
+export type BreathingType = 'libre';
 
 // Ambiances sonores
 export interface SoundAmbiance {
@@ -581,13 +581,13 @@ export function getAmbianceTheme(ambianceId: string): AmbianceTheme {
   return THEME_CONFIG[ambianceId] || THEME_CONFIG['silence'];
 }
 
-// Durées disponibles (en minutes)
-export const availableDurations = [5, 10, 15, 20, 30, 45, 60];
+// Durées disponibles (en minutes) - Simplifiées pour une expérience plus concentrée
+export const availableDurations = [5, 10, 15];
 
 // Fonction pour suggérer un nom divin basé sur l'intention
 export function suggestDivineName(intention: string): DivineName {
   const lowerIntention = intention.toLowerCase();
-  
+
   // Chercher des mots-clés dans l'intention
   for (const [keyword, nameIds] of Object.entries(intentionToNameMapping)) {
     if (lowerIntention.includes(keyword)) {
@@ -596,9 +596,50 @@ export function suggestDivineName(intention: string): DivineName {
       if (name) return name;
     }
   }
-  
+
   // Si aucun mapping trouvé, retourner un nom aléatoire
   return divineNames[Math.floor(Math.random() * divineNames.length)];
+}
+
+// Fonction pour suggérer 3 noms divins basés sur l'intention
+export function suggestDivineNames(intention: string, count: number = 3): DivineName[] {
+  const lowerIntention = intention.toLowerCase();
+
+  // 1. Chercher des correspondances exactes par mots-clés
+  const matchedNames: DivineName[] = [];
+  const seenIds = new Set<string>();
+
+  for (const [keyword, nameIds] of Object.entries(intentionToNameMapping)) {
+    if (lowerIntention.includes(keyword)) {
+      // Mélanger les IDs pour ne pas toujours prendre les mêmes
+      const shuffledIds = [...nameIds].sort(() => Math.random() - 0.5);
+
+      for (const id of shuffledIds) {
+        if (!seenIds.has(id)) {
+          const name = divineNames.find(n => n.id === id);
+          if (name) {
+            matchedNames.push(name);
+            seenIds.add(id);
+          }
+        }
+      }
+    }
+  }
+
+  // Mélanger les résultats trouvés
+  matchedNames.sort(() => Math.random() - 0.5);
+
+  // 2. Si on n'a pas assez de noms, compléter avec des noms aléatoires
+  while (matchedNames.length < count) {
+    const randomName = divineNames[Math.floor(Math.random() * divineNames.length)];
+    if (!seenIds.has(randomName.id)) {
+      matchedNames.push(randomName);
+      seenIds.add(randomName.id);
+    }
+  }
+
+  // Retourner le nombre demandé
+  return matchedNames.slice(0, count);
 }
 
 // Fonction pour obtenir un nom divin aléatoire
@@ -637,41 +678,41 @@ const khalwaNameMapping: Record<string, string> = {
 export function extractKhalwaName(taskDescription: string): string | null {
   // Pattern pour extraire le nom après "Kalwa :" ou "Kalwa:"
   // Gère les cas avec guillemets, sans guillemets, et avec "× 99" ou autres suffixes
-  
+
   // Essayer d'abord avec guillemets (simple ou double)
   let match = taskDescription.match(/Kalwa\s*:\s*["']([^"']+)(?:\s*×\s*\d+)?["']/i);
   if (match && match[1]) {
     return match[1].trim();
   }
-  
+
   // Si pas de guillemets, extraire jusqu'à la fin ou jusqu'à "×" suivi d'un nombre
   match = taskDescription.match(/Kalwa\s*:\s*([^×]+?)(?:\s*×\s*\d+)?$/i);
   if (match && match[1]) {
     return match[1].trim();
   }
-  
+
   return null;
 }
 
 // Fonction pour mapper un nom de khalwa vers un DivineName
 export function mapKhalwaNameToDivineName(khalwaName: string): DivineName | null {
   const normalizedName = khalwaName.toLowerCase().trim();
-  
+
   // Vérifier d'abord le mapping direct
   const mappedId = khalwaNameMapping[normalizedName];
   if (mappedId) {
     const divineName = divineNames.find(n => n.id === mappedId);
     if (divineName) return divineName;
   }
-  
+
   // Chercher par transliteration (sans le préfixe "Yâ" ou "Ya")
   const nameWithoutPrefix = normalizedName.replace(/^yâ\s+|^ya\s+/i, '');
-  const divineName = divineNames.find(n => 
-    n.transliteration.toLowerCase().replace(/[^a-z0-9]/g, '') === 
+  const divineName = divineNames.find(n =>
+    n.transliteration.toLowerCase().replace(/[^a-z0-9]/g, '') ===
     nameWithoutPrefix.replace(/[^a-z0-9]/g, '')
   );
   if (divineName) return divineName;
-  
+
   // Si aucun mapping trouvé, retourner null (sera géré par le composant)
   return null;
 }

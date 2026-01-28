@@ -4,11 +4,8 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Accelerometer, Magnetometer } from 'expo-sensors';
-import { calculateOrientation } from '@/services/orientation.service';
-
-type AccelerometerData = { x: number; y: number; z: number };
-type MagnetometerData = { x: number; y: number; z: number };
+import { Accelerometer, Magnetometer, AccelerometerData, MagnetometerData } from 'expo-sensors';
+import { calculateOrientation } from '@/services/system/orientation.service';
 
 export interface UseHeadingReturn {
   heading: number | null; // 0-360, heading magnétique

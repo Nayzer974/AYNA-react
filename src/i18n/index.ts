@@ -8,7 +8,7 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Localization from 'expo-localization';
-import { setRTLForLanguage } from '@/services/rtl';
+import { setRTLForLanguage } from '@/services/system/rtl';
 
 // Logger simplifié pour éviter les problèmes de runtime lors de l'initialisation
 // Utiliser directement console.error ici car i18n s'initialise avant que le logger soit disponible
@@ -71,7 +71,7 @@ i18n
     interpolation: {
       escapeValue: false, // React échappe déjà
     },
-    compatibilityJSON: 'v4',
+    compatibilityJSON: 'v3',
     react: {
       useSuspense: false,
     },

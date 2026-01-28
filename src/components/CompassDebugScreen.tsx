@@ -46,11 +46,11 @@ export function CompassDebugScreen() {
       {/* GPS */}
       <View style={[styles.section, { backgroundColor: theme.colors.backgroundSecondary }]}>
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>GPS</Text>
-        <DebugRow label="Latitude" value={formatNumber(location?.latitude ?? null, 6)} />
-        <DebugRow label="Longitude" value={formatNumber(location?.longitude ?? null, 6)} />
+        <DebugRow label="Latitude" value={formatNumber(location?.latitude, 6)} />
+        <DebugRow label="Longitude" value={formatNumber(location?.longitude, 6)} />
         <DebugRow label="Accuracy" value={location?.accuracy ? `${location.accuracy.toFixed(1)} m` : '—'} />
         <DebugRow label="Speed" value={location?.speed ? `${location.speed.toFixed(2)} m/s` : '—'} />
-        <DebugRow label="GPS Heading" value={formatAngle(location?.heading ?? null)} />
+        <DebugRow label="GPS Heading" value={formatAngle(location?.heading)} />
         <DebugRow label="Altitude" value={location?.altitude ? `${location.altitude.toFixed(1)} m` : '—'} />
       </View>
 

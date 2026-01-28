@@ -6,7 +6,6 @@
  */
 
 import { Easing } from 'react-native-reanimated';
-import type { EasingFunction } from 'react-native-reanimated';
 
 /**
  * Durées standard pour les animations
@@ -25,26 +24,15 @@ export const STAGGER_DELAY = 50;
 
 /**
  * Easing functions standard
- * 
- * IMPORTANT: Les valeurs SPRING, SPRING_GENTLE, SPRING_SNAPPY sont des objets de configuration
- * pour withSpring(), PAS des fonctions easing pour withTiming().
- * 
- * Pour withTiming(), utilisez uniquement:
- * - STANDARD, EASE_IN, EASE_OUT, EASE_IN_OUT, BOUNCE, ELASTIC, BEZIER_SMOOTH, BEZIER_SHARP
- * 
- * Pour withSpring(), utilisez:
- * - SPRING_CONFIGS.NORMAL, SPRING_CONFIGS.GENTLE, SPRING_CONFIGS.SNAPPY, etc.
  */
 export const ANIMATION_EASING = {
   STANDARD: Easing.out(Easing.ease),
   EASE_IN: Easing.in(Easing.ease),
   EASE_OUT: Easing.out(Easing.ease),
   EASE_IN_OUT: Easing.inOut(Easing.ease),
-  // ⚠️ NE PAS utiliser ces valeurs avec withTiming() - ce sont des configs pour withSpring()
   SPRING: { damping: 18, stiffness: 90 },
   SPRING_GENTLE: { damping: 20, stiffness: 80 },
   SPRING_SNAPPY: { damping: 15, stiffness: 120 },
-  // ✅ Ces valeurs peuvent être utilisées avec withTiming()
   BOUNCE: Easing.out(Easing.back(1.1)),
   ELASTIC: Easing.out(Easing.elastic(1)),
   BEZIER_SMOOTH: Easing.bezier(0.4, 0.0, 0.2, 1),
@@ -95,7 +83,7 @@ export function getStaggerDelay(index: number, baseDelay: number = STAGGER_DELAY
  */
 export function createEasingAnimation(
   duration: number = ANIMATION_DURATION.NORMAL,
-  easing: EasingFunction = ANIMATION_EASING.STANDARD
+  easing: Easing.EasingFunction = ANIMATION_EASING.STANDARD
 ) {
   return { duration, easing };
 }
@@ -105,33 +93,6 @@ export function createEasingAnimation(
  */
 export function createSpringAnimation(config: SpringConfig = SPRING_CONFIGS.NORMAL) {
   return config;
-}
-
-/**
- * Helper pour valider qu'un easing est une fonction (pas un objet spring)
- * Utilisez cette fonction si vous utilisez des configurations d'animation de manière générique
- */
-export function isValidEasingFunction(easing: any): easing is EasingFunction {
-  return typeof easing === 'function';
-}
-
-/**
- * Helper pour obtenir une fonction easing valide depuis une configuration
- * Si la config utilise spring, retourne une fonction easing par défaut
- */
-export function getEasingFromConfig(config: { easing?: any; useSpring?: boolean }): EasingFunction {
-  if (config.useSpring) {
-    // Si c'est une animation spring, on ne devrait pas utiliser withTiming
-    // Mais si on doit quand même fournir un easing, on retourne STANDARD
-    return ANIMATION_EASING.STANDARD;
-  }
-  
-  if (config.easing && isValidEasingFunction(config.easing)) {
-    return config.easing;
-  }
-  
-  // Par défaut, utiliser STANDARD
-  return ANIMATION_EASING.STANDARD;
 }
 
 /**
@@ -202,7 +163,7 @@ export const ENTRY_ANIMATIONS = {
       scale: 1,
     },
     duration: ANIMATION_DURATION.NORMAL,
-    easing: ANIMATION_EASING.EASE_OUT,
+    easing: ANIMATION_EASING.SPRING,
   },
   SCALE_SPRING: {
     initial: { 
@@ -214,9 +175,8 @@ export const ENTRY_ANIMATIONS = {
       scale: 1,
     },
     duration: ANIMATION_DURATION.NORMAL,
-    easing: ANIMATION_EASING.STANDARD,
+    easing: ANIMATION_EASING.SPRING,
     useSpring: true,
-    springConfig: SPRING_CONFIGS.NORMAL,
   },
 } as const;
 

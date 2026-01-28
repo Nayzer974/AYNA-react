@@ -15,7 +15,7 @@ import {
   type UserHabits,
   type NotificationSettings,
   type SmartNotification,
-} from '@/services/smartNotifications';
+} from '@/services/system/smartNotifications';
 
 export function useSmartNotifications() {
   const { user } = useUser();

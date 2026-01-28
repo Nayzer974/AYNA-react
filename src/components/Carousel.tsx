@@ -10,7 +10,7 @@ import {
   ListRenderItem,
   Pressable,
 } from 'react-native';
-// Animations supprimées pour améliorer les performances
+import Animated, { FadeIn } from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -91,7 +91,8 @@ export function Carousel<T>({
         ref={flatListRef}
         data={data}
         renderItem={({ item, index }) => (
-          <View
+          <Animated.View
+            entering={FadeIn.duration(400)}
             style={[styles.itemContainer, { width: itemWidth }]}
           >
             {onItemPress ? (
@@ -101,7 +102,7 @@ export function Carousel<T>({
             ) : (
               renderItem(item, index)
             )}
-          </View>
+          </Animated.View>
         )}
         keyExtractor={(_, index) => `carousel-item-${index}`}
         horizontal

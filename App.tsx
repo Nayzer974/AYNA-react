@@ -7,6 +7,7 @@ import { View, StyleSheet, ActivityIndicator, Text, AppState, AppStateStatus, Li
 import { UserProvider, useUser } from './src/contexts/UserContext';
 import { QuranProvider } from './src/contexts/QuranContext';
 import { PreferencesProvider } from './src/contexts/PreferencesContext';
+import { SpaceAudioProvider } from './src/contexts/SpaceAudioContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { getTheme } from './src/data/themes';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,15 +16,17 @@ import { useNotificationScheduler } from './src/hooks/useNotificationScheduler';
 import { I18nextProvider } from 'react-i18next';
 import i18n, { initializeRTL } from './src/i18n';
 import { useNavigationContainerRef } from '@react-navigation/native';
-import { supabase } from './src/services/supabase';
+import { supabase } from './src/services/auth/supabase';
 import { ConsentScreen, hasConsentChoiceBeenMade } from './src/pages/ConsentScreen';
 import { analytics } from './src/analytics';
 import { usePreferences } from './src/contexts/PreferencesContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getSubscriptionStatus } from './src/services/subscription';
+import { getSubscriptionStatus } from './src/services/system/subscription';
 import { PremiumThankYouModal } from './src/components/PremiumThankYouModal';
 import { logger } from './src/utils/logger';
-import { initializeNotifications } from './src/services/expoNotifications';
+import * as Sentry from '@sentry/react-native';
+
+// Notifications supprimées
 
 function AppContent() {
   const { user, isLoading } = useUser();
@@ -33,15 +36,19 @@ function AppContent() {
   const [showConsentScreen, setShowConsentScreen] = React.useState<boolean | null>(null);
   const [isCheckingConsent, setIsCheckingConsent] = React.useState(true);
   const [showPremiumThankYou, setShowPremiumThankYou] = React.useState(false);
-  
+  const [loadingTimeout, setLoadingTimeout] = React.useState(false);
+
   // Initialiser RTL au démarrage
   useEffect(() => {
-    initializeRTL().catch(console.error);
+    initializeRTL().catch((err: any) => logger.error('[App] Failed to initialize RTL:', err));
   }, []);
 
-  // Initialiser les notifications au démarrage
+  // ✅ ÉTAPE 1 : Timeout de sécurité OBLIGATOIRE - L'app DOIT toujours rendre
   useEffect(() => {
-    initializeNotifications().catch(console.error);
+    const timer = setTimeout(() => {
+      setLoadingTimeout(true);
+    }, 2000); // Max 2 secondes - RÈGLE ABSOLUE : ne jamais bloquer plus
+    return () => clearTimeout(timer);
   }, []);
 
   // Vérifier le consentement analytics au démarrage
@@ -49,7 +56,7 @@ function AppContent() {
     const checkConsent = async () => {
       try {
         const choiceMade = await hasConsentChoiceBeenMade();
-        
+
         if (!choiceMade) {
           // Aucun choix n'a été fait - afficher l'écran de consentement
           setShowConsentScreen(true);
@@ -63,7 +70,7 @@ function AppContent() {
           setShowConsentScreen(false);
         }
       } catch (error) {
-        console.error('[App] Error checking consent:', error);
+        logger.error('[App] Error checking consent:', error);
         // En cas d'erreur, afficher l'écran de consentement par sécurité
         setShowConsentScreen(true);
         // Ensure analytics is disabled on error
@@ -83,7 +90,7 @@ function AppContent() {
   useEffect(() => {
     analytics.initialize().catch(error => {
       if (__DEV__) {
-        console.error('[App] Analytics initialization failed:', error);
+        logger.error('[App] Analytics initialization failed:', error);
       }
     });
   }, []);
@@ -139,83 +146,125 @@ function AppContent() {
 
     // Écouter les deep links entrants
     const handleDeepLink = async (url: string) => {
-      logger.info('App', 'Deep link reçu:', url);
-      
-      // Vérifier si c'est le callback de vérification d'email
-      if (url.startsWith('ayna://auth/callback')) {
-        logger.info('App', 'Callback de vérification d\'email détecté');
-        
+      logger.info('App', `[DeepLink] URL reçue: ${url}`);
+
+      // Vérifier si c'est le callback d'authentification (OAuth ou Email)
+      if (url.includes('auth/callback')) {
+        logger.info('App', '[DeepLink] Callback d\'authentification détecté');
+
         try {
-          // Extraire les paramètres de l'URL manuellement
-          const urlObj = new URL(url.replace('ayna://', 'https://'));
-          const queryParams: Record<string, string> = {};
-          urlObj.searchParams.forEach((value, key) => {
-            queryParams[key] = value;
-          });
-          
-          logger.info('App', 'Paramètres du callback:', queryParams);
-          
-          // Vérifier si on a un token_hash ou token
-          if (queryParams?.token_hash || queryParams?.token) {
-            logger.info('App', 'Token trouvé, vérification de l\'email...');
-            
-            // Vérifier l'email avec Supabase
-            if (!supabase) return;
-            const { data, error } = await supabase.auth.verifyOtp({
-              token_hash: queryParams.token_hash as string,
-              type: (queryParams.type_hash as any) || 'signup',
+          // 1. Gérer les jetons OAuth (souvent après le # dans les redirections Supabase OAuth)
+          let accessToken = '';
+          let refreshToken = '';
+
+          // Vérifier dans le fragment (#)
+          if (url.includes('#')) {
+            const hash = url.split('#')[1];
+            const hashParams = new URLSearchParams(hash);
+            accessToken = hashParams.get('access_token') || '';
+            refreshToken = hashParams.get('refresh_token') || '';
+
+            if (accessToken) {
+              logger.info('App', '[DeepLink] Jetons OAuth trouvés dans le fragment (#)');
+            }
+          }
+
+          // Vérifier dans la query string (?) si pas trouvé dans le fragment
+          if (!accessToken && url.includes('?')) {
+            const queryString = url.split('?')[1];
+            const queryParams = new URLSearchParams(queryString);
+            accessToken = queryParams.get('access_token') || '';
+            refreshToken = queryParams.get('refresh_token') || '';
+
+            if (accessToken) {
+              logger.info('App', '[DeepLink] Jetons OAuth trouvés dans la query string (?)');
+            }
+          }
+
+          // Si on a les jetons, établir la session
+          if (accessToken && refreshToken) {
+            if (!supabase) {
+              logger.error('[App] Supabase non configuré lors du traitement OAuth');
+              return;
+            }
+            logger.info('App', '[DeepLink] Création de la session Supabase...');
+            const { data, error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
             });
 
             if (error) {
-              logger.error('[App] Erreur lors de la vérification:', error);
-              // Rediriger vers l'écran de vérification avec une erreur
+              logger.error('[App] Erreur lors du setSession OAuth:', error);
+              return;
+            }
+
+            logger.info('App', '[DeepLink] Session OAuth établie avec succès');
+            return;
+          }
+
+          // 2. Gérer la vérification d'email (OTP via query params : token_hash)
+          const urlObj = new URL(url.replace('ayna://', 'https://'));
+          const tokenHash = urlObj.searchParams.get('token_hash');
+          const token = urlObj.searchParams.get('token');
+          const type = urlObj.searchParams.get('type') || urlObj.searchParams.get('type_hash') || 'signup';
+
+          if (tokenHash || token) {
+            const finalToken = (tokenHash || token) as string;
+            logger.info('App', `[DeepLink] Token de vérification trouvé (type: ${type})`);
+
+            if (!supabase) {
+              logger.error('[App] Supabase non configuré lors de la vérification OTP');
+              return;
+            }
+
+            const { data, error } = await supabase.auth.verifyOtp({
+              token_hash: finalToken,
+              type: type as any,
+            });
+
+            if (error) {
+              logger.error('[App] Erreur lors de la vérification OTP:', error);
               if (navigationRef.isReady()) {
-                navigationRef.navigate('VerifyEmail' as never, {
+                (navigationRef as any).navigate('VerifyEmail', {
                   error: error.message || 'Erreur lors de la vérification de l\'email',
-                } as never);
+                });
               }
               return;
             }
 
-            logger.info('App', 'Email vérifié avec succès');
-            
-            // Rediriger vers l'accueil
-            if (navigationRef.isReady()) {
-              navigationRef.reset({
-                index: 0,
-                routes: [{ name: 'Main' as never }],
-              });
-            }
+            logger.info('App', '[DeepLink] Email vérifié avec succès via OTP');
           } else {
-            logger.warn('[App] Aucun token trouvé dans le callback');
+            logger.warn('[App] [DeepLink] Aucun token ou jeton exploitable trouvé dans le callback');
           }
         } catch (error: any) {
-          logger.error('[App] Erreur lors du traitement du deep link:', error);
+          logger.error('[App] [DeepLink] Erreur lors du traitement du callback:', error);
         }
         return;
       }
 
       // Vérifier si c'est une invitation à une session privée
-      if (url.startsWith('ayna://dhikr/invite/')) {
+      if (url.startsWith('ayna://dhikr/invite/') || url.includes('nurayna.com/dhikr/invite/')) {
         logger.info('App', 'Invitation à une session privée détectée');
-        
+
         try {
-          // Parser l'URL : ayna://dhikr/invite/SESSION_ID?token=TOKEN
-          const match = url.match(/ayna:\/\/dhikr\/invite\/([^?]+)\?token=([^&]+)/);
-          
+          // Parser l'URL : 
+          // ayna://dhikr/invite/SESSION_ID?token=TOKEN
+          // ou https://nurayna.com/dhikr/invite/SESSION_ID?token=TOKEN
+          const match = url.match(/(?:ayna:\/\/|nurayna\.com\/)dhikr\/invite\/([^?]+)\?token=([^&]+)/);
+
           if (match && match[1] && match[2]) {
             const sessionId = match[1];
             const token = match[2];
-            
+
             logger.info('App', 'Session ID:', sessionId);
             logger.info('App', 'Token:', token);
-            
+
             // Naviguer vers DairatAnNur avec les paramètres d'invitation
             if (navigationRef.isReady()) {
-              navigationRef.navigate('DairatAnNur' as never, {
+              (navigationRef as any).navigate('DairatAnNur', {
                 inviteSessionId: sessionId,
                 inviteToken: token,
-              } as never);
+              });
             }
           } else {
             logger.warn('[App] Format d\'URL d\'invitation invalide:', url);
@@ -243,18 +292,16 @@ function AppContent() {
     // (pour gérer les callbacks même si le deep link n'est pas capturé)
     const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       logger.info('App', 'Auth state change:', event);
-      
+
       if (event === 'SIGNED_IN' && session) {
         // Si l'utilisateur vient de se connecter (après vérification d'email)
         // et qu'on est sur l'écran VerifyEmail, rediriger vers l'accueil
         if (navigationRef.isReady() && session.user.email_confirmed_at) {
-          // Attendre un peu pour que le contexte utilisateur soit mis à jour
-          setTimeout(() => {
-            navigationRef.reset({
-              index: 0,
-              routes: [{ name: 'Main' as never }],
-            });
-          }, 500);
+          // Navigation immédiate pour meilleure performance
+          navigationRef.reset({
+            index: 0,
+            routes: [{ name: 'Main' as never }],
+          });
         }
       }
     });
@@ -269,8 +316,10 @@ function AppContent() {
 
   // Notifications de prière supprimées - plus de système de notifications
 
-  // Afficher un écran de chargement pendant l'initialisation
-  if (isLoading || isCheckingConsent) {
+  // ✅ ÉTAPE 1 : RÈGLE ABSOLUE - L'app DOIT toujours rendre quelque chose
+  // Afficher un loader UNIQUEMENT si le timeout n'est pas atteint
+  // Après timeout, rendre l'app même si isLoading est true (render partiel)
+  if ((isLoading || isCheckingConsent) && !loadingTimeout) {
     return (
       <SafeAreaView style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
         <StatusBar style="light" />
@@ -283,6 +332,8 @@ function AppContent() {
       </SafeAreaView>
     );
   }
+  // ✅ Après timeout, continuer le render même si isLoading est true
+  // L'app fonctionnera avec des données partielles plutôt que de rester bloquée
 
   // Afficher l'écran de consentement si nécessaire
   if (showConsentScreen === true) {
@@ -321,21 +372,25 @@ function AppContent() {
   );
 }
 
-export default function App() {
+function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-    <I18nextProvider i18n={i18n}>
-      <UserProvider>
-        <PreferencesProvider>
-          <QuranProvider>
-            <AppContent />
-          </QuranProvider>
-        </PreferencesProvider>
-      </UserProvider>
-    </I18nextProvider>
+      <I18nextProvider i18n={i18n}>
+        <UserProvider>
+          <PreferencesProvider>
+            <SpaceAudioProvider>
+              <QuranProvider>
+                <AppContent />
+              </QuranProvider>
+            </SpaceAudioProvider>
+          </PreferencesProvider>
+        </UserProvider>
+      </I18nextProvider>
     </GestureHandlerRootView>
   );
 }
+
+export default Sentry.wrap(App);
 
 const styles = StyleSheet.create({
   loadingContainer: {

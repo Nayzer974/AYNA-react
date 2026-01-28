@@ -6,7 +6,7 @@
 import { useEffect, useMemo } from 'react';
 import { useLocation } from './useLocation';
 import { useHeading } from './useHeading';
-import { calculateBearing, KAABA_LAT, KAABA_LNG } from '@/services/qibla.service';
+import { calculateBearing, KAABA_LAT, KAABA_LNG } from '@/services/system/qibla.service';
 
 export interface UseQiblaReturn {
   // Position

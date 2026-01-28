@@ -16,7 +16,7 @@ import Animated, {
   interpolateColor,
   Easing,
 } from 'react-native-reanimated';
-import type { NotificationSettings } from '@/services/smartNotifications';
+import type { NotificationSettings } from '@/services/system/smartNotifications';
 
 interface SmartNotificationsSettingsProps {
   theme: ReturnType<typeof getTheme>;

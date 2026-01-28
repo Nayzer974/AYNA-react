@@ -5,7 +5,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, TextInput, Platform } from 'react-native';
 import { X, Search } from 'lucide-react-native';
-import Animated, { FadeIn, FadeOut, SlideInDown } from 'react-native-reanimated';
+import Animated, { SlideInDown } from 'react-native-reanimated';
 
 interface DateSearchModalProps {
   visible: boolean;
@@ -46,21 +46,14 @@ export function DateSearchModal({ visible, onClose, onDateSelect, textColor, acc
       transparent
       animationType="fade"
       onRequestClose={onClose}
-      statusBarTranslucent={true}
     >
       <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable onPress={(e) => e.stopPropagation()}>
-          <Animated.View
-            entering={FadeIn}
-            exiting={FadeOut}
-            style={[
-              styles.modalContent,
-              {
-                backgroundColor: theme.colors.backgroundSecondary,
-                borderColor: theme.colors.border || 'rgba(255, 255, 255, 0.1)',
-              },
-            ]}
-          >
+        <Animated.View
+          entering={SlideInDown.duration(300)}
+          style={[styles.modalContent, { backgroundColor: theme.colors.backgroundSecondary }]}
+          onStartShouldSetResponder={() => true}
+        >
+          <Pressable onPress={(e) => e.stopPropagation()}>
             <View style={styles.header}>
               <Text style={[styles.title, { color: textColor }]}>
                 Rechercher une date
@@ -126,8 +119,8 @@ export function DateSearchModal({ visible, onClose, onDateSelect, textColor, acc
                 Rechercher
               </Text>
             </Pressable>
-          </Animated.View>
-        </Pressable>
+          </Pressable>
+        </Animated.View>
       </Pressable>
     </Modal>
   );
@@ -137,23 +130,23 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-    zIndex: 9999,
+    justifyContent: 'flex-end',
   },
   modalContent: {
-    width: '100%',
-    maxWidth: 400,
-    borderRadius: 20,
-    padding: 24,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 10,
-    zIndex: 10000,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
   header: {
     flexDirection: 'row',

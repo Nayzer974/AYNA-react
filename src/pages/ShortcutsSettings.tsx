@@ -18,7 +18,7 @@ import {
   toggleShortcut,
   reorderShortcuts,
   type Shortcut,
-} from '@/services/shortcuts';
+} from '@/services/system/shortcuts';
 import Animated, { FadeIn, SlideInRight } from 'react-native-reanimated';
 
 export function ShortcutsSettings() {

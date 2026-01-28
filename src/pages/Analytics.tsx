@@ -2,8 +2,8 @@
  * Page Analytics complète avec vue d'ensemble, historique et insights IA
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TextInput, Pressable, Alert, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TextInput, Pressable, Alert, RefreshControl, KeyboardAvoidingView, Platform } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
@@ -11,10 +11,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card, CardHeader, CardTitle, CardContent, Button } from '@/components/ui';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GalaxyBackground } from '@/components/GalaxyBackground';
-import { calculatePersonalOverview, loadEventHistory, type PersonalOverview, type EventHistoryItem } from '@/services/analyticsStats';
-import { generateAnalyticsAnalysis, queryAnalytics, type AnalyticsAnalysis, type AnalyticsQuery } from '@/services/aiAnalyticsAgent';
-import { exportAnalytics } from '@/services/analyticsExport';
-import { resetAllAnalytics } from '@/services/analyticsReset';
+import { calculatePersonalOverview, loadEventHistory, type PersonalOverview, type EventHistoryItem } from '@/services/analytics/analyticsStats';
+import { generateAnalyticsAnalysis, queryAnalytics, type AnalyticsAnalysis, type AnalyticsQuery } from '@/services/ai/aiAnalyticsAgent';
+import { exportAnalytics } from '@/services/analytics/analyticsExport';
+import { resetAllAnalytics } from '@/services/analytics/analyticsReset';
 import { LineChart, Heatmap } from '@/components/analytics/AdvancedCharts';
 import { TrendingUp, Award, Lightbulb, Send, Bot, Sparkles, Clock, Monitor, Activity, ArrowUp, ArrowDown, Filter, Download, Trash2, Shield, ChevronRight, Calendar } from 'lucide-react-native';
 import Animated, { FadeIn, SlideInRight } from 'react-native-reanimated';
@@ -60,6 +60,7 @@ export function Analytics() {
   const [inputText, setInputText] = useState('');
   const [querying, setQuerying] = useState(false);
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year' | 'all'>('month');
+  const chatScrollViewRef = useRef<ScrollView>(null);
   
   // Confidentialité - toujours visible maintenant
   const [showPrivacySettings, setShowPrivacySettings] = useState(true);
@@ -67,14 +68,23 @@ export function Analytics() {
   // Rafraîchissement
   const [refreshing, setRefreshing] = useState(false);
 
-  // Recharger les données à chaque fois que la page est focusée (mise à jour en temps réel)
+  // ✅ FIX : Recharger les données sans bloquer le render
   useFocusEffect(
     useCallback(() => {
       if (user?.id) {
-        loadAllData();
-        loadHistory();
+        // Charger en arrière-plan, ne pas bloquer l'UI
+        loadAllData().catch((error) => {
+          if (__DEV__) {
+            console.warn('[Analytics] Error loading data:', error);
+          }
+        });
+        loadHistory().catch((error) => {
+          if (__DEV__) {
+            console.warn('[Analytics] Error loading history:', error);
+          }
+        });
       }
-    }, [user?.id, overviewPeriod, historyFilter])
+    }, [user?.id]) // ✅ FIX : Retirer overviewPeriod et historyFilter pour éviter les re-renders
   );
 
   // Recharger aussi quand overviewPeriod change
@@ -92,6 +102,7 @@ export function Analytics() {
   }, [user?.id, historyFilter]);
 
   // ✅ OPTIMISÉ : Charger overview de manière asynchrone et mémorisée
+  // ✅ FIX : Garantir que setLoading(false) est toujours appelé
   const loadAllData = useCallback(async () => {
     if (!user?.id) {
       setLoading(false);
@@ -99,16 +110,27 @@ export function Analytics() {
     }
     
     setLoading(true);
+    const loadingTimeoutRef = setTimeout(() => {
+      setLoading(false); // Timeout de sécurité
+    }, 5000);
+    
     try {
       // Différer le calcul lourd après les interactions
       InteractionManager.runAfterInteractions(async () => {
-        const overviewData = await calculatePersonalOverview(user.id, overviewPeriod);
-        setOverview(overviewData);
-        setLoading(false);
+        try {
+          const overviewData = await calculatePersonalOverview(user.id, overviewPeriod);
+          setOverview(overviewData);
+        } catch (error) {
+          logger.error('[Analytics] Erreur chargement données:', error);
+        } finally {
+          clearTimeout(loadingTimeoutRef);
+          setLoading(false); // ✅ Toujours désactiver
+        }
       });
     } catch (error) {
       logger.error('[Analytics] Erreur chargement données:', error);
-      setLoading(false);
+      clearTimeout(loadingTimeoutRef);
+      setLoading(false); // ✅ Toujours désactiver
     }
   }, [user?.id, overviewPeriod]);
 
@@ -196,6 +218,10 @@ export function Analytics() {
     setChatMessages(prev => [...prev, userMessage]);
     setInputText('');
     setQuerying(true);
+    // Scroller vers le bas après un court délai pour que le message soit rendu
+    setTimeout(() => {
+      chatScrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
 
     try {
       const query: AnalyticsQuery = {
@@ -213,6 +239,10 @@ export function Analytics() {
       };
 
       setChatMessages(prev => [...prev, aiMessage]);
+      // Scroller vers le bas après un court délai pour que le message soit rendu
+      setTimeout(() => {
+        chatScrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
       } catch (error: any) {
       logger.error('[Analytics] Erreur requête:', error);
       
@@ -228,6 +258,10 @@ export function Analytics() {
         timestamp: new Date(),
       };
       setChatMessages(prev => [...prev, errorMessage]);
+      // Scroller vers le bas après un court délai pour que le message soit rendu
+      setTimeout(() => {
+        chatScrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
       } finally {
       setQuerying(false);
     }
@@ -1061,7 +1095,13 @@ export function Analytics() {
                           <Text style={[styles.chatTitle, { color: theme.colors.text }]}>
                             {t('analytics.assistant.chat') || 'Posez vos questions'}
                           </Text>
-                          <View style={styles.chatMessagesList}>
+                          <ScrollView
+                            ref={chatScrollViewRef}
+                            style={styles.chatMessagesList}
+                            contentContainerStyle={styles.chatMessagesContent}
+                            nestedScrollEnabled={true}
+                            showsVerticalScrollIndicator={true}
+                          >
                             {chatMessages.map((item) => (
                               <View
                                 key={item.id}
@@ -1083,7 +1123,7 @@ export function Analytics() {
                                 </Text>
                               </View>
                             ))}
-                          </View>
+                          </ScrollView>
                           <View style={[styles.chatInputContainer, { borderColor: theme.colors.textSecondary + '40' }]}>
                             <TextInput
                               value={inputText}
@@ -1461,7 +1501,11 @@ const styles = StyleSheet.create({
   chatMessagesList: {
     maxHeight: 300,
     marginBottom: 12,
+  },
+  chatMessagesContent: {
     paddingVertical: 8,
+    paddingBottom: 16,
+    flexGrow: 1,
   },
   chatMessage: {
     padding: 12,

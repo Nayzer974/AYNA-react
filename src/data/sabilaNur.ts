@@ -68,13 +68,15 @@ export interface BlockInfo {
 export interface Challenge {
   id: string;
   title: string;
-  emoji: string;
+  emoji: string;  // Gardé pour compatibilité, mais on utilisera iconName
+  iconName: 'Heart' | 'Shield' | 'Flame' | 'Sparkles';  // Nom de l'icône Lucide
   attribute: string;
   attributeArabic: string;
   description: string;
   color: string;
   days: Day[];
   blocks: BlockInfo[];      // Informations sur les 7 blocs
+  introduction?: string;   // Texte d'introduction du défi
 }
 
 /**
@@ -154,29 +156,29 @@ function getDayDescriptions(day: number, challengeId: string, attribute: string)
   if (challengeId === 'voyage-du-coeur') {
     const descriptions: Record<number, any> = {
       1: {
-        spirituelle: '🌿 Nur Shifa\n\nLire Al-Fâtiha sur un verre d\'eau, avec présence.\n\nSouffler légèrement sur l\'eau.\n\nBoire cette eau ou s\'en essuyer le visage.\n\n---\n\n🌙 Kalwa — Yâ Allah\n\nEntrer en Kalwa avec l\'invocation Yâ Allah.\n\n(Le mode Kalwa n\'est volontairement pas détaillé.)\n\n---\n\n🤍 Intention guidée\n\nAvant de poursuivre le défi, prends un moment pour poser ton intention.\n\nQuestionne ton cœur, simplement :\n\nQu\'est-ce que je veux apaiser en moi ?\n\nQu\'est-ce qui me pèse le plus aujourd\'hui ?\n\nQuelle gêne revient souvent dans mon cœur ?\n\nPuis formule une intention courte et sincère, par exemple :\n\n> « Ô Allah, je fais ce chemin pour apaiser mon cœur de … »',
+        spirituelle: '🌿 Nur Shifa\n\nLire Al-Fâtiha sur un verre d\'eau, avec présence.\nSouffler légèrement sur l\'eau.\nBoire cette eau ou s\'en essuyer le visage.',
         discipline: null,
-        action: null
+        action: '🤍 Intention guidée\n\nAvant de poursuivre le défi, prends un moment pour poser ton intention.\nQuestionne ton cœur, simplement :\nQu\'est-ce que je veux apaiser en moi ?\nQu\'est-ce qui me pèse le plus aujourd\'hui ?\nQuelle gêne revient souvent dans mon cœur ?\nPuis formule une intention courte et sincère, par exemple :\n> « Ô Allah, je fais ce chemin pour apaiser mon cœur de … »'
       },
       2: {
-        spirituelle: 'Tâche spirituelle — Présence du cœur\n\nMéditation :\nPorter l\'attention sur le cœur comme lieu de réception de la miséricorde d\'Allah.\nVisualiser une lumière apaisante (comme symbole).\nRéciter Yâ Rahmân, Yâ Rahîm pendant 5 à 10 minutes.\n\n> Objectif : adoucir le cœur et installer la sakîna.',
-        discipline: 'Tâche de discipline — Préserver la douceur\n\nAujourd\'hui, observe ce qui durcit ton cœur\net abstiens-toi de toute dureté inutile\n(parole sèche, réaction immédiate, jugement intérieur).\n\n> Sens :\nNe pas ajouter de poids là où le cœur cherche à s\'alléger.',
-        action: 'Tâche d\'action — Geste de miséricorde\n\nPose un seul geste concret de douceur, même discret\n(parole apaisante, pardon silencieux, aide simple).\n\n> Sens :\nLaisser la miséricorde reçue circuler vers l\'extérieur.'
+        spirituelle: '🌿 Tâche spirituelle — Présence du cœur\n\nMéditation :\nPorter l\'attention sur le cœur comme lieu de réception de la miséricorde d\'Allah.\nVisualiser une lumière apaisante (comme symbole).\nRéciter Yâ Rahmân, Yâ Rahîm pendant 5 à 10 minutes.\n\n> Objectif :\nAdoucir le cœur et installer la sakîna.',
+        discipline: '🧭 Tâche de discipline — Préserver la douceur.\n\nAujourd\'hui, observe ce qui durcit ton cœur\net abstiens-toi de toute dureté inutile\n(parole sèche, réaction immédiate, jugement intérieur).\n\n> Sens :\nNe pas ajouter de poids là où le cœur cherche à s\'alléger.',
+        action: '🔥 Tâche d\'action — Geste de miséricorde\n\nPose un seul geste concret de douceur, même discret\n(parole apaisante, pardon silencieux, aide simple).\n\n> Sens :\nLaisser la miséricorde reçue circuler vers l\'extérieur.'
       },
       3: {
-        spirituelle: `Kalwa — ${attribute}`,
-        discipline: 'Tâche de discipline — Ralentir l\'intérieur\n\nAujourd\'hui, refuse la précipitation intérieure.\n\nNe fais qu\'une chose à la fois.\n\nRalentis volontairement lorsque tu te sens pressé ou dispersé.\n\n> Sens :\nLa lumière se perçoit dans le calme, pas dans l\'agitation.',
-        action: 'Tâche d\'action — Présence dans un acte simple\n\nChoisis une action ordinaire de la journée\n(travail, marche, rangement, échange)\net accomplis-la avec présence totale, sans distraction.\n\n> Sens :\nIncarner la lumière dans le quotidien.'
+        spirituelle: `🌿 Tâche spirituelle — Kalwa Yâ Nûr`,
+        discipline: '🧭 Tâche de discipline — Ralentir l\'intérieur\n\nAujourd\'hui, refuse la précipitation intérieure.\nNe fais qu\'une chose à la fois.\nRalentis volontairement lorsque tu te sens pressé ou dispersé.\n\n> Sens :\nLa lumière se perçoit dans le calme, pas dans l\'agitation.',
+        action: '🔥 Tâche d\'action — Présence dans un acte simple.\n\nChoisis une action ordinaire de la journée\n(travail, marche, rangement, échange)\net accomplis-la avec présence totale, sans distraction.\n\n> Sens :\nIncarner la lumière dans le quotidien.'
       },
       4: {
-        spirituelle: 'Tâche spirituelle — Retour au cœur\n\nRéciter doucement Yâ Nûr pendant quelques minutes.\n\nPorter l\'attention sur le cœur et observer ce qui pèse, sans chercher à corriger.\n\n> Objectif :\nReconnaître ce qui alourdit le cœur pour commencer à l\'alléger.',
-        discipline: 'Tâche de discipline — Ne pas nourrir le poids\n\nAujourd\'hui, ne nourris pas une pensée ou une émotion qui t\'alourdit\n(rumination, inquiétude, comparaison).\n\nQuand elle revient, laisse-la passer sans t\'y attacher.\n\n> Sens :\nTout ce que l\'on nourrit grandit.',
-        action: 'Tâche d\'action — Alléger le concret\n\nAllège une seule chose dans ta journée :\n\nranger un petit espace,\n\nterminer une tâche en attente,\n\nretirer quelque chose d\'inutile.\n\n> Sens :\nAlléger l\'extérieur aide le cœur à respirer.'
+        spirituelle: '🌿 Tâche spirituelle — Retour au cœur\n\nRéciter doucement Yâ Nûr pendant quelques minutes.\nPorter l\'attention sur le cœur et observer ce qui pèse, sans chercher à corriger.\n\n> Objectif :\nReconnaître ce qui alourdit le cœur pour commencer à l\'alléger.',
+        discipline: '🧭 Tâche de discipline — Ne pas nourrir le poids.\n\nAujourd\'hui, ne nourris pas une pensée ou une émotion qui t\'alourdit\n(rumination, inquiétude, comparaison).\nQuand elle revient, laisse-la passer sans t\'y attacher.\n\n> Sens :\nTout ce que l\'on nourrit grandit.',
+        action: '🔥 Tâche d\'action — Alléger le concret\n\nAllège une seule chose dans ta journée :\n-ranger un petit espace,\n-terminer une tâche en attente,\n-retirer quelque chose d\'inutile.\n\n> Sens :\nAlléger l\'extérieur aide le cœur à respirer.'
       },
       5: {
-        spirituelle: 'Tâche spirituelle — Apaisement conscient\n\nPrends quelques minutes de calme.\nPorte l\'attention sur ta respiration, puis sur ton cœur.\nSans invocation particulière.\nSans analyse.\n\nLaisse simplement le rythme ralentir.\n\n> Objectif :\nPermettre au cœur de se poser sans effort.',
-        discipline: 'Tâche de discipline — Ne pas s\'alimenter en agitation\n\nAujourd\'hui, évite volontairement une source d\'agitation :\n\ndiscussions inutiles,\n\ncontenus stressants,\n\nsollicitations excessives.\n\n> Sens :\nLe cœur s\'apaise quand on cesse de le surcharger.',
-        action: 'Tâche d\'action — Geste de simplicité\n\nFais une chose simple et lente aujourd\'hui :\n\nmarcher quelques minutes sans distraction,\n\nboire un verre d\'eau en conscience,\n\nranger calmement un petit espace.\n\n> Sens :\nLa simplicité extérieure aide le cœur à retrouver le calme.'
+        spirituelle: '🌿 Tâche spirituelle — Apaisement conscient.\n\nPrends quelques minutes de calme.\nPorte l\'attention sur ta respiration, puis sur ton cœur.\nSans invocation particulière.\nSans analyse.\nLaisse simplement le rythme ralentir.\n\n> Objectif :\nPermettre au cœur de se poser sans effort.',
+        discipline: '🧭 Tâche de discipline — Ne pas s\'alimenter en agitation.\n\nAujourd\'hui, évite volontairement une source d\'agitation :\n-discussions inutiles,\n-contenus stressants,\n-sollicitations excessives.\n\n> Sens :\nLe cœur s\'apaise quand on cesse de le surcharger.',
+        action: '🔥 Tâche d\'action — Geste de simplicité\n\nFais une chose simple et lente aujourd\'hui :\n-marcher quelques minutes sans distraction.\n-boire un verre d\'eau en conscience.\n-ranger calmement un petit espace.\n\n> Sens :\nLa simplicité extérieure aide le cœur à retrouver le calme.'
       },
       6: {
         spirituelle: '🌿 Tâche spirituelle — Parole consciente\n\nMéditation :\nRéciter Subḥâna Rabbiyal \'Aẓîm lentement,\nen ressentant la vibration de la parole et du souffle.\nRespiration profonde, 5 à 10 minutes.\n\n> Objectif :\nPurifier la parole et l\'intention.',
@@ -184,24 +186,64 @@ function getDayDescriptions(day: number, challengeId: string, attribute: string)
         action: '🔥 Tâche d\'action — Parole juste\n\nPrononce une seule parole juste et bénéfique aujourd\'hui :\n\nune vérité dite avec douceur,\n\nun encouragement sincère,\n\nou un silence gardé là où parler aurait blessé.\n\n> Sens :\nLa parole purifiée se reconnaît à son effet.'
       },
       7: {
-        spirituelle: 'Récite le du\'ā :\n\n> Ḥasbiyallāhu lā ilāha illā Huwa\nAllah me suffit, il n\'y a de divinité que Lui.\n\nRépète-le pendant quelques minutes,\ncomme un rappel que le cœur n\'est pas seul.',
-        discipline: 'Aujourd\'hui, lorsque une inquiétude apparaît,\nne la développe pas.\nReconnais-la, puis reviens simplement à ce que tu fais.',
-        action: 'Fais une chose concrète que tu repousses par peur ou hésitation,\nmême petite.\nAvance sans attendre d\'être rassuré.'
+        spirituelle: '🌿 Tâche spirituelle.\n\nRécite le du\'ā :\n> Ḥasbiyallāhu lā ilāha illā Huwa\nAllah me suffit, il n\'y a de divinité que Lui.\n-Répète-le pendant quelques minutes,\ncomme un rappel que le cœur n\'est pas seul.',
+        discipline: '🧭 Tâche de discipline:\n\nAujourd\'hui, lorsque une inquiétude apparaît,\nne la développe pas.\nReconnais-la, puis reviens simplement à ce que tu fais.',
+        action: '🔥 Tâche d\'action:\n\nFais une chose concrète que tu repousses par peur ou hésitation,\nmême petite.\nAvance sans attendre d\'être rassuré.'
       },
       8: {
-        spirituelle: 'Récite le du\'ā :\n\n> Al-ḥamdu lillāhi \'alā kulli ḥāl\nLouange à Allah en toute situation.\n\nRépète-le pendant quelques minutes,\nen pensant à une chose simple pour laquelle tu peux dire merci aujourd\'hui.',
-        discipline: 'Aujourd\'hui, évite de te plaindre, même intérieurement.\nQuand l\'envie vient, remplace-la par une reconnaissance silencieuse.',
-        action: 'Exprime une gratitude concrète :\n\nremercie une personne,\n\nreconnais un effort,\n\nou valorise un détail souvent ignoré.'
+        spirituelle: '🌙Jour8.\n🌿 Tâche spirituelle:\n\nRécite le du\'ā :\n> Al-ḥamdu lillāhi \'alā kulli ḥāl\nLouange à Allah en toute situation.\n-Répète-le pendant quelques minutes,\nen pensant à une chose simple pour laquelle tu peux dire merci aujourd\'hui.',
+        discipline: '🧭 Tâche de discipline:\n\nAujourd\'hui, évite de te plaindre, même intérieurement.\nQuand l\'envie vient, remplace-la par une reconnaissance silencieuse.',
+        action: '🔥 Tâche d\'action.\n\nExprime une gratitude concrète :\n-remercie une personne.\n-reconnais un effort.\n-ou valorise un détail souvent ignoré.'
       },
       9: {
-        spirituelle: `Kalwa ${attribute}.`,
-        discipline: 'Aujourd\'hui, n\'oppose pas de résistance à ce qui te dérange légèrement\n(situation, remarque, imprévu).\n\nAccueille sans réagir immédiatement.',
-        action: 'Fais un choix simple et juste, même inconfortable,\nplutôt que ce qui est facile ou automatique.'
+        spirituelle: `🌙jour 9 — Laisser la lumière éclairer\n-----\n🌿 Tâche spirituelle. \nKalwa Yâ Nûr.`,
+        discipline: '🧭 Tâche de discipline.\n\nAujourd\'hui, n\'oppose pas de résistance à ce qui te dérange légèrement\n(situation, remarque, imprévu).\nAccueille sans réagir immédiatement.',
+        action: '🔥 Tâche d\'action.\n\nFais un choix simple et juste, même inconfortable,\nplutôt que ce qui est facile ou automatique.'
       },
       10: {
-        spirituelle: 'Tâche spirituelle — Actes et ouverture\n\nMéditation :\nPoser les mains sur le cœur ou devant soi,\nréciter Yâ Fattâḥ,\npuis accomplir une action concrète juste.\n\n> Objectif :\nRelier le dhikr à l\'action.',
-        discipline: 'Tâche de discipline — Aller jusqu\'au bout\n\nAujourd\'hui, ne laisse pas une action commencée inachevée.\nCe que tu débutes, tu le termines, même simplement.\n\n> Sens :\nL\'ouverture se bloque souvent dans l\'inachevé.',
-        action: 'Tâche d\'action — Acte utile pour autrui\n\nAccomplis une action utile pour quelqu\'un d\'autre\n(sans attendre de retour) :\naider, rendre service, faciliter.\n\n> Sens :\nLes ouvertures durables passent par le don.'
+        spirituelle: '🌙 Jour 10 — Ouvrir par l\'acte juste\n---\n🌿 Tâche spirituelle — Actes et ouverture\n\nMéditation :\nPoser les mains sur le cœur ou devant soi,\nréciter Yâ Fattâḥ,\npuis accomplir une action concrète juste.\n\n> Objectif :\nRelier le dhikr à l\'action.',
+        discipline: '🧭 Tâche de discipline — Aller jusqu\'au bout.\n\nAujourd\'hui, ne laisse pas une action commencée inachevée.\nCe que tu débutes, tu le termines, même simplement.\n\n> Sens :\nL\'ouverture se bloque souvent dans l\'inachevé.',
+        action: '🔥 Tâche d\'action — Acte utile pour autrui\n\nAccomplis une action utile pour quelqu\'un d\'autre\n(sans attendre de retour) :\naider, rendre service, faciliter.\n\n> Sens :\nLes ouvertures durables passent par le don.'
+      },
+      11: {
+        spirituelle: '🌙 Jour 11 — Al-Fâtiha | Verset 1\n﴿ بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ ﴾\nAu nom d\'Allah, le Tout Miséricordieux, le Très Miséricordieux.\n\n🧠 Sens du verset\nCe verset n\'est pas une information.\nC\'est une entrée en présence.\nIl enseigne :\n-ne rien commencer par soi\n-ne rien s\'approprier\n-placer l\'acte sous la miséricorde, pas sous le contrôle\n\n🌿 Spiritualité:\nLire le verset lentement, puis rester quelques instants en silence en conscience du fait que tout commence par Allah.',
+        discipline: '🧭 Discipline(— tenir l\'entrée)\n1. Ne pas commencer une action importante dans la précipitation.\n2. Marquer un court temps d\'arrêt avant toute décision.\n3. Éviter de parler ou d\'agir mécaniquement.\n4. Refuser l\'automatisme dans les gestes du quotidien.\n5. Se rappeler intérieurement que l\'acte ne t\'appartient pas.\n👉 Discipline = ralentir pour laisser entrer Allah.',
+        action: '🔥 Action:(incarner le commencement juste)\n1. Recommencer consciemment une action habituelle (travail, parole, tâche).\n2. Corriger un geste fait trop vite.\n3. Faire une chose simple avec présence totale.\n4. Choisir la qualité plutôt que la quantité aujourd\'hui.\n5. Poser un acte sans chercher à en tirer un bénéfice personnel.\n👉 Action = agir sans se mettre au centre'
+      },
+      12: {
+        spirituelle: '🌙 Jour 12 — Al-Fâtiha | Verset 2\n﴿ الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ ﴾\nLouange à Allah, Seigneur des mondes.\n\n🧠 Sens du verset :\nCe verset n\'est pas une émotion.\nC\'est une reconnaissance lucide.\nIl enseigne :\nque tout bien a une source\nque la maîtrise ne t\'appartient pas\nque la gratitude précède la demande\n\n🌿 Spiritualité:\nLire le verset lentement, puis méditer sur ce qui t\'est donné sans que tu l\'aies produit.',
+        discipline: '🧭 Discipline: tenir la reconnaissance\n1. S\'abstenir de toute plainte verbale aujourd\'hui.\n2. Ne pas minimiser ce qui t\'est donné, même petit.\n3. Éviter de comparer ta situation à celle des autres.\n4. Reconnaître intérieurement un bienfait sans l\'expliquer.\n5. Garder une attitude sobre face à ce qui te manque.\n👉 Discipline = ne pas laisser la plainte couvrir la louange',
+        action: '🔥 Action: incarner la gratitude\n1. Exprimer une gratitude concrète (parole ou geste), sans attente.\n2. Prendre soin de quelque chose qui t\'est confié.\n3. Utiliser un bienfait dans un but juste.\n4. Aider quelqu\'un avec ce que tu as déjà.\n5. Transformer une facilité en acte de bien.\n👉 Action = remercier par l\'usage'
+      },
+      13: {
+        spirituelle: '🌙 Jour 13 — Al-Fâtiha | Verset 3\n﴿ الرَّحْمَٰنِ الرَّحِيمِ ﴾\nLe Tout Miséricordieux, le Très Miséricordieux.\n\n🧠 Sens du verset :\nCe verset ne décrit pas seulement Allah.\nIl rappelle la manière dont Il se manifeste envers la création :\npar la miséricorde avant le jugement,\npar la douceur avant la rigueur.\nIl enseigne :\nque la miséricorde précède la correction.\nque la dureté n\'est pas la voie.\nque l\'on est traité comme on traite.\n\n🌿 Spiritualité:\nLire le verset lentement, puis méditer sur la miséricorde reçue, même quand elle n\'a pas été méritée.',
+        discipline: '🧭 Discipline: tenir la douceur\n1. S\'abstenir de toute dureté inutile dans la parole.\n2. Ne pas répondre immédiatement sous l\'émotion.\n3. Éviter le jugement intérieur envers soi ou autrui.\n4. Ralentir volontairement dans les échanges tendus.\n5. Choisir la douceur même quand tu pourrais imposer.\n👉 Discipline = ne pas fermer la porte de la miséricorde',
+        action: '🔥 Action: incarner la miséricorde\n1. Faciliter une situation pour quelqu\'un.\n2. Pardonner une petite chose sans la rappeler.\n3. Aider sans faire sentir l\'aide.\n4. Alléger une charge (temps, parole, geste).\n5. Répondre avec calme là où tu aurais répondu sèchement.\n👉 Action = faire passer la miséricorde avant la victoire.'
+      },
+      14: {
+        spirituelle: '🌙 Jour 14 — Al-Fâtiha | Verset 4\n﴿ مَالِكِ يَوْمِ الدِّينِ ﴾\nMaître du Jour de la rétribution.\n\n🧠 Sens du verset :\nCe verset remet l\'âme à sa place.\nIl rappelle que :\nle jugement final n\'appartient à personne d\'autre qu\'Allah.\nchaque acte a une portée réelle.\nla responsabilité ne peut pas être évitée.\nIl enseigne :\nla conscience des conséquences.\nla fin de l\'illusion d\'impunité.\nla lucidité sans peur excessive.\n\n🌿 Spiritualité:\nLire le verset lentement, puis méditer sur le fait que tout acte aura un sens et un retour, même ceux que personne ne voit.',
+        discipline: '🧭 Discipline:tenir la responsabilité.\n1. Agir aujourd\'hui en te rappelant que chaque geste compte.\n2. Éviter toute légèreté dans une action connue comme sérieuse.\n3. Ne pas repousser une obligation claire.\n4. Assumer un tort sans te justifier excessivement.\n5. Garder une attitude droite même sans contrôle extérieur.\n👉 Discipline = vivre en conscience du retour',
+        action: '🔥 Action: incarner la responsabilité.\n1. Corriger un comportement discret mais incorrect.\n2. Tenir une promesse ou un engagement négligé.\n3. Réparer une petite injustice, même silencieuse.\n4. Choisir la droiture plutôt que la facilité.\n5. Mettre de l\'ordre dans une affaire laissée en suspens.\n👉 Action = agir comme si cela comptait vraiment.'
+      },
+      15: {
+        spirituelle: '🌙 Jour 15 — Al-Fâtiha | Verset 5\n﴿ إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ ﴾\nC\'est Toi que nous adorons, et c\'est de Toi que nous implorons l\'aide.\n\n🧠 Sens du verset :\nCe verset est un engagement.\nIl affirme :\nl\'exclusivité de l\'adoration.\nla dépendance réelle à Allah.\nla fin de l\'illusion d\'autosuffisance.\nIl enseigne :\nl\'humilité active.\nl\'équilibre entre effort et reliance.\nla cohérence entre ce que l\'on dit et ce que l\'on vit.\n\n🌿 Spiritualité:\nLire le verset lentement, puis méditer sur cette parole comme un pacte personnel : adorer Allah seul et reconnaître son besoin d\'aide.',
+        discipline: '🧭 Discipline:tenir l\'exclusivité et la reliance.\n1. Cesser aujourd\'hui de compter uniquement sur tes propres forces.\n2. Ne pas agir par orgueil ou autosuffisance.\n3. Revenir intérieurement à Allah avant une tâche difficile.\n4. Refuser de chercher l\'approbation des gens au détriment d\'Allah.\n5. Garder la cohérence entre l\'intention et l\'acte.\n👉 Discipline = ne pas se suffire à soi-même.',
+        action: '🔥 Action:demander et agir juste\n1. Demander sincèrement l\'aide d\'Allah avant une action importante.\n2. Accepter l\'aide d\'une personne sans te sentir diminué.\n3. Renoncer à une action motivée par l\'ego.\n4. Poser un acte d\'adoration avec présence réelle.\n5. Agir sans te glorifier du résultat.\n👉 Action = agir en servant, pas en dominant.'
+      },
+      16: {
+        spirituelle: '🌙 Jour 16 — Al-Fâtiha | Verset 6\n﴿ اهْدِنَا الصِّرَاطَ الْمُسْتَقِيمَ ﴾\nGuide-nous sur le droit chemin.\n\n🧠 Sens du verset :\nCe verset est une demande claire, répétée chaque jour.\nIl affirme que :\nla guidance ne s\'improvise pas.\nconnaître le bien ne suffit pas, il faut y être conduit.\nla droiture est un chemin vivant, pas une idée abstraite.\nIl enseigne :\nl\'humilité face à la direction.\nla vigilance face aux écarts subtils.\nla nécessité de demander, encore et encore.\n\n🌿 Spiritualité:\nLire le verset lentement, puis le formuler intérieurement comme une demande réelle, personnelle et présente.',
+        discipline: '🧭 Discipline: tenir la direction\n1. Refuser aujourd\'hui un choix flou ou ambigu.\n2. Ne pas justifier une décision que tu sais déviée.\n3. Ralentir avant toute décision importante.\n4. Vérifier que tes actions vont dans la même direction.\n5. Te rappeler que la droiture se tient au quotidien, pas ponctuellement.\n👉 Discipline = ne pas marcher sans direction.',
+        action: '🔥 Action:marcher droit concrètement\n1. Choisir l\'option la plus droite même si elle est plus exigeante.\n2. Corriger un petit écart volontairement ignoré.\n3. Poser un acte cohérent avec ce que tu sais être juste.\n4. Renoncer à une facilité qui t\'éloigne du droit chemin.\n5. Avancer avec constance plutôt qu\'avec précipitation.\n👉 Action = mettre les pas dans la bonne direction.'
+      },
+      17: {
+        spirituelle: '🌙 Jour 17 — Al-Fâtiha | Verset 7\n﴿ صِرَاطَ الَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ الْمَغْضُوبِ عَلَيْهِمْ وَلَا الضَّالِّينَ ﴾\nLe chemin de ceux que Tu as comblés de faveurs,\nnon pas de ceux qui ont encouru Ta colère,\nni des égarés.\n\n🧠 Sens du verset :\nCe verset précise la demande de guidance.\nIl enseigne que :\ntous les chemins ne se valent pas.\nla droiture a des modèles concrets.\nl\'égarement peut venir soit du refus conscient, soit de la confusion.\nIl rappelle que la guidance n\'est pas abstraite :\nelle se voit dans les choix, les comportements, les fréquentations.\n\n🌿 Spiritualité:\nLire le verset lentement, puis méditer sur le chemin que tu suis réellement, pas celui que tu revendiques.',
+        discipline: '🧭 Discipline:choisir le bon modèle.\n1. Ne pas imiter un comportement que tu sais erroné, même s\'il est courant.\n2. Refuser une habitude populaire mais contraire à tes valeurs.\n3. Être vigilant face à la confusion déguisée en "liberté".\n4. Ne pas persister dans une erreur connue par orgueil.\n5. Te rappeler que le bon chemin se reconnaît à ses fruits.\n👉 Discipline = ne pas suivre sans discernement',
+        action: '🔥 Action: marcher avec les justes\n1. Align­er un choix concret avec un modèle droit et intègre.\n2. T\'éloigner d\'une influence qui te trouble intérieurement.\n3. Renforcer une pratique qui t\'ancre dans la droiture.\n4. Agir aujourd\'hui comme quelqu\'un que tu respectes spirituellement.\n5. Choisir la clarté plutôt que la facilité.\n👉 Action = marcher avec ceux qui ont reçu la faveur.'
+      },
+      18: {
+        spirituelle: `🌙18 — Intégration de la lumière.\n\n🌿 Tâche spirituelle:\nKalwa Yâ Nûr.`,
+        discipline: '🧭 Tâche de discipline:\n\nAujourd\'hui, n\'ajoute rien de nouveau.\nRespecte ce qui est déjà en place : rythme, engagements, décisions prises.\n\n> Sens : intégrer avant d\'accumuler.',
+        action: '🔥 Tâche d\'action:\n\nApplique une chose apprise depuis le début du défi\ndans un geste concret de la journée\n(parole, comportement, choix simple).\n\n> Sens : la lumière devient réelle quand elle est vécue.'
       },
       18: {
         spirituelle: `Kalwa ${attribute}.`,
@@ -209,67 +251,102 @@ function getDayDescriptions(day: number, challengeId: string, attribute: string)
         action: 'Applique une chose apprise depuis le début du défi\ndans un geste concret de la journée\n(parole, comportement, choix simple).\n\n> Sens : la lumière devient réelle quand elle est vécue.'
       },
       19: {
-        spirituelle: `Kalwa ${attribute}.\n\n> Axe spirituel : rester avec la lumière sans fuite.`,
-        discipline: 'Aujourd\'hui, ne cherche pas à te distraire\nquand un léger inconfort apparaît\n(ennui, impatience, vide, agitation).\n\n> Axe : arrêter la compensation.',
-        action: 'Continue une tâche routinière jusqu\'au bout,\nsans la rendre plus agréable,\nsans t\'échapper mentalement.\n\n> Axe : fidélité à l\'ordinaire.',
-        introspection: 'Répond intérieurement à cette question :\n« Qu\'est-ce que j\'utilise pour éviter de ressentir ? »\n\n> Axe : lucidité sans analyse.',
-        ancrage: 'Accepte un inconfort mineur aujourd\'hui\n(ne pas changer de place, ne pas optimiser, ne pas améliorer).\n\n> Axe : stabilité corporelle.'
+        spirituelle: '🌙Jour 19 — Tenir sans compenser:\n\n🌿 Spiritualité:\n Kalwa Yâ Nûr.\n> Axe spirituel : rester avec la lumière sans fuite.',
+        discipline: '🧭 Discipline:\n\nAujourd\'hui, ne cherche pas à te distraire\nquand un léger inconfort apparaît\n(ennui, impatience, vide, agitation).\n\n> Axe : arrêter la compensation.',
+        action: '🔥 Action:\n\nContinue une tâche routinière jusqu\'au bout,\nsans la rendre plus agréable,\nsans t\'échapper mentalement.\n\n> Axe : fidélité à l\'ordinaire.',
+        introspection: '🪞 Introspection:\n\nRépond intérieurement à cette question :\n« Qu\'est-ce que j\'utilise pour éviter de ressentir ? »\n\n> Axe : lucidité sans analyse.',
+        ancrage: '🧱 Ancrage concret:\n\nAccepte un inconfort mineur aujourd\'hui\n(ne pas changer de place, ne pas optimiser, ne pas améliorer).\n\n> Axe : stabilité corporelle.'
       },
       20: {
-        spirituelle: 'Spiritualité — Clarté intérieure\n\nMéditation :\nPorter l\'attention sur le front comme lieu de concentration.\nVisualiser la lumière de guidance descendant vers le cœur.\nRéciter Yâ Nûr pendant 5 à 10 minutes.\n\n> Axe : voir juste avant d\'agir.',
-        discipline: 'Discipline — Ne pas se mentir\n\nAujourd\'hui, ne te raconte pas d\'histoire\npour justifier une décision, un retard ou un choix flou.\nAppelle les choses par leur nom, intérieurement.\n\n> Axe : honnêteté intérieure.',
-        action: 'Action — Choix clair\n\nFais un choix clair aujourd\'hui\nlà où tu laissais volontairement le flou\n(même un petit choix).\n\n> Axe : la clarté soulage le cœur.',
-        introspection: 'Pose-toi cette question, une seule fois :\n« Où est-ce que je sais déjà ce qui est juste ? »\n\n> Axe : reconnaître ce qui est déjà vu.',
-        ancrage: 'Élimine une source de confusion matérielle :\nun objet mal placé, un message ambigu, une information inutile.\n\n> Axe : la clarté commence dans le concret.'
+        spirituelle: '🌙Jour 20 — Clarifier la vision\n---\n\n🌿 Spiritualité — Clarté intérieure:\n\nMéditation :\nPorter l\'attention sur le front comme lieu de concentration.\nVisualiser la lumière de guidance descendant vers le cœur.\nRéciter Yâ Nûr pendant 5 à 10 minutes.\n\n> Axe : voir juste avant d\'agir.',
+        discipline: '🧭 Discipline — Ne pas se mentir:\n\nAujourd\'hui, ne te raconte pas d\'histoire\npour justifier une décision, un retard ou un choix flou.\nAppelle les choses par leur nom, intérieurement.\n\n> Axe : honnêteté intérieure.',
+        action: '🔥 Action — Choix clair:\n\nFais un choix clair aujourd\'hui\nlà où tu laissais volontairement le flou\n(même un petit choix).\n\n> Axe : la clarté soulage le cœur.',
+        introspection: '🪞 Introspection:\n\nPose-toi cette question, une seule fois :\n« Où est-ce que je sais déjà ce qui est juste ? »\n\n> Axe : reconnaître ce qui est déjà vu.',
+        ancrage: '🧱 Ancrage concret:\n\nÉlimine une source de confusion matérielle:\nun objet mal placé, un message ambigu, une information inutile.\n\n> Axe : la clarté commence dans le concret.'
       },
       21: {
-        spirituelle: `Kalwa ${attribute}.`,
-        discipline: 'Discipline — Ne pas dépasser\n\nAujourd\'hui, ne dépasse pas une limite claire :\n\ntemps,\n\nénergie,\n\ndisponibilité.\n\nQuand c\'est suffisant, tu t\'arrêtes.',
-        action: 'Action — Dire non une fois\n\nDis un non juste aujourd\'hui\n(là où tu aurais dit oui par habitude ou pression).',
-        introspection: 'Répond intérieurement à cette question :\n« Où est-ce que je me surcharge inutilement ? »',
-        ancrage: 'Crée une limite visible :\nfermer un onglet, couper une notification, fixer une fin claire à une activité.'
+        spirituelle: '🌙Jour 21 — Poser une limite claire:\n---\n🌿 Spiritualité:\n Kalwa  Yâ Nûr.',
+        discipline: '🧭 Discipline — Ne pas dépasser:\n\nAujourd\'hui, ne dépasse pas une limite claire :\n-temps.\n-énergie.\n-disponibilité.\n-Quand c\'est suffisant, tu t\'arrêtes.',
+        action: '🔥 Action — Dire non une fois:\n\nDis un non juste aujourd\'hui\n(là où tu aurais dit oui par habitude ou pression).',
+        introspection: '🪞 Introspection:\n\nRépond intérieurement à cette question :\n« Où est-ce que je me surcharge inutilement ? »',
+        ancrage: '🧱 Ancrage concret:\n\nCrée une limite visible :\nfermer un onglet, couper une notification, fixer une fin claire à une activité.'
       },
       22: {
-        spirituelle: 'Récite le du\'ā :\n\n> Allāhumma ihdinī li-aḥsani l-akhlāq\nÔ Allah, guide-moi vers le meilleur comportement.\n\nRépète-le pendant quelques minutes, comme une demande de retenue.',
-        discipline: 'Discipline — Différer volontairement\n\nDiffère volontairement une réponse ou une décision non urgente.\nChoisis consciemment de ne pas agir tout de suite.',
-        action: 'Laisse une situation évoluer sans intervenir,\nmême si tu aurais habituellement pris la main.',
-        introspection: '« Qu\'est-ce qui déclenche mes réactions rapides ? »',
-        ancrage: 'Range ou mets hors de vue un élément\nqui provoque chez toi une réaction automatique\n(notification, application, objet).'
+        spirituelle: '🌙Jour 22 — Suspendre la réaction:\n\n🌿 Spiritualité:\n\nRécite le du\'ā : Allāhumma ihdinī li-aḥsani l-akhlāq\nÔ Allah, guide-moi vers le meilleur comportement.\nRépète-le pendant quelques minutes, comme une demande de retenue.',
+        discipline: '🧭 Discipline — Différer volontairement:\n\nDiffère volontairement une réponse ou une décision non urgente.\nChoisis consciemment de ne pas agir tout de suite.',
+        action: '🔥 Action:\n\nLaisse une situation évoluer sans intervenir,\nmême si tu aurais habituellement pris la main.',
+        introspection: '🪞 Introspection:\n\n« Qu\'est-ce qui déclenche mes réactions rapides ? »',
+        ancrage: '🧱 Ancrage concret:\n\nRange ou mets hors de vue un élément\nqui provoque chez toi une réaction automatique\n(notification, application, objet).'
       },
       23: {
-        spirituelle: 'Récite le du\'ā :\n\n> Allāhumma lā taj\'al ad-dunyā akbara hamminā\nÔ Allah, ne fais pas de ce monde notre plus grande préoccupation.\n\nRépète-le pendant quelques minutes, sans analyse.',
-        discipline: 'Discipline — Ne pas insister\n\nAujourd\'hui, n\'insiste pas pour obtenir quelque chose\n(réponse, validation, résultat).',
-        action: 'Renonce volontairement à une petite chose\nque tu voulais absolument aujourd\'hui.',
-        introspection: '« À quoi est-ce que je m\'accroche inutilement ? »',
-        ancrage: 'Éloigne-toi consciemment d\'un contenu, objet ou habitude\nqui capte excessivement ton attention.'
+        spirituelle: '🌙Jour 23 — Détacher le cœur:\n-----\n🌿 Spiritualité:\n\nRécite le du\'ā : Allāhumma lā taj\'al ad-dunyā akbara hamminā\nÔ Allah, ne fais pas de ce monde notre plus grande préoccupation.\nRépète-le pendant quelques minutes, sans analyse.',
+        discipline: '🧭 Discipline — Ne pas insister:\n\nAujourd\'hui, n\'insiste pas pour obtenir quelque chose\n(réponse, validation, résultat).',
+        action: '🔥 Action:\n\nRenonce volontairement à une petite chose\nque tu voulais absolument aujourd\'hui.',
+        introspection: '🪞 Introspection:\n\n« À quoi est-ce que je m\'accroche inutilement ? »',
+        ancrage: '🧱 Ancrage concret:\n\nÉloigne-toi consciemment d\'un contenu, objet ou habitude\nqui capte excessivement ton attention.'
       },
       24: {
-        spirituelle: 'Spiritualité — Stabilité intérieure\n\nMéditation :\nRespiration consciente.\nAttention portée au centre du corps (ventre) comme lieu de stabilité.\nRéciter Yâ Qawiyy pendant 5 à 10 minutes.\n\n> Objectif :\nRenforcer la stabilité et la maîtrise.',
-        discipline: 'Discipline — Tenir une position\n\nAujourd\'hui, ne change pas d\'avis sur une décision simple\nque tu sais déjà juste.\nTiens ta position sans te justifier.',
-        action: 'Action — Effort maintenu\n\nMaintiens un effort physique ou pratique jusqu\'au bout\n(même léger),\nsans l\'interrompre par confort.',
-        introspection: '« Où est-ce que je manque de fermeté intérieure ? »',
-        ancrage: 'Adopte une posture stable aujourd\'hui :\nassis droit, debout ancré, gestes posés\npendant une activité précise.'
+        spirituelle: '🌙Jour 24 — S\'établir intérieurement:\n-----\n🌿 Spiritualité — Stabilité intérieure\n\nMéditation :\nRespiration consciente.\nAttention portée au centre du corps (ventre) comme lieu de stabilité.\nRéciter Yâ Qawiyy pendant 5 à 10 minutes.\n\n> Objectif :\nRenforcer la stabilité et la maîtrise.',
+        discipline: '🧭 Discipline — Tenir une position:\n\nAujourd\'hui, ne change pas d\'avis sur une décision simple\nque tu sais déjà juste.\nTiens ta position sans te justifier.',
+        action: '🔥 Action — Effort maintenu:\n\nMaintiens un effort physique ou pratique jusqu\'au bout\n(même léger),\nsans l\'interrompre par confort.',
+        introspection: '🪞 Introspection:\n\n« Où est-ce que je manque de fermeté intérieure ? »',
+        ancrage: '🧱 Ancrage concret:\n\nAdopte une posture stable aujourd\'hui :\nassis droit, debout ancré, gestes posés\npendant une activité précise.'
       },
       25: {
-        spirituelle: 'Spiritualité — Dhikr\n\nRécite :\n\nAstaghfirullāh\n« Je demande pardon à Allah »\n\nRépète-le pendant quelques minutes,\ncomme une libération, pas comme une accusation.',
-        discipline: 'Aujourd\'hui, ne te parles pas durement.\nAucune phrase intérieure qui t\'accuse ou t\'écrase.',
-        action: 'Corrige une petite erreur calmement,\nsans te reprocher de l\'avoir faite.',
-        introspection: '« De quoi est-ce que je me fais porter la faute inutilement ? »',
-        ancrage: 'Dis intérieurement une phrase simple :\n« Je fais ce que je peux, et je confie le reste à Allah. »'
+        spirituelle: 'Jour 25 — Cesser l\'auto-accusation\n---\n🌿 Spiritualité — Dhikr\n\nRécite : Astaghfirullāh\n« Je demande pardon à Allah »\nRépète-le pendant quelques minutes,\ncomme une libération, pas comme une accusation.',
+        discipline: '🧭 Discipline:\n\nAujourd\'hui, ne te parles pas durement.\nAucune phrase intérieure qui t\'accuse ou t\'écrase.',
+        action: '🔥 Action:\n\nCorrige une petite erreur calmement,\nsans te reprocher de l\'avoir faite.',
+        introspection: '🪞 Introspection:\n\n« De quoi est-ce que je me fais porter la faute inutilement ? »',
+        ancrage: '🧱 Ancrage concret:\n\nDis intérieurement une phrase simple :\n« Je fais ce que je peux, et je confie le reste à Allah. »'
       },
       26: {
-        spirituelle: 'Spiritualité — Dhikr\n\nRécite :\n\nMā shā\' Allāh\n« Ce qu\'Allah a voulu »\n\nRépète-le pendant quelques minutes,\nen reconnaissant que chaque chemin est différent.',
-        discipline: 'Aujourd\'hui, ne te compares pas\nni en mieux, ni en moins bien.',
-        action: 'Réduis volontairement une exposition\nqui nourrit la comparaison\n(réseaux, discussions, contenus).',
-        introspection: '« Qui est-ce que je regarde au lieu de regarder mon cœur ? »',
-        ancrage: 'Occupe-toi d\'une chose simple pour toi,\nsans référence à personne d\'autre.'
+        spirituelle: '🌙Jour 26 — Retirer la comparaison\n-----\n🌿 Spiritualité — Dhikr\n\nRécite : Mā shā\' Allāh\n« Ce qu\'Allah a voulu »\nRépète-le pendant quelques minutes,\nen reconnaissant que chaque chemin est différent.',
+        discipline: '🧭 Discipline:\n\nAujourd\'hui, ne te compares pas\nni en mieux, ni en moins bien.',
+        action: '🔥 Action:\n\nRéduis volontairement une exposition\nqui nourrit la comparaison\n(réseaux, discussions, contenus).',
+        introspection: '🪞 Introspection:\n\n« Qui est-ce que je regarde au lieu de regarder mon cœur ? »',
+        ancrage: '🧱 Ancrage concret:\n\nOccupe-toi d\'une chose simple pour toi,\nsans référence à personne d\'autre.'
       },
       27: {
-        spirituelle: `Kalwa ${attribute}.`,
-        discipline: 'Aujourd\'hui, ne rouvre pas un sujet ancien\n(pensée, discussion, souvenir)\nque ton cœur a déjà travaillé.',
-        action: 'Laisse une chose inachevée en paix\nsans la forcer à se résoudre aujourd\'hui\n(si elle peut attendre sans conséquence).',
-        introspection: '« Qu\'est-ce que je peux laisser à Allah sans y revenir ? »',
-        ancrage: 'Range ou mets à distance un objet ou un élément symbolique\nlié à une préoccupation passée.'
+        spirituelle: '🌙Jour 27 — Déposer ce qui reste\n------\n🌿 Spiritualité :\n Kalwa  Yâ Nûr.',
+        discipline: '🧭 Discipline:\n\nAujourd\'hui, ne rouvre pas un sujet ancien\n(pensée, discussion, souvenir)\nque ton cœur a déjà travaillé.',
+        action: '🔥 Action:\n\nLaisse une chose inachevée en paix\nsans la forcer à se résoudre aujourd\'hui\n(si elle peut attendre sans conséquence).',
+        introspection: '🪞 Introspection:\n\n« Qu\'est-ce que je peux laisser à Allah sans y revenir ? »',
+        ancrage: '🧱 Ancrage concret:\n\nRange ou mets à distance un objet ou un élément symbolique\nlié à une préoccupation passée.'
+      },
+      28: {
+        spirituelle: '🌙 Jour 28 — Sourate Yâ-Sîn (36:1–10).\n\n🧠 Thème central des versets.\nLe Coran est un rappel clair.\nLa voie droite est déjà connue,\nCertains cœurs se ferment par refus, pas par ignorance,\nLa guidance est proposée, jamais imposée\n\n🌿 SPIRITUALITÉ:\n(lecture & méditation)\n1. Lire les versets 1 à 10 lentement, sans multitâche et mediter',
+        discipline: '🧭 DISCIPLINE\n(disponibilité au rappel)\n1. Couper volontairement toute distraction pendant le temps spirituel.\n2. Ne pas repousser la lecture à plus tard dans la journée.\n3. Respecter un moment fixe pour la lecture.\n4. Ne pas consommer d\'informations inutiles juste après la lecture.\n5. S\'abstenir de parler inutilement dans l\'heure qui suit.',
+        action: '🔥 ACTION:\n(incarner la voie droite)\n1. Accomplir une action juste que tu sais déjà devoir faire.\n2. Corriger un comportement que tu sais incorrect.\n3. Répondre à une responsabilité que tu retardes.\n4. Poser un acte aligné avec une valeur claire de l\'islam.\n5. Cesser une action que tu sais inutile ou nuisible.',
+        introspection: '🤍 INTROSPECTION:\n(voir les voiles intérieurs)\n1. Identifier une vérité que tu connais mais que tu évites.\n2. Reconnaître une habitude de justification intérieure.\n3. Observer une résistance quand un rappel apparaît.\n4. Noter ce qui te ferme intérieurement (peur, orgueil, confort).\n5. Accepter sans jugement ce qui est encore bloqué.',
+        ancrage: '🪨 ANCRAGE CONCRET:\n(rendre le rappel vivant dans le corps)\n1. Marcher lentement en conscience après la lecture.\n2. Respirer profondément en sentant l\'air entrer et sortir.\n3. Ancrer les pieds au sol quelques instants.\n4. Se redresser physiquement (posture droite).\n5. Toucher un élément réel (sol, mur, objet) pour revenir au présent.'
+      },
+      29: {
+        spirituelle: '🌙 Jour 29 — Sourate Yâ-Sîn (36:12–20)\n\n🧠 Sens des versets :\nDans ces versets, Allah تعالى parle de :\nCeux qui craignent Allah dans l\'invisible.\nLa récompense et le pardon promis.\nLe fait que tout est compté et inscrit.\nL\'exemple du peuple qui rejette les messagers.\nL\'homme venu de loin qui appelle à suivre la vérité, malgré l\'opposition.\n👉 Thème central :\nCroire sans voir, rester droit quand la majorité refuse, assumer la vérité même seul.\n\n🌿 SPIRITUALITÉ:\n(lecture & rappel)\n1. Lire les versets 12 à 20 lentement et entièrement, avec attention et silence après la lecture.',
+        discipline: '🧭 DISCIPLINE:\n(fidélité intérieure, même sans regard extérieur)\n1. Agir correctement aujourd\'hui même si personne ne te voit.\n2. Respecter une obligation sans chercher reconnaissance.\n3. Ne pas modifier ton comportement pour plaire aux autres.\n4. Garder une intention droite dans un acte discret.\n5. Ne pas abandonner une bonne pratique par peur du regard.\n👉 Discipline = tenir dans l\'invisible',
+        action: '🔥 ACTION:\n(témoigner par les actes)\n1. Défendre une vérité avec calme, sans agressivité.\n2. Poser un acte juste même s\'il est impopulaire.\n3. Soutenir une personne ou une cause juste discrètement.\n4. Dire une parole vraie quand le silence serait plus confortable.\n5. Choisir Allah plutôt que l\'approbation des gens.\n👉 Action = avancer même seul',
+        introspection: '🤍 INTROSPECTION:\n(regard sur la sincérité)\n1. Observer ce que tu fais uniquement quand on te regarde.\n2. Identifier une peur liée au jugement des autres.\n3. Reconnaître où tu adaptes ta foi pour être accepté.\n4. Te demander : si personne ne voyait, agirais-je pareil ?\n5. Accueillir avec honnêteté tes contradictions intérieures.\n👉 Introspection = aligner l\'intérieur et l\'extérieur',
+        ancrage: '🪨 ANCRAGE CONCRET:\n(incarner la fidélité)\n1. Marcher seul quelques minutes en silence.\n2. Poser les mains sur la poitrine et respirer calmement.\n3. Écrire une intention sincère et la garder pour toi.\n4. Ralentir volontairement un geste quotidien.\n5. Sentir le poids du corps et l\'instant présent.\n👉 Ancrage = rester stable quand l\'extérieur bouge.'
+      },
+      30: {
+        spirituelle: '🌙 Jour 30 — Sourate Yâ-Sîn (36:21–30)\n\n🧠 Sens des versets :\nDans ces versets, Allah ﷻ parle de :\nSuivre ceux qui ne demandent aucune récompense.\nLa sincérité du message, sans intérêt personnel.\nLe rappel que la création entière témoigne d\'Allah.\nLe regret profond de ceux qui ont rejeté la vérité.\nLe caractère éphémère de la vie et des occasions manquées.\n👉 Thème central :\nLa vérité est simple, sincère, et sans contrepartie.\nLe plus grand regret est de l\'avoir reconnue trop tard.\n\n🌿 SPIRITUALITÉ\n(lecture & rappel)\n1. Lire les versets 21 à 30 lentement et entièrement, avec attention et silence après la lecture.',
+        discipline: '🧭 DISCIPLINE:\n(pureté de l\'intention)\n1. Refuser de faire une bonne action dans l\'attente d\'un retour.\n2. Vérifier l\'intention avant d\'agir : pour Allah ou pour autre chose ?\n3. Continuer une action juste même sans encouragement.\n4. Ne pas conditionner le bien à une récompense.\n5. Éviter toute recherche de reconnaissance dans la foi.\n👉 Discipline = agir sans calcul',
+        action: '🔥 ACTION:\n(sincérité incarnée)\n1. Accomplir un bien sans en parler à personne.\n2. Aider sans expliquer ni justifier ton geste.\n3. Dire une vérité utile sans chercher l\'approbation.\n4. Faire une sadaqa discrète, même minime.\n5. Poser un acte juste sans attendre de retour immédiat.\n👉 Action = donner sans attendre',
+        introspection: '🤍 INTROSPECTION:\n(regarder le regret avant qu\'il n\'arrive)\n1. Identifier une vérité que tu reconnais mais que tu repousses\n2. Imaginer le regret de ne pas avoir agi aujourd\'hui\n3. Reconnaître où tu attends trop avant de faire le bien\n4. Te demander : qu\'est-ce que je ne veux pas regretter plus tard ?\n5. Accepter que certaines occasions ne reviennent pas\n👉 Introspection = agir avant le regret',
+        ancrage: '🪨 ANCRAGE CONCRET:\n(se rappeler de la finitude)\n1. Marcher lentement en observant ce qui disparaît (ombres, sons)\n2. Toucher un objet simple et rappeler sa fragilité\n3. Respirer profondément en conscience de l\'instant\n4. Écrire une action que tu feras aujourd\'hui, pas demain\n5. T\'ancrer dans le présent sans projection excessive\n👉 Ancrage = vivre maintenant'
+      },
+      31: {
+        spirituelle: '🌙 Jour 31 — Sourate Yâ-Sîn (36:31–40)\n\n🧠 Sens des versets:\nDans ces versets, Allah ﷻ parle de :\nLes générations passées détruites dont les gens ne tirent pas de leçon.\nLes signes constants d\'Allah dans la création.\nL\'ordre précis du jour et de la nuit.\nLe fait que chaque chose suit une trajectoire déterminée.\nL\'impossibilité pour la création de sortir du cadre qu\'Allah a fixé.\n👉 Thème central :\nLes signes sont clairs, répétés et stables.\nL\'oubli vient du cœur, pas du manque de preuves.\n\n🌿 SPIRITUALITÉ:\n(lecture & rappel)\n1. Lire les versets 31 à 40 lentement et entièrement, avec attention et silence après la lecture.',
+        discipline: '🧭 DISCIPLINE:\n(respect de l\'ordre et des limites)\n1. Respecter un cadre précis aujourd\'hui (horaire, engagement, règle)\n2. Ne pas dépasser volontairement une limite connue\n3. Accepter une contrainte sans te plaindre\n4. Honorer un rythme naturel (repos, effort, silence)\n5. Cesser de lutter contre un ordre que tu ne contrôles pas\n👉 Discipline = se placer dans l\'ordre, pas contre lui',
+        action: '🔥 ACTION:\n(s\'aligner avec l\'ordre voulu)\n1. Mettre de l\'ordre dans un aspect concret de ta vie\n2. Réparer un déséquilibre évident (excès, négligence)\n3. Agir avec régularité plutôt qu\'avec intensité\n4. Ajuster un comportement pour qu\'il soit plus juste et mesuré\n5. Respecter le temps des choses sans précipitation\n👉 Action = agir en harmonie',
+        introspection: '🤍 INTROSPECTION:\n(regarder sa place)\n1. Identifier où tu refuses une limite\n2. Reconnaître une lutte inutile contre la réalité\n3. Observer ton rapport au temps (impatience, fuite)\n4. Te demander : suis-je aligné ou en résistance ?\n5. Accepter que tout n\'est pas entre tes mains\n👉 Introspection = retrouver sa juste place',
+        ancrage: '🪨 ANCRAGE CONCRET:\n(s\'ancrer dans le rythme réel)\n1. Observer le ciel, la lumière ou l\'obscurité consciemment\n2. Marcher en suivant un rythme lent et régulier\n3. Synchroniser la respiration avec les pas\n4. S\'asseoir immobile quelques minutes\n5. Ressentir le passage du temps sans le combler\n👉 Ancrage = sentir l\'ordre dans le corps'
+      },
+      32: {
+        spirituelle: '🌙 Jour 32 — Sourate Yâ-Sîn (36:41–50)\n\n🧠 Sens des versets:\nDans ces versets, Allah ﷻ parle de :\nSignes dans le déplacement et le transport (l\'arche, les moyens porteurs)\nLe fait qu\'Allah porte, protège et fait traverser.\nLa miséricorde...\n\n🌿 SPIRITUALITÉ:\n(lecture & rappel)\n1. Lire les versets 41 à 50 lentement et entièrement, avec attention et silence après la lecture.',
+        discipline: '🧭 DISCIPLINE:\n(respect de l\'ordre et des limites)\n1. Respecter un cadre précis aujourd\'hui (horaire, engagement, règle)\n2. Ne pas dépasser volontairement une limite connue\n3. Accepter une contrainte sans te plaindre\n4. Honorer un rythme naturel (repos, effort, silence)\n5. Cesser de lutter contre un ordre que tu ne contrôles pas\n👉 Discipline = se placer dans l\'ordre, pas contre lui',
+        action: '🔥 ACTION:\n(s\'aligner avec l\'ordre voulu)\n1. Mettre de l\'ordre dans un aspect concret de ta vie\n2. Réparer un déséquilibre évident (excès, négligence)\n3. Agir avec régularité plutôt qu\'avec intensité\n4. Ajuster un comportement pour qu\'il soit plus juste et mesuré\n5. Respecter le temps des choses sans précipitation\n👉 Action = agir en harmonie',
+        introspection: '🤍 INTROSPECTION:\n(regarder sa place)\n1. Identifier où tu refuses une limite\n2. Reconnaître une lutte inutile contre la réalité\n3. Observer ton rapport au temps (impatience, fuite)\n4. Te demander : suis-je aligné ou en résistance ?\n5. Accepter que tout n\'est pas entre tes mains\n👉 Introspection = retrouver sa juste place',
+        ancrage: '🪨 ANCRAGE CONCRET:\n(s\'ancrer dans le rythme réel)\n1. Observer le ciel, la lumière ou l\'obscurité consciemment\n2. Marcher en suivant un rythme lent et régulier\n3. Synchroniser la respiration avec les pas\n4. S\'asseoir immobile quelques minutes\n5. Ressentir le passage du temps sans le combler\n👉 Ancrage = sentir l\'ordre dans le corps'
       },
       36: {
         spirituelle: `Kalwa ${attribute}.`,
@@ -894,8 +971,7 @@ function generateDaysStructure(attribute: string, attributeArabic: string, chall
       {
         description: day4Descriptions?.spirituelle || 'Tâche spirituelle du jour 4',
         type: 'spirituelle_ia',
-        generatedByIA: !day4Descriptions?.spirituelle,
-        hasIntention: true
+        generatedByIA: !day4Descriptions?.spirituelle
       },
       {
         description: day4Descriptions?.discipline || 'Tâche discipline du jour 4',
@@ -907,8 +983,7 @@ function generateDaysStructure(attribute: string, attributeArabic: string, chall
         type: 'action_ia',
         generatedByIA: !day4Descriptions?.action
       }
-    ],
-    hasIntention: true
+    ]
   });
 
   // J5 : 3 tâches
@@ -1071,8 +1146,7 @@ function generateDaysStructure(attribute: string, attributeArabic: string, chall
       {
         description: day10Descriptions?.spirituelle || 'Tâche spirituelle du jour 10',
         type: 'spirituelle_ia',
-        generatedByIA: !day10Descriptions?.spirituelle,
-        hasIntention: true
+        generatedByIA: !day10Descriptions?.spirituelle
       },
       {
         description: day10Descriptions?.discipline || 'Tâche discipline du jour 10',
@@ -1084,8 +1158,7 @@ function generateDaysStructure(attribute: string, attributeArabic: string, chall
         type: 'action_ia',
         generatedByIA: !day10Descriptions?.action
       }
-    ],
-    hasIntention: true
+    ]
   });
 
   // J11-17 : 1 verset Al-Fatiha par jour + 2 tâches spécifiques
@@ -1109,7 +1182,7 @@ function generateDaysStructure(attribute: string, attributeArabic: string, chall
         'Choisir la qualité plutôt que la quantité aujourd\'hui',
         'Poser un acte sans chercher à en tirer un bénéfice personnel'
       ],
-      closingPhrase: 'Ce qui commence sans Allah s\'épuise.\nCe qui commence par Lui s\'apaise.'
+      closingPhrase: 'D\'après Abu Hurayra (qu\'Allah l\'agrée), le Prophète (paix sur lui) a dit :\n« Allah a certes dit :\n\n"J\'ai divisé la prière entre Moi et Mon serviteur en deux parties et Mon serviteur a ce qu\'il demande."'
     },
     {
       day: 12,
@@ -1130,7 +1203,7 @@ function generateDaysStructure(attribute: string, attributeArabic: string, chall
         'Aider quelqu\'un avec ce que tu as déjà',
         'Transformer une facilité en acte de bien'
       ],
-      closingPhrase: '« Mon serviteur M\'a loué. »'
+      closingPhrase: 'Ainsi lorsque le serviteur dit : "Toutes les louanges appartiennent à Allah, Seigneur des Mondes", Allah dit : "Mon serviteur M\'a loué."'
     },
     {
       day: 13,
@@ -1151,7 +1224,7 @@ function generateDaysStructure(attribute: string, attributeArabic: string, chall
         'Alléger une charge (temps, parole, geste)',
         'Répondre avec calme là où tu aurais répondu sèchement'
       ],
-      closingPhrase: '« Mon serviteur a fait Mon éloge. »'
+      closingPhrase: 'Lorsqu\'il dit : "Le Tout-Miséricordieux, le Très-Miséricordieux", Allah dit : "Mon serviteur M\'a glorifié."'
     },
     {
       day: 14,
@@ -1172,7 +1245,7 @@ function generateDaysStructure(attribute: string, attributeArabic: string, chall
         'Choisir la droiture plutôt que la facilité',
         'Mettre de l\'ordre dans une affaire laissée en suspens'
       ],
-      closingPhrase: '« Mon serviteur M\'a glorifié. »'
+      closingPhrase: 'Puis, quand il dit : "Maître du Jour de la Rétribution", Allah dit : "Mon serviteur M\'a honoré."'
     },
     {
       day: 15,
@@ -1193,7 +1266,7 @@ function generateDaysStructure(attribute: string, attributeArabic: string, chall
         'Poser un acte d\'adoration avec présence réelle',
         'Agir sans te glorifier du résultat'
       ],
-      closingPhrase: '« Ceci est entre Moi et Mon serviteur,\net Mon serviteur aura ce qu\'il demande. »'
+      closingPhrase: 'Lorsqu\'il dit : "C\'est Toi seul que nous adorons et c\'est de Toi seul dont nous implorons le secours", Allah dit : "Cela est entre Moi et Mon serviteur et Mon serviteur a ce qu\'il demande."'
     },
     {
       day: 16,
@@ -1214,7 +1287,7 @@ function generateDaysStructure(attribute: string, attributeArabic: string, chall
         'Renoncer à une facilité qui t\'éloigne du droit chemin',
         'Avancer avec constance plutôt qu\'avec précipitation'
       ],
-      closingPhrase: '« Ceci est pour Mon serviteur,\net Mon serviteur aura ce qu\'il a demandé. »'
+      closingPhrase: 'Puis, quand il dit : "Guide-nous sur le droit chemin"Allah dit : "Cela est pour Mon serviteur et Mon serviteur a ce qu\'il demande."'
     },
     {
       day: 17,
@@ -1235,35 +1308,38 @@ function generateDaysStructure(attribute: string, attributeArabic: string, chall
         'Agir aujourd\'hui comme quelqu\'un que tu respectes spirituellement',
         'Choisir la clarté plutôt que la facilité'
       ],
-      closingPhrase: '« Ceci est pour Mon serviteur,\net Mon serviteur aura ce qu\'il a demandé. »'
+      closingPhrase: 'Puis, quand il dit : "le chemin de ceux que tu as comblés de Tes faveurs, non pas de ceux qui ont encouru Ta colère ni des égarés", Allah dit : "Cela est pour Mon serviteur et Mon serviteur a ce qu\'il demande."'
     }
   ];
 
   alFatihaDays.forEach(({ day, verseNumber, verseSense, spiritualite, discipline, action, closingPhrase }) => {
     const verse = getAlFatihaVerse(verseNumber);
+    // Utiliser les descriptions personnalisées si disponibles
+    const dayDescriptions = challengeId ? getDayDescriptions(day, challengeId, attribute) : null;
+    
     days.push({
       day,
-      title: `JOUR ${day} — AL-FÂTIHA`,
+      title: dayDescriptions?.spirituelle ? (dayDescriptions.spirituelle.includes('Jour 11') ? '🌙 Jour 11 — Al-Fâtiha | Verset 1' : dayDescriptions.spirituelle.includes('Jour 12') ? '🌙 Jour 12 — Al-Fâtiha | Verset 2' : dayDescriptions.spirituelle.includes('Jour 13') ? '🌙 Jour 13 — Al-Fâtiha | Verset 3' : dayDescriptions.spirituelle.includes('Jour 14') ? '🌙 Jour 14 — Al-Fâtiha | Verset 4' : dayDescriptions.spirituelle.includes('Jour 15') ? '🌙 Jour 15 — Al-Fâtiha | Verset 5' : dayDescriptions.spirituelle.includes('Jour 16') ? '🌙 Jour 16 — Al-Fâtiha | Verset 6' : dayDescriptions.spirituelle.includes('Jour 17') ? '🌙 Jour 17 — Al-Fâtiha | Verset 7' : `🌙 Jour ${day} — Al-Fâtiha | Verset ${verseNumber}`) : `🌙 Jour ${day} — Al-Fâtiha | Verset ${verseNumber}`,
       block: `${BLOCKS_INFO[2].name} — ${BLOCKS_INFO[2].nameTranslation}`,
       blockNumber: 3,
       tasks: [
         {
-          description: `🧠 Sens du verset\n\n${verseSense}\n\n---\n\n🌿 Spiritualité\n\n${spiritualite}`,
+          description: dayDescriptions?.spirituelle || (verse ? `${verse.arabic}\n${verse.translation}\n\n🧠 Sens du verset\n${verseSense}\n\n------\n🌿 Spiritualité:\n${spiritualite}` : `🧠 Sens du verset\n\n${verseSense}\n\n---\n\n🌿 Spiritualité\n\n${spiritualite}`),
           type: 'alfatiha_verse',
           verseReference: `Al-Fâtiha (1:${verseNumber})`,
           generatedByIA: false
         },
         {
-          description: `🧭 Discipline\n\n(— tenir l'entrée)\n\n${discipline.map((d, i) => `${i + 1}. ${d}`).join('\n')}\n\n👉 Discipline = ${day === 11 ? 'ralentir pour laisser entrer Allah' : day === 12 ? 'ne pas laisser la plainte couvrir la louange' : day === 13 ? 'ne pas fermer la porte de la miséricorde' : day === 14 ? 'vivre en conscience du retour' : day === 15 ? 'ne pas se suffire à soi-même' : day === 16 ? 'ne pas marcher sans direction' : 'ne pas suivre sans discernement'}`,
+          description: dayDescriptions?.discipline || `🧭 Discipline(${day === 11 ? '— tenir l\'entrée' : day === 12 ? 'tenir la reconnaissance' : day === 13 ? 'tenir la douceur' : day === 14 ? 'tenir la responsabilité' : day === 15 ? 'tenir l\'exclusivité et la reliance' : day === 16 ? 'tenir la direction' : 'choisir le bon modèle'})\n${discipline.map((d, i) => `${i + 1}. ${d}`).join('\n')}\n👉 Discipline = ${day === 11 ? 'ralentir pour laisser entrer Allah' : day === 12 ? 'ne pas laisser la plainte couvrir la louange' : day === 13 ? 'ne pas fermer la porte de la miséricorde' : day === 14 ? 'vivre en conscience du retour' : day === 15 ? 'ne pas se suffire à soi-même' : day === 16 ? 'ne pas marcher sans direction' : 'ne pas suivre sans discernement'}\n-----`,
           type: 'discipline_ia',
           generatedByIA: false,
-          options: discipline
+          options: dayDescriptions?.discipline ? undefined : discipline
         },
         {
-          description: `🔥 Action\n\n(incarner ${day === 11 ? 'le commencement juste' : day === 12 ? 'la gratitude' : day === 13 ? 'la miséricorde' : day === 14 ? 'la responsabilité' : day === 15 ? 'et agir juste' : day === 16 ? 'marcher droit concrètement' : 'marcher avec les justes'})\n\n${action.map((a, i) => `${i + 1}. ${a}`).join('\n')}\n\n👉 Action = ${day === 11 ? 'agir sans se mettre au centre' : day === 12 ? 'remercier par l\'usage' : day === 13 ? 'faire passer la miséricorde avant la victoire' : day === 14 ? 'agir comme si cela comptait vraiment' : day === 15 ? 'agir en servant, pas en dominant' : day === 16 ? 'mettre les pas dans la bonne direction' : 'marcher avec ceux qui ont reçu la faveur'}`,
+          description: dayDescriptions?.action || `🔥 Action:(${day === 11 ? 'incarner le commencement juste' : day === 12 ? 'incarner la gratitude' : day === 13 ? 'incarner la miséricorde' : day === 14 ? 'incarner la responsabilité' : day === 15 ? 'demander et agir juste' : day === 16 ? 'marcher droit concrètement' : 'marcher avec les justes'})\n${action.map((a, i) => `${i + 1}. ${a}`).join('\n')}\n👉 Action = ${day === 11 ? 'agir sans se mettre au centre' : day === 12 ? 'remercier par l\'usage' : day === 13 ? 'faire passer la miséricorde avant la victoire' : day === 14 ? 'agir comme si cela comptait vraiment' : day === 15 ? 'agir en servant, pas en dominant' : day === 16 ? 'mettre les pas dans la bonne direction' : 'marcher avec ceux qui ont reçu la faveur'}\n-----`,
           type: 'action_ia',
           generatedByIA: false,
-          options: action,
+          options: dayDescriptions?.action ? undefined : action,
           hasPoincon: day === 14 // J14 a un poinçon (Présence de la clarté intérieure - Front)
         }
       ],
@@ -1330,8 +1406,7 @@ function generateDaysStructure(attribute: string, attributeArabic: string, chall
       {
         description: day19Descriptions?.discipline || 'Tâche discipline du jour 19',
         type: 'discipline_ia',
-        generatedByIA: !day19Descriptions?.discipline,
-        hasIntention: true
+        generatedByIA: !day19Descriptions?.discipline
       },
       {
         description: day19Descriptions?.action || 'Tâche action du jour 19',
@@ -1350,7 +1425,6 @@ function generateDaysStructure(attribute: string, attributeArabic: string, chall
       }
     ],
     hasKalwa: true,
-    hasIntention: true,
     closingPhrase: challengeId === 'voyage-du-coeur' ? 'La lumière ne demande pas toujours d\'agir.\nParfois, elle demande de tenir.' : challengeId === 'liberation-spirituelle' ? 'Ce qui est lâché sous la protection d\'Allah\nne laisse pas de vide,\nil laisse de l\'espace.' : challengeId === 'discipline-baraka' ? 'La discipline devient baraka\nquand elle cesse d\'être un combat\net devient une habitude tenue.' : challengeId === 'purete-esprit' ? 'L\'esprit se purifie\nquand il n\'est plus sollicité.' : undefined
   });
 
@@ -1465,8 +1539,7 @@ function generateDaysStructure(attribute: string, attributeArabic: string, chall
       {
         description: day22Descriptions?.discipline || 'Tâche discipline du jour 22',
         type: 'discipline_ia',
-        generatedByIA: !day22Descriptions?.discipline,
-        hasIntention: true
+        generatedByIA: !day22Descriptions?.discipline
       },
       {
         description: day22Descriptions?.action || 'Tâche action du jour 22',
@@ -1484,7 +1557,6 @@ function generateDaysStructure(attribute: string, attributeArabic: string, chall
         generatedByIA: !day22Descriptions?.ancrage
       }
     ],
-    hasIntention: true,
     closingPhrase: challengeId === 'voyage-du-coeur' ? 'Quand la réaction se suspend,\nle cœur se repose.' : challengeId === 'liberation-spirituelle' ? 'La paix n\'a pas besoin d\'arguments.' : challengeId === 'discipline-baraka' ? 'Quand l\'intention est pure,\nla baraka descend.' : challengeId === 'purete-esprit' ? 'L\'intention allège l\'esprit.' : undefined
   });
 
@@ -1737,8 +1809,8 @@ function generateDaysStructure(attribute: string, attributeArabic: string, chall
     },
     {
       day: 29,
-      verses: '11-20',
-      verseStart: 11,
+      verses: '12-20',
+      verseStart: 12,
       verseEnd: 20,
       theme: 'Croire sans voir, rester droit quand la majorité refuse, assumer la vérité même seul.',
       spiritualite: 'Lire les versets 11 à 20 lentement et entièrement, avec attention et silence après la lecture.',
@@ -1997,6 +2069,9 @@ function generateDaysStructure(attribute: string, attributeArabic: string, chall
   ];
 
   yassineDays.forEach(({ day, verses, verseStart, verseEnd, theme, spiritualite, discipline, action, introspection, ancrage, closingPhrase }) => {
+    // Utiliser les descriptions personnalisées si disponibles
+    const dayDescriptions = challengeId ? getDayDescriptions(day, challengeId, attribute) : null;
+    
     days.push({
       day,
       title: `JOUR ${day} — YASSINE (${verses})`,
@@ -2004,38 +2079,38 @@ function generateDaysStructure(attribute: string, attributeArabic: string, chall
       blockNumber: 6,
       tasks: [
         {
-          description: `🧠 Thème central des versets\n\n${theme}\n\n---\n\n🌿 SPIRITUALITÉ\n\n(lecture & méditation)\n\n${spiritualite}`,
+          description: dayDescriptions?.spirituelle || `🧠 Thème central des versets\n\n${theme}\n\n---\n\n🌿 SPIRITUALITÉ\n\n(lecture & méditation)\n\n${spiritualite}`,
           type: 'yassine_reading',
           verseReference: `Yâ-Sîn (36:${verseStart}-${verseEnd})`,
           generatedByIA: false
         },
         {
-          description: `🧭 DISCIPLINE\n\n(disponibilité au rappel)\n\n${discipline.map((d, i) => `${i + 1}. ${d}`).join('\n')}`,
+          description: dayDescriptions?.discipline || `🧭 DISCIPLINE\n\n(disponibilité au rappel)\n\n${discipline.map((d, i) => `${i + 1}. ${d}`).join('\n')}`,
           type: 'discipline_ia',
           generatedByIA: false,
-          options: discipline
+          options: dayDescriptions?.discipline ? undefined : discipline
         },
         {
-          description: `🔥 ACTION\n\n(incarner la voie droite)\n\n${action.map((a, i) => `${i + 1}. ${a}`).join('\n')}`,
+          description: dayDescriptions?.action || `🔥 ACTION\n\n(incarner la voie droite)\n\n${action.map((a, i) => `${i + 1}. ${a}`).join('\n')}`,
           type: 'action_ia',
           generatedByIA: false,
-          options: action
+          options: dayDescriptions?.action ? undefined : action
         },
         {
-          description: `🤍 INTROSPECTION\n\n(voir les voiles intérieurs)\n\n${introspection.map((i, idx) => `${idx + 1}. ${i}`).join('\n')}`,
+          description: dayDescriptions?.introspection || `🤍 INTROSPECTION\n\n(voir les voiles intérieurs)\n\n${introspection.map((i, idx) => `${idx + 1}. ${i}`).join('\n')}`,
           type: 'introspection',
           generatedByIA: false,
-          options: introspection
+          options: dayDescriptions?.introspection ? undefined : introspection
         },
         {
-          description: `🪨 ANCRAGE CONCRET\n\n(rendre le rappel vivant dans le corps)\n\n${ancrage.map((a, i) => `${i + 1}. ${a}`).join('\n')}`,
+          description: dayDescriptions?.ancrage || `🪨 ANCRAGE CONCRET\n\n(rendre le rappel vivant dans le corps)\n\n${ancrage.map((a, i) => `${i + 1}. ${a}`).join('\n')}`,
           type: 'ancrage_concret',
           generatedByIA: false,
-          options: ancrage
+          options: dayDescriptions?.ancrage ? undefined : ancrage
         }
       ],
       hasYassine: true,
-      closingPhrase: closingPhrase,
+      closingPhrase: dayDescriptions?.spirituelle ? undefined : closingPhrase,
       verse: {
         reference: `Yâ-Sîn (36:${verseStart}-${verseEnd})`,
         translation: `Versets ${verseStart} à ${verseEnd} de Yassine`,
@@ -2545,50 +2620,106 @@ function generateDaysStructure(attribute: string, attributeArabic: string, chall
 /**
  * Les 4 défis de Sabila Nur
  */
+// Textes d'introduction spécifiques pour chaque défi
+const CHALLENGE_INTRODUCTIONS: Record<string, string> = {
+  'voyage-du-coeur': `Ce défi de 40 jours est un chemin intérieur vers la lumière du cœur.
+
+À travers l'invocation de Yâ Nûr (النور), tu vas progressivement éclairer les recoins de ton être, guérir les blessures du passé et révéler la beauté qui réside en toi.
+
+Chaque jour, tu recevras des pratiques de méditation (Kalwa), des moments de guérison spirituelle (Nûr Shifa), des exercices de discipline et des actions concrètes pour ancrer cette lumière dans ta vie quotidienne.
+
+Tu traverseras 7 portes de l'âme, de l'âme impulsive à l'âme purifiée, en apprenant à observer, à te corriger, à t'inspirer, à t'apaiser, à accepter, à t'aligner et finalement à te remettre entièrement.
+
+Prends ton temps. Il n'y a pas de course à gagner. L'important est la présence et la sincérité dans chaque geste.
+
+Que cette lumière t'accompagne tout au long de ce voyage.`,
+  'liberation-spirituelle': `Ce défi de 40 jours est un chemin de libération intérieure à travers la protection d'Allah.
+
+En invoquant Yâ Hafidh (الحفيظ), tu vas tisser une armure de lumière autour de ton âme, retrouver ton cœur léger et te libérer des chaînes invisibles qui t'empêchent d'avancer.
+
+Chaque jour, tu recevras des pratiques spirituelles pour t'ancrer dans cette protection, des moments de méditation profonde, des exercices de discipline et des actions qui renforcent ta confiance en la protection divine.
+
+Tu traverseras les 7 portes de l'âme en apprenant à reconnaître les mécanismes de protection, à lâcher les peurs, à faire confiance au décret divin et à vivre dans la sérénité de celui qui sait qu'il est protégé.
+
+Prends ton temps. Il n'y a pas de course à gagner. L'important est la présence et la sincérité dans chaque geste.
+
+Que cette protection t'accompagne tout au long de ce voyage.`,
+  'discipline-baraka': `Ce défi de 40 jours est un chemin de discipline et de baraka à travers la force divine.
+
+En invoquant Yâ Qawiyy (القويّ), tu vas développer ta force intérieure, ton endurance et ta capacité à agir avec constance, tout en attirant la bénédiction dans chaque aspect de ta vie.
+
+Chaque jour, tu recevras des pratiques spirituelles pour renforcer ta discipline, des moments de méditation pour ancrer ta force, des exercices concrets et des actions qui construisent ta stabilité intérieure.
+
+Tu traverseras les 7 portes de l'âme en apprenant à transformer l'impulsivité en action réfléchie, à développer la constance, à puiser dans la force divine et à agir avec détermination tout en restant humble.
+
+Prends ton temps. Il n'y a pas de course à gagner. L'important est la présence et la sincérité dans chaque geste.
+
+Que cette force t'accompagne tout au long de ce voyage.`,
+  'purete-esprit': `Ce défi de 40 jours est un chemin de purification intérieure à travers la subtilité divine.
+
+En invoquant Yâ Latîf (اللطيف), tu vas purifier ton esprit, ton cœur et tes intentions, en apprenant à percevoir la subtilité de la présence divine dans chaque moment de ta vie.
+
+Chaque jour, tu recevras des pratiques de purification spirituelle, des moments de méditation profonde, des exercices pour affiner ta perception et des actions qui reflètent la pureté de tes intentions.
+
+Tu traverseras les 7 portes de l'âme en apprenant à nettoyer les impuretés de l'âme, à purifier tes intentions, à affiner ta perception spirituelle et à vivre dans la subtilité de celui qui perçoit la présence divine dans les détails.
+
+Prends ton temps. Il n'y a pas de course à gagner. L'important est la présence et la sincérité dans chaque geste.
+
+Que cette pureté t'accompagne tout au long de ce voyage.`
+};
+
 export const SABILA_NUR_CHALLENGES: Challenge[] = [
   {
     id: 'voyage-du-coeur',
     title: 'VOYAGE DU CŒUR',
     emoji: '🌙✨',
+    iconName: 'Heart',
     attribute: 'Yâ Nûr',
     attributeArabic: 'النور',
     description: 'Le chemin lumineux vers un cœur qui guérit, s\'allège et se révèle',
     color: '#FFD369',
     days: generateDaysStructure('Yâ Nûr', 'النور', 'voyage-du-coeur'),
-    blocks: BLOCKS_INFO
+    blocks: BLOCKS_INFO,
+    introduction: CHALLENGE_INTRODUCTIONS['voyage-du-coeur']
   },
   {
     id: 'liberation-spirituelle',
     title: 'LIBÉRATION SPIRITUELLE',
     emoji: '✨',
+    iconName: 'Shield',
     attribute: 'Yâ Hafidh',
     attributeArabic: 'الحفيظ',
     description: 'Quarante jours pour t\'ancrer dans Sa protection, retrouver ton cœur léger et tisser une armure de lumière autour de ton âme.',
     color: '#9B59B6',
     days: generateDaysStructure('Yâ Hafidh', 'الحفيظ', 'liberation-spirituelle'),
-    blocks: BLOCKS_INFO
+    blocks: BLOCKS_INFO,
+    introduction: CHALLENGE_INTRODUCTIONS['liberation-spirituelle']
   },
   {
     id: 'discipline-baraka',
     title: 'DISCIPLINE & BARAKA',
     emoji: '🔥',
+    iconName: 'Flame',
     attribute: 'Yâ Qawiyy',
     attributeArabic: 'القويّ',
     description: 'Celui qui donne la force, l\'endurance, la stabilité et la capacité d\'agir.',
     color: '#E74C3C',
     days: generateDaysStructure('Yâ Qawiyy', 'القويّ', 'discipline-baraka'),
-    blocks: BLOCKS_INFO
+    blocks: BLOCKS_INFO,
+    introduction: CHALLENGE_INTRODUCTIONS['discipline-baraka']
   },
   {
     id: 'purete-esprit',
     title: 'PURETÉ DE L\'ESPRIT',
     emoji: '🌙✨',
+    iconName: 'Sparkles',
     attribute: 'Yâ Latîf',
     attributeArabic: 'اللطيف',
     description: 'Quarante jours pour purifier ton esprit, ton cœur et tes intentions. Chaque souffle devient un rappel, chaque geste une purification, chaque intention une lumière qui éclaire ton chemin.',
     color: '#3498DB',
     days: generateDaysStructure('Yâ Latîf', 'اللطيف', 'purete-esprit'),
-    blocks: BLOCKS_INFO
+    blocks: BLOCKS_INFO,
+    introduction: CHALLENGE_INTRODUCTIONS['purete-esprit']
   }
 ];
 

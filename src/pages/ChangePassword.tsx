@@ -6,13 +6,13 @@ import { getTheme } from '@/data/themes';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input, Button } from '@/components/ui';
 import { Lock, ArrowLeft, Eye, EyeOff } from 'lucide-react-native';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services/auth/supabase';
 import { APP_CONFIG } from '@/config';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GalaxyBackground } from '@/components/GalaxyBackground';
 import { useTranslation } from 'react-i18next';
-import { trackPageView, trackEvent } from '@/services/analytics';
-import { changePasswordWithToken } from '@/services/passwordChange';
+import { trackPageView, trackEvent } from '@/services/analytics/analytics';
+import { changePasswordWithToken } from '@/services/auth/passwordChange';
 
 /**
  * Page ChangePassword
@@ -44,8 +44,7 @@ export function ChangePassword() {
     if (routeParams?.token) {
       setToken(routeParams.token);
     } else {
-      // Essayer de récupérer depuis l'URL si c'est un deep link
-      // Le token sera passé via le deep link ayna://auth/change-password?token=...
+      // Le token sera passé via le lien https://nurayna.com/auth/change-password?token=...
       setError('Token de réinitialisation manquant. Veuillez utiliser le lien reçu par email.');
     }
   }, [route]);
@@ -140,8 +139,8 @@ export function ChangePassword() {
         style={StyleSheet.absoluteFill}
       />
       <GalaxyBackground starCount={100} minSize={1} maxSize={2} />
-      
-      <SafeAreaView 
+
+      <SafeAreaView
         style={styles.container}
         edges={['top', 'bottom']}
       >

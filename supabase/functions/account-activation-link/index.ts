@@ -129,10 +129,6 @@ serve(async (req) => {
         userId: user.id,
         userEmail: user.email || '',
       },
-      // Activer les codes promotionnels et cartes cadeau
-      allow_promotion_codes: true,
-      // Activer les méthodes de paiement qui supportent les cartes cadeau
-      payment_method_types: ['card', 'link', 'amazon_pay'],
     });
 
     // Return checkout URL

@@ -16,7 +16,7 @@ import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
 import { useTranslation } from 'react-i18next';
 import { Mail, CheckCircle, RefreshCw } from 'lucide-react-native';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services/auth/supabase';
 
 type VerifyEmailRouteParams = {
   email?: string;
@@ -42,7 +42,7 @@ export function VerifyEmail() {
         if (!supabase) return;
 
         const { data: { user: currentUser }, error } = await supabase.auth.getUser();
-        
+
         if (!error && currentUser?.email_confirmed_at) {
           setIsVerified(true);
           // Attendre 2 secondes puis rediriger vers l'accueil
@@ -85,7 +85,7 @@ export function VerifyEmail() {
         type: 'signup',
         email: email,
         options: {
-          emailRedirectTo: 'ayna://auth/callback',
+          emailRedirectTo: 'https://nurayna.com/auth/callback',
         },
       });
 
@@ -116,12 +116,12 @@ export function VerifyEmail() {
         style={StyleSheet.absoluteFill}
       />
       <GalaxyBackground starCount={100} minSize={1} maxSize={2} />
-      
+
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.content}>
           {isVerified ? (
             <>
-              <CheckCircle size={80} color={theme.colors.success || '#10B981'} style={styles.icon} />
+              <CheckCircle size={80} color="#10B981" style={styles.icon} />
               <Text style={[styles.title, { color: theme.colors.text }]}>
                 {t('auth.emailVerified') || 'Email vérifié !'}
               </Text>

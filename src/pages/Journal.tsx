@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, ActivityIndicator, Alert, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import Animated, { FadeInDown, FadeIn, SlideInDown, Layout } from 'react-native-reanimated';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useUser } from '@/contexts/UserContext';
@@ -7,23 +8,22 @@ import { getTheme } from '@/data/themes';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Plus, Mic, TrendingUp, BookOpen, Sparkles, Heart, Brain } from 'lucide-react-native';
 import { storage } from '@/utils/storage';
-import { loadJournalNotes, saveJournalNotes, deleteJournalNote, type JournalNote } from '@/services/notesStorage';
+import { loadJournalNotes, saveJournalNotes, deleteJournalNote, type JournalNote } from '@/services/storage/notesStorage';
 import { requestRecordingPermissionsAsync, AudioModule } from 'expo-audio';
 import type { AudioRecorder } from 'expo-audio';
 import * as FileSystem from 'expo-file-system';
-import { sttTranscribe } from '@/services/voice';
+import { sttTranscribe } from '@/services/system/voice';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GalaxyBackground } from '@/components/GalaxyBackground';
 import { useTranslation } from 'react-i18next';
-import { trackPageView, trackEvent } from '@/services/analytics';
+import { trackPageView, trackEvent } from '@/services/analytics/analytics';
 import i18n from '@/i18n';
 import { EmptyState, Skeleton, SkeletonText, Button, GlassCard } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { createAccessibilityProps } from '@/utils/accessibility';
-import { AnimatedListItem } from '@/components/AnimatedListItem';
-import { analyzeJournal, analyzeSingleNote, type JournalInsight } from '@/services/journalAnalysis';
+import { analyzeSingleNote } from '@/services/ai/journalAnalysis';
 import { logger } from '@/utils/logger';
-import { getSubscriptionStatus } from '@/services/subscription';
+import { getSubscriptionStatus } from '@/services/system/subscription';
 import { PaywallModal } from '@/components/PaywallModal';
 
 interface JournalEntry {
@@ -41,11 +41,11 @@ interface JournalEntry {
  * - Voir une analyse IA (placeholder pour l'instant)
  */
 export function Journal() {
-  const { user, addJournalEntry, removeJournalEntry } = useUser();
+  const { user } = useUser();
   const theme = getTheme(user?.theme || 'default');
   const { t } = useTranslation();
   const { isTablet, adaptiveValue } = useResponsive();
-  
+
   const [note, setNote] = useState('');
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -53,11 +53,8 @@ export function Journal() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const recordingRef = useRef<AudioRecorder | null>(null);
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
-  
+
   // Analyse IA
-  const [journalInsight, setJournalInsight] = useState<JournalInsight | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year' | 'all'>('month');
   const [selectedNoteAnalysis, setSelectedNoteAnalysis] = useState<{
     noteId: string;
     analysis: Awaited<ReturnType<typeof analyzeSingleNote>>;
@@ -70,65 +67,49 @@ export function Journal() {
     trackPageView('Journal');
   }, []);
 
-  // Charger les entrées depuis le stockage local
+  // ✅ ÉTAPE 4 : Charger les entrées avec timeout de sécurité
   useEffect(() => {
+    const loadingTimeoutRef = setTimeout(() => {
+      setIsLoading(false); // Timeout de sécurité après 5 secondes
+    }, 5000);
+
     const loadEntries = async () => {
       try {
         // Charger les notes depuis le service de stockage dédié (avec synchronisation Supabase)
         const localStorageEntries = await loadJournalNotes(user?.id, true);
-        
+
         // Convertir les notes en format JournalEntry
         const journalEntries: JournalEntry[] = localStorageEntries.map(note => ({
           id: note.id,
           text: note.text,
           createdAt: note.createdAt,
         }));
-        
+
         // Trier par date (plus récent en premier) et limiter à 500
-        journalEntries.sort((a, b) => 
+        journalEntries.sort((a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
-        
+
         setEntries(journalEntries.slice(0, 500));
       } catch (e) {
+        // ✅ ÉTAPE 4 : Logger les erreurs en DEV
+        if (__DEV__) {
+          console.error('[Journal] Error loading entries:', e);
+        }
         setEntries([]);
       } finally {
+        // ✅ ÉTAPE 4 : FINALLY GARANTI - Toujours désactiver loading
+        clearTimeout(loadingTimeoutRef);
         setIsLoading(false);
       }
     };
-    
+
     loadEntries();
+
+    return () => {
+      clearTimeout(loadingTimeoutRef);
+    };
   }, [user?.id]);
-
-  // Générer l'analyse du journal
-  const handleAnalyzeJournal = async () => {
-    if (!user?.id || analyzing) return;
-
-    // ✅ Premium gating: require active subscription
-    try {
-      const subscriptionStatus = await getSubscriptionStatus();
-      if (!subscriptionStatus.isActive) {
-        setShowPaywall(true);
-        return;
-      }
-    } catch (e) {
-      // Si on ne peut pas vérifier, on bloque par défaut (évite fuite premium)
-      setShowPaywall(true);
-      return;
-    }
-
-    setAnalyzing(true);
-    try {
-      const insight = await analyzeJournal(user.id, timeRange);
-      setJournalInsight(insight);
-      trackEvent('journal_analysis_generated', { timeRange });
-    } catch (error) {
-      logger.error('[Journal] Erreur analyse:', error);
-      Alert.alert(t('common.error'), t('journal.error.analysisFailed'));
-    } finally {
-      setAnalyzing(false);
-    }
-  };
 
   // Analyser une note spécifique
   const handleAnalyzeNote = async (noteText: string, noteId: string) => {
@@ -146,7 +127,7 @@ export function Journal() {
       setShowPaywall(true);
       return;
     }
-    
+
     setAnalyzingNote(noteId);
     try {
       const analysis = await analyzeSingleNote(noteText, user.id);
@@ -164,22 +145,22 @@ export function Journal() {
 
   const handleAddNote = async () => {
     if (!note.trim()) return;
-    
+
     try {
       const newEntry: JournalEntry = {
         text: note,
         createdAt: new Date().toISOString()
       };
-      
+
       const next = [newEntry, ...entries].slice(0, 500);
       setEntries(next);
-      
+
       // Sauvegarder dans le stockage local et Supabase via le service dédié
       try {
         // Sauvegarder la nouvelle note avec synchronisation Supabase
-        const { saveJournalNote } = await import('@/services/notesStorage');
+        const { saveJournalNote } = await import('@/services/storage/notesStorage');
         await saveJournalNote(newEntry, user?.id);
-        
+
         // Recharger les notes pour obtenir l'ID Supabase
         const updatedNotes = await loadJournalNotes(user?.id, true);
         const updatedEntries = updatedNotes.map(n => ({
@@ -187,22 +168,22 @@ export function Journal() {
           text: n.text,
           createdAt: n.createdAt,
         }));
-        
+
         // Trier par date (plus récent en premier) et limiter à 500
-        updatedEntries.sort((a, b) => 
+        updatedEntries.sort((a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
-        
+
         setEntries(updatedEntries.slice(0, 500));
       } catch (e) {
         // Erreur silencieuse en production
         logger.error('[Journal] Erreur sauvegarde note:', e);
       }
-      
-      
+
+
       // TODO: Envoyer à l'IA pour analyse
       // sendToAyna([{ role: 'user', content: `Analyse cette note de journal en français: ${note}` }]).catch(() => null);
-      
+
       setNote('');
       trackEvent('journal_entry_created', { hasText: !!note, length: note.length });
     } catch (e) {
@@ -240,8 +221,8 @@ export function Journal() {
             numberOfChannels: 2,
             android: {
               extension: '.m4a',
-              outputFormat: 2, // MPEG_4
-              audioEncoder: 3, // AAC
+              outputFormat: 2 as any, // MPEG_4
+              audioEncoder: 3 as any, // AAC
             },
             ios: {
               extension: '.m4a',
@@ -265,18 +246,18 @@ export function Journal() {
         if (recordingRef.current) {
           setRecording(false);
           setIsTranscribing(true);
-          
+
           try {
             await recordingRef.current.stop();
             const uri = recordingRef.current.uri;
-            
+
             if (uri) {
               // Transcrire l'audio
               try {
                 const transcribedText = await sttTranscribe(uri);
                 setNote(prev => (prev ? prev + '\n' + transcribedText : transcribedText));
                 trackEvent('journal_voice_transcribed', { length: transcribedText.length });
-                
+
                 // Supprimer le fichier temporaire
                 await FileSystem.deleteAsync(uri, { idempotent: true });
               } catch (transcribeError: any) {
@@ -311,7 +292,7 @@ export function Journal() {
     const diffTime = Math.abs(now.getTime() - date.getTime());
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     const locale = i18n.language === 'ar' ? 'ar-SA' : i18n.language === 'en' ? 'en-US' : 'fr-FR';
-    
+
     // Format relatif pour les dates récentes
     if (diffDays === 0) {
       return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
@@ -332,18 +313,18 @@ export function Journal() {
   // ✅ OPTIMISÉ : renderEntry mémorisé
   const renderEntry = useCallback(({ item, index }: { item: JournalEntry; index: number }) => {
     const itemKey = `${item.createdAt}-${index}`;
-    
+
     const handleDelete = async () => {
       try {
         // Fermer le swipeable avant de supprimer
         const swipeableRef = swipeableRefs.current.get(itemKey);
         swipeableRef?.close();
-        
+
         const entryToDelete = item;
-        
+
         // Vérifier si cette note vient du challenge (format: [Jour X - Journal du cœur]\n...)
         const isChallengeEntry = entryToDelete.text.startsWith('[') && entryToDelete.text.includes(' - ') && entryToDelete.text.includes(']\n');
-        
+
         if (isChallengeEntry) {
           // Extraire le jour et l'entrée du texte formaté
           // Format: [Jour X - Journal du cœur]\n{entryText}
@@ -351,34 +332,34 @@ export function Journal() {
           if (headerEndIndex > 0) {
             const header = entryToDelete.text.substring(0, headerEndIndex + 2);
             const entryText = entryToDelete.text.substring(headerEndIndex + 2);
-            
+
           }
         }
-        
+
         // Si ce n'est pas une entrée du challenge, supprimer aussi dans Supabase
         if (!isChallengeEntry && entryToDelete.id && user?.id) {
           await deleteJournalNote(entryToDelete.id, user.id);
         }
-        
+
         // Utiliser l'index pour une suppression plus fiable
         const updatedEntries = entries.filter((_, i) => i !== index);
         setEntries(updatedEntries);
-        
+
         // Nettoyer la ref
         swipeableRefs.current.delete(itemKey);
-        
+
         // Sauvegarder les notes mises à jour (seulement les notes locales, pas celles du challenge)
         const localEntries = updatedEntries.filter(e => {
           // Exclure les entrées du challenge
           return !(e.text.startsWith('[') && e.text.includes(' - ') && e.text.includes(']\n'));
         });
-        
+
         await saveJournalNotes(localEntries.map(e => ({
           id: e.id,
           text: e.text,
           createdAt: e.createdAt,
         })), user?.id);
-        
+
         trackEvent('journal_entry_deleted');
       } catch (error) {
         logger.error('Erreur lors de la suppression:', error);
@@ -400,22 +381,22 @@ export function Journal() {
     );
 
     return (
-      <AnimatedListItem index={index} useSpring={true}>
-        <Swipeable
-          key={itemKey} 
-          ref={(ref) => {
-            if (ref) {
-              swipeableRefs.current.set(itemKey, ref);
-            } else {
-              swipeableRefs.current.delete(itemKey);
-            }
-          }}
-          renderRightActions={renderRightActions}
+      <Swipeable
+        key={itemKey}
+        ref={(ref) => {
+          if (ref) {
+            swipeableRefs.current.set(itemKey, ref);
+          } else {
+            swipeableRefs.current.delete(itemKey);
+          }
+        }}
+        renderRightActions={renderRightActions}
+      >
+        <Animated.View
+          style={[styles.entryCard, { backgroundColor: theme.colors.backgroundSecondary }]}
+          entering={FadeInDown.delay(index * 50).duration(400).springify()}
+          layout={Layout.springify()}
         >
-          <Animated.View
-            style={[styles.entryCard, { backgroundColor: theme.colors.backgroundSecondary }]}
-            layout={Layout.springify()}
-          >
           <View style={styles.entryHeader}>
             <Text style={[styles.entryDate, { color: theme.colors.textSecondary }]}>
               {formatDate(item.createdAt)}
@@ -452,7 +433,7 @@ export function Journal() {
                   {t('journal.noteAnalysis')}
                 </Text>
               </View>
-              
+
               {selectedNoteAnalysis.analysis.emotions.length > 0 && (
                 <View style={styles.noteEmotions}>
                   <Text style={[styles.noteAnalysisLabel, { color: theme.colors.textSecondary }]}>
@@ -478,7 +459,7 @@ export function Journal() {
                   </View>
                 </View>
               )}
-              
+
               {selectedNoteAnalysis.analysis.insight && (
                 <View style={styles.noteInsight}>
                   <Text style={[styles.noteAnalysisLabel, { color: theme.colors.textSecondary }]}>
@@ -491,11 +472,10 @@ export function Journal() {
               )}
             </View>
           )}
-          </Animated.View>
-        </Swipeable>
-      </AnimatedListItem>
+        </Animated.View>
+      </Swipeable>
     );
-  }, [entries, formatDate, theme, t, analyzingNote, selectedNoteAnalysis, handleAnalyzeNote, removeJournalEntry, user, deleteJournalNote, saveJournalNotes]);
+  }, [entries, formatDate, theme, t, analyzingNote, selectedNoteAnalysis, handleAnalyzeNote, user, deleteJournalNote, saveJournalNotes]);
 
   // ✅ OPTIMISÉ : keyExtractor
   const keyExtractor = useCallback((item: JournalEntry, index: number) => `${item.createdAt}-${index}`, []);
@@ -518,7 +498,7 @@ export function Journal() {
       </View>
 
       {/* Note Editor */}
-      <GlassCard 
+      <GlassCard
         intensity={adaptiveValue(15, 20, 25, 30)}
         blurType="dark"
         style={styles.card}
@@ -533,7 +513,7 @@ export function Journal() {
           numberOfLines={6}
           textAlignVertical="top"
         />
-        
+
         <View style={styles.buttonRow}>
           <Button
             onPress={handleAddNote}
@@ -546,18 +526,18 @@ export function Journal() {
           >
             {t('journal.addNote')}
           </Button>
-          
+
           <Pressable
             onPress={toggleVoiceRecording}
             disabled={isTranscribing}
             style={({ pressed }) => [
               styles.voiceButton,
-              { 
-                backgroundColor: recording 
-                  ? '#EF4444' 
-                  : isTranscribing 
-                  ? theme.colors.accent 
-                  : 'rgba(255, 255, 255, 0.1)' 
+              {
+                backgroundColor: recording
+                  ? '#EF4444'
+                  : isTranscribing
+                    ? theme.colors.accent
+                    : 'rgba(255, 255, 255, 0.1)'
               },
               (pressed || isTranscribing) && styles.buttonPressed
             ]}
@@ -571,163 +551,8 @@ export function Journal() {
         </View>
       </GlassCard>
 
-      {/* AI Analysis */}
-      <GlassCard 
-        intensity={adaptiveValue(15, 20, 25, 30)}
-        blurType="dark"
-        style={styles.card}
-      >
-        <View style={styles.aiHeader}>
-          <Brain size={24} color={theme.colors.accent} />
-          <Text style={[styles.aiTitle, { color: theme.colors.accent }]}>
-            {t('journal.aiAnalysis')}
-          </Text>
-        </View>
 
-        {/* Sélecteur de période */}
-        <View style={styles.timeRangeSelector}>
-          {(['week', 'month', 'year', 'all'] as const).map((range) => (
-            <Pressable
-              key={range}
-              onPress={() => {
-                setTimeRange(range);
-                setJournalInsight(null);
-              }}
-              style={[
-                styles.timeRangeButton,
-                {
-                  backgroundColor: timeRange === range 
-                    ? theme.colors.accent + '33' 
-                    : 'transparent',
-                  borderColor: timeRange === range 
-                    ? theme.colors.accent 
-                    : theme.colors.textSecondary + '40',
-                },
-              ]}
-            >
-              <Text style={[
-                styles.timeRangeText,
-                {
-                  color: timeRange === range 
-                    ? theme.colors.accent 
-                    : theme.colors.textSecondary,
-                },
-              ]}>
-                {range === 'week' ? t('journal.week') :
-                 range === 'month' ? t('journal.month') :
-                 range === 'year' ? t('journal.year') :
-                 t('journal.all')}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <Button
-          onPress={handleAnalyzeJournal}
-          loading={analyzing}
-          disabled={analyzing || entries.length === 0}
-          icon={Sparkles}
-          iconPosition="left"
-          style={styles.analyzeButton}
-        >
-          {analyzing 
-            ? t('journal.analyzing')
-            : t('journal.generateAnalysis')}
-        </Button>
-
-        {journalInsight && (
-          <View style={styles.insightContainer}>
-            {/* Résumé */}
-            <Text style={[styles.insightSectionTitle, { color: theme.colors.text }]}>
-              {t('journal.summary')}
-            </Text>
-            <Text style={[styles.insightText, { color: theme.colors.textSecondary }]}>
-              {journalInsight.summary}
-            </Text>
-
-            {/* Émotions */}
-            {journalInsight.emotions && (
-              <>
-                <View style={styles.emotionHeader}>
-                  <Heart size={20} color={theme.colors.accent} />
-                  <Text style={[styles.insightSectionTitle, { color: theme.colors.text, marginLeft: 8 }]}>
-                    {t('journal.emotions')}
-                  </Text>
-                </View>
-                <View style={styles.emotionBadges}>
-                  <View style={[
-                    styles.emotionBadge,
-                    {
-                      backgroundColor: journalInsight.emotions.sentiment === 'positive' 
-                        ? '#10B981' + '33'
-                        : journalInsight.emotions.sentiment === 'negative'
-                        ? '#EF4444' + '33'
-                        : theme.colors.textSecondary + '33',
-                      borderColor: journalInsight.emotions.sentiment === 'positive' 
-                        ? '#10B981'
-                        : journalInsight.emotions.sentiment === 'negative'
-                        ? '#EF4444'
-                        : theme.colors.textSecondary,
-                    },
-                  ]}>
-                    <Text style={[
-                      styles.emotionBadgeText,
-                      {
-                        color: journalInsight.emotions.sentiment === 'positive' 
-                          ? '#10B981'
-                          : journalInsight.emotions.sentiment === 'negative'
-                          ? '#EF4444'
-                          : theme.colors.textSecondary,
-                      },
-                    ]}>
-                      {journalInsight.emotions.sentiment === 'positive' 
-                        ? t('journal.positive')
-                        : journalInsight.emotions.sentiment === 'negative'
-                        ? t('journal.negative')
-                        : t('journal.neutral')}
-                    </Text>
-                  </View>
-                  {journalInsight.emotions.topEmotions?.map((emotion, idx) => (
-                    <View
-                      key={idx}
-                      style={[
-                        styles.emotionBadge,
-                        {
-                          backgroundColor: theme.colors.accent + '20',
-                          borderColor: theme.colors.accent + '60',
-                        },
-                      ]}
-                    >
-                      <Text style={[styles.emotionBadgeText, { color: theme.colors.accent }]}>
-                        {emotion}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </>
-            )}
-
-            {/* Tendances */}
-            {journalInsight.trends && journalInsight.trends.length > 0 && (
-              <>
-                <View style={styles.emotionHeader}>
-                  <TrendingUp size={20} color={theme.colors.accent} />
-                  <Text style={[styles.insightSectionTitle, { color: theme.colors.text, marginLeft: 8 }]}>
-                    {t('journal.trends')}
-                  </Text>
-                </View>
-                {journalInsight.trends.map((trend, idx) => (
-                  <View key={idx} style={styles.trendItem}>
-                    <Text style={[styles.trendText, { color: theme.colors.textSecondary }]}>
-                      {trend}
-                    </Text>
-                  </View>
-                ))}
-              </>
-            )}
-          </View>
-        )}
-      </GlassCard>
+      {/* Sélecteur de période */}
 
       {/* Section Title */}
       {entries.length > 0 && (
@@ -738,7 +563,7 @@ export function Journal() {
         </View>
       )}
     </>
-  ), [theme, t, note, setNote, handleAddNote, toggleVoiceRecording, recording, isTranscribing, timeRange, setTimeRange, handleAnalyzeJournal, analyzing, entries.length, journalInsight, adaptiveValue]);
+  ), [theme, t, note, setNote, handleAddNote, toggleVoiceRecording, recording, isTranscribing, entries.length, adaptiveValue]);
 
   return (
     <View style={styles.wrapper}>
@@ -747,13 +572,13 @@ export function Journal() {
         style={StyleSheet.absoluteFill}
       />
       <GalaxyBackground starCount={100} minSize={1} maxSize={2} />
-      
-      <SafeAreaView 
+
+      <SafeAreaView
         style={styles.container}
         edges={['top']}
       >
         {isLoading ? (
-          <ScrollView 
+          <ScrollView
             style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
@@ -766,7 +591,7 @@ export function Journal() {
             </View>
           </ScrollView>
         ) : (
-          <FlatList
+          <FlashList
             data={entries}
             renderItem={renderEntry}
             keyExtractor={keyExtractor}
@@ -779,12 +604,8 @@ export function Journal() {
               />
             }
             contentContainerStyle={styles.scrollContent}
-            removeClippedSubviews={true}
-            initialNumToRender={10}
-            maxToRenderPerBatch={5}
-            windowSize={10}
-            updateCellsBatchingPeriod={50}
-            getItemLayout={getItemLayout}
+            // @ts-ignore - False positive: estimatedItemSize exists on FlashList
+            estimatedItemSize={150}
             showsVerticalScrollIndicator={false}
           />
         )}
@@ -928,77 +749,6 @@ const styles = StyleSheet.create({
   loadingContainer: {
     paddingVertical: 20,
     paddingHorizontal: 16,
-  },
-  timeRangeSelector: {
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-    marginBottom: 16,
-  },
-  timeRangeButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  timeRangeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    fontFamily: 'System',
-  },
-  analyzeButton: {
-    marginBottom: 16,
-  },
-  insightContainer: {
-    marginTop: 16,
-  },
-  insightSectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    fontFamily: 'System',
-    marginBottom: 8,
-  },
-  insightText: {
-    fontSize: 14,
-    fontFamily: 'System',
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  insightItem: {
-    fontSize: 14,
-    fontFamily: 'System',
-    lineHeight: 20,
-    marginTop: 4,
-  },
-  emotionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 16,
-    marginBottom: 12,
-  },
-  emotionBadges: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
-  },
-  emotionBadge: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  emotionBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    fontFamily: 'System',
-  },
-  noDataText: {
-    fontSize: 14,
-    fontFamily: 'System',
-    textAlign: 'center',
-    marginTop: 16,
-    fontStyle: 'italic',
   },
   entryHeader: {
     flexDirection: 'row',

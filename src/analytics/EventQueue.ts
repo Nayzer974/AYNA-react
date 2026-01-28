@@ -18,6 +18,35 @@ const LOCK_KEY = '@ayna_analytics_v2_lock';
 // Maximum serialized size before we start aggressive cleanup (5MB)
 const MAX_SERIALIZED_SIZE = 5 * 1024 * 1024;
 
+/**
+ * Calculate byte length of UTF-8 string (React Native compatible)
+ * Replaces Node.js Buffer.byteLength which doesn't exist in React Native
+ */
+function getByteLength(str: string): number {
+  // Use TextEncoder if available (modern browsers and some RN environments)
+  if (typeof TextEncoder !== 'undefined') {
+    return new TextEncoder().encode(str).length;
+  }
+  
+  // Fallback: calculate UTF-8 byte length manually
+  let byteLength = 0;
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    if (code <= 0x7f) {
+      byteLength += 1;
+    } else if (code <= 0x7ff) {
+      byteLength += 2;
+    } else if (code >= 0xd800 && code <= 0xdbff) {
+      // Surrogate pair (4 bytes)
+      byteLength += 4;
+      i++; // Skip next char (low surrogate)
+    } else {
+      byteLength += 3;
+    }
+  }
+  return byteLength;
+}
+
 interface QueueStats {
   queued: number;
   failedSyncs: number;
@@ -593,7 +622,7 @@ export class EventQueue {
       
       // Serialize and check size
       const serialized = JSON.stringify(queue);
-      const size = Buffer.byteLength(serialized, 'utf8');
+      const size = getByteLength(serialized);
       
       if (size > MAX_SERIALIZED_SIZE) {
         // Too large, perform aggressive cleanup
@@ -605,7 +634,7 @@ export class EventQueue {
         const cleanedQueue = await this.loadQueue(); // Reload cleaned queue
         const cleanedSerialized = JSON.stringify(cleanedQueue);
         
-        if (Buffer.byteLength(cleanedSerialized, 'utf8') > MAX_SERIALIZED_SIZE) {
+        if (getByteLength(cleanedSerialized) > MAX_SERIALIZED_SIZE) {
           throw new Error('Queue too large even after cleanup');
         }
         

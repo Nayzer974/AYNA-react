@@ -15,7 +15,7 @@ import { Linking } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
-import { getSubscriptionStatus, getSubscriptionStatusWithSession, requestActivationLink, requestActivationLinkWithSession } from '@/services/subscription';
+import { getSubscriptionStatus, getSubscriptionStatusWithSession, requestActivationLink, requestActivationLinkWithSession } from '@/services/system/subscription';
 import { useTranslation } from 'react-i18next';
 import { useSessionRestored } from '@/hooks/useSessionRestored';
 
@@ -31,11 +31,27 @@ export function SubscriptionGate({ children }: SubscriptionGateProps) {
   const [isActive, setIsActive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // CRITICAL: Utiliser le hook pour gérer la restauration de session
   const { session, loading: sessionLoading, error: sessionError } = useSessionRestored();
   const appState = useRef(AppState.currentState);
   const lastCheckTime = useRef<number>(0);
+  
+  // ✅ ÉTAPE 4 : Timeout de sécurité pour loading initial
+  useEffect(() => {
+    loadingTimeoutRef.current = setTimeout(() => {
+      if (loading) {
+        setLoading(false); // Forcer la fin du chargement après 5 secondes
+      }
+    }, 5000);
+    
+    return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Détecter quand l'app revient au premier plan (après retour de Stripe)
   useEffect(() => {
@@ -164,6 +180,9 @@ export function SubscriptionGate({ children }: SubscriptionGateProps) {
     if (!currentSession?.access_token) {
       console.error('[SubscriptionGate] No access token in session');
       setError('No access token available. Please log in again.');
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
       setLoading(false);
       setIsActive(false);
       return;
@@ -175,10 +194,17 @@ export function SubscriptionGate({ children }: SubscriptionGateProps) {
       setIsActive(status.isActive);
       setError(null);
     } catch (err: any) {
-      console.error('[SubscriptionGate] Error checking subscription:', err);
+      // ✅ ÉTAPE 4 : Logger toutes les erreurs en DEV
+      if (__DEV__) {
+        console.error('[SubscriptionGate] Error checking subscription:', err);
+      }
       setError(err.message || 'Failed to check subscription status');
       setIsActive(false);
     } finally {
+      // ✅ ÉTAPE 4 : FINALLY GARANTI - Toujours désactiver loading
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
       setLoading(false);
     }
   };

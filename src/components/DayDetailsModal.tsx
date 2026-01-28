@@ -17,17 +17,17 @@ import {
 import { X, Plus, Trash2, Edit2 } from 'lucide-react-native';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
-import { getPrayerTimesForDate } from '@/services/hijri';
+import { getPrayerTimesForDate } from '@/services/content/prayerServices';
 import * as Location from 'expo-location';
-import Animated, { FadeIn, FadeOut, SlideInDown } from 'react-native-reanimated';
-import { 
-  getNotesForDate, 
-  saveNote, 
-  deleteNote, 
-  generateNoteId, 
+import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
+import {
+  getNotesForDate,
+  saveNote,
+  deleteNote,
+  generateNoteId,
   formatDateForStorage,
-  type CalendarNote 
-} from '@/services/calendarNotes';
+  type CalendarNote
+} from '@/services/storage/calendarNotes';
 import { TextInput } from 'react-native';
 
 interface CalendarDay {
@@ -83,7 +83,7 @@ const PRAYER_LABELS = {
 export function DayDetailsModal({ visible, onClose, day }: DayDetailsModalProps) {
   const { user } = useUser();
   const theme = useMemo(() => getTheme(user?.theme || 'default'), [user?.theme]);
-  
+
   const [prayerTimes, setPrayerTimes] = useState<Record<string, string> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -127,7 +127,7 @@ export function DayDetailsModal({ visible, onClose, day }: DayDetailsModalProps)
 
   const handleAddNote = async () => {
     if (!day || !newNoteTitle.trim()) return;
-    
+
     try {
       const dateStr = formatDateForStorage(day.gregorianYear, day.gregorianMonth, day.gregorianDay);
       const newNote: CalendarNote = {
@@ -139,7 +139,7 @@ export function DayDetailsModal({ visible, onClose, day }: DayDetailsModalProps)
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      
+
       await saveNote(newNote);
       await loadNotes();
       setNewNoteTitle('');
@@ -176,7 +176,7 @@ export function DayDetailsModal({ visible, onClose, day }: DayDetailsModalProps)
 
       // Obtenir la localisation
       const location = await Location.getCurrentPositionAsync({});
-      
+
       // Récupérer les heures de prière pour la date sélectionnée
       const response = await getPrayerTimesForDate(
         location.coords.latitude,
@@ -220,21 +220,14 @@ export function DayDetailsModal({ visible, onClose, day }: DayDetailsModalProps)
       transparent
       animationType="fade"
       onRequestClose={onClose}
-      statusBarTranslucent={true}
     >
       <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable onPress={(e) => e.stopPropagation()}>
-          <Animated.View
-            entering={FadeIn}
-            exiting={FadeOut}
-            style={[
-              styles.modalContent,
-              {
-                backgroundColor: cardBackground,
-                borderColor: theme.colors.border || 'rgba(255, 255, 255, 0.1)',
-              },
-            ]}
-          >
+        <Animated.View
+          entering={SlideInDown.duration(300)}
+          style={[styles.modalContent, { backgroundColor: cardBackground }]}
+          onStartShouldSetResponder={() => true}
+        >
+          <Pressable onPress={(e) => e.stopPropagation()}>
             {/* En-tête */}
             <View style={styles.header}>
               <View style={styles.headerContent}>
@@ -278,7 +271,7 @@ export function DayDetailsModal({ visible, onClose, day }: DayDetailsModalProps)
                 <Text style={[styles.sectionTitle, { color: textColor }]}>
                   Heures de prière
                 </Text>
-                
+
                 {loading ? (
                   <View style={styles.loadingContainer}>
                     <ActivityIndicator size="small" color={accentColor} />
@@ -297,7 +290,7 @@ export function DayDetailsModal({ visible, onClose, day }: DayDetailsModalProps)
                     {Object.entries(PRAYER_NAMES).map(([key, name]) => {
                       const time = prayerTimes[name];
                       if (!time) return null;
-                      
+
                       return (
                         <View key={key} style={[styles.prayerTimeRow, { borderBottomColor: 'rgba(255, 255, 255, 0.1)' }]}>
                           <Text style={[styles.prayerName, { color: textColor }]}>
@@ -320,11 +313,11 @@ export function DayDetailsModal({ visible, onClose, day }: DayDetailsModalProps)
                     Événements
                   </Text>
                   {day.events.map((event, index) => (
-                    <View 
-                      key={index} 
+                    <View
+                      key={index}
                       style={[
                         styles.eventCard,
-                        { 
+                        {
                           backgroundColor: event.isImportant ? accentColor + '20' : 'rgba(255, 255, 255, 0.05)',
                           borderLeftColor: event.isImportant ? accentColor : theme.colors.textSecondary + '40',
                         }
@@ -366,7 +359,7 @@ export function DayDetailsModal({ visible, onClose, day }: DayDetailsModalProps)
                     <Plus size={18} color={accentColor} />
                   </Pressable>
                 </View>
-                
+
                 {showAddNote && (
                   <View style={[styles.addNoteContainer, { backgroundColor: 'rgba(255, 255, 255, 0.05)' }]}>
                     <TextInput
@@ -409,15 +402,15 @@ export function DayDetailsModal({ visible, onClose, day }: DayDetailsModalProps)
                     </View>
                   </View>
                 )}
-                
+
                 {notes.length > 0 ? (
                   <View style={styles.notesContainer}>
                     {notes.map((note) => (
-                      <View 
-                        key={note.id} 
+                      <View
+                        key={note.id}
                         style={[
                           styles.noteCard,
-                          { 
+                          {
                             backgroundColor: note.color ? note.color + '20' : 'rgba(255, 255, 255, 0.05)',
                             borderLeftColor: note.color || accentColor,
                           }
@@ -471,8 +464,8 @@ export function DayDetailsModal({ visible, onClose, day }: DayDetailsModalProps)
                 )}
               </View>
             </ScrollView>
-          </Animated.View>
-        </Pressable>
+          </Pressable>
+        </Animated.View>
       </Pressable>
     </Modal>
   );
@@ -482,24 +475,23 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-    zIndex: 9999,
+    justifyContent: 'flex-end',
   },
   modalContent: {
-    width: '100%',
-    maxWidth: 400,
-    borderRadius: 20,
-    padding: 24,
-    borderWidth: 1,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     maxHeight: '80%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 10,
-    zIndex: 10000,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
   header: {
     flexDirection: 'row',

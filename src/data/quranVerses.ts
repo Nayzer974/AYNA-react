@@ -7,6 +7,7 @@ export interface Verse {
   number: number;
   arabic: string;
   translation: string;
+  reference?: string;
 }
 
 export interface SurahVerses {
@@ -123,3 +124,44 @@ export function getYassineVersesRange(day: number): { start: number; end: number
 
 
 
+/**
+ * Versets de guérison (Shifa)
+ */
+export const HEALING_VERSES: Verse[] = [
+  {
+    number: 82,
+    arabic: 'وَنُنَزِّلُ مِنَ ٱلْقُرْءَانِ مَا هُوَ شِفَآءٌ وَرَحْمَةٌ لِّلْمُؤْمِنِينَ',
+    translation: 'Nous faisons descendre du Coran ce qui est guérison et miséricorde pour les croyants.',
+    reference: '17:82'
+  },
+  {
+    number: 14,
+    arabic: 'وَيَشْفِ صُدُورَ قَوْمٍ مُّؤْمِنِينَ',
+    translation: '...et Il guérira les poitrines d’un peuple croyant.',
+    reference: '9:14'
+  },
+  {
+    number: 57,
+    arabic: 'يَـٰٓأَيُّهَا ٱلنَّاسُ قَدْ جَآءَتْكُم مَّوعِظَةٌ مِّن رَّبِّكُمْ وَشِفَآءٌ لِّمَا فِى ٱلصُّدُورِ',
+    translation: 'Ô gens ! Une exhortation vous est venue de votre Seigneur, une guérison de ce qui est dans les poitrines...',
+    reference: '10:57'
+  },
+  {
+    number: 69,
+    arabic: 'يَخْرُجُ مِن بُطُونِهَا شَرَابٌ مُّخْتَلِفٌ أَلْوَٰنُهُۥ فِيهِ شِفَآءٌ لِّلنَّاسِ',
+    translation: '...il sort de leurs ventres un breuvage aux couleurs variées, dans lequel il y a une guérison pour les gens.',
+    reference: '16:69'
+  },
+  {
+    number: 80,
+    arabic: 'وَإِذَا مَرِضْتُ فَهُوَ يَشْفِينِ',
+    translation: 'et quand je suis malade, c’est Lui qui me guérit.',
+    reference: '26:80'
+  },
+  {
+    number: 44,
+    arabic: 'قُلْ هُوَ لِلَّذِينَ ءَامَنُوا۟ هُدًى وَشِفَآءٌ',
+    translation: 'Dis : « Pour ceux qui croient, il est guide et guérison ».',
+    reference: '41:44'
+  },
+];

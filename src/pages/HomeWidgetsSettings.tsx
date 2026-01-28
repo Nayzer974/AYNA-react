@@ -17,7 +17,7 @@ import {
   saveHomeWidgets,
   updateHomeWidget,
   type HomeWidget,
-} from '@/services/homeWidgets';
+} from '@/services/system/homeWidgets';
 import Animated, { FadeIn, SlideInRight } from 'react-native-reanimated';
 // Note: Pour le drag & drop, utiliser react-native-draggable-flatlist si installé
 // Sinon, implémenter avec react-native-gesture-handler

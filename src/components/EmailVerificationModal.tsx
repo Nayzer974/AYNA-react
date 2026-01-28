@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Modal, Pressable, Alert } from 'react-native';
 import { X, Mail, CheckCircle } from 'lucide-react-native';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services/auth/supabase';
 import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -25,7 +25,7 @@ export function EmailVerificationModal({ visible, onClose }: EmailVerificationMo
       setSending(true);
       
       // Utiliser le service dédié pour la vérification d'email
-      const { sendVerificationEmail } = await import('@/services/emailVerification');
+      const { sendVerificationEmail } = await import('@/services/auth/emailVerification');
       const result = await sendVerificationEmail(user.email, 'signup');
 
       if (!result.success) {

@@ -6,13 +6,13 @@ import { getTheme } from '@/data/themes';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input, Button } from '@/components/ui';
 import { Mail, ArrowLeft } from 'lucide-react-native';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services/auth/supabase';
 import { APP_CONFIG } from '@/config';
-import { requestPasswordChange } from '@/services/passwordChange';
+import { requestPasswordChange } from '@/services/auth/passwordChange';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GalaxyBackground } from '@/components/GalaxyBackground';
 import { useTranslation } from 'react-i18next';
-import { trackPageView, trackEvent } from '@/services/analytics';
+import { trackPageView, trackEvent } from '@/services/analytics/analytics';
 
 /**
  * Page ForgotPassword

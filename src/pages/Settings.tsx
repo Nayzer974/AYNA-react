@@ -17,11 +17,11 @@ import { useDarkMode } from '@/hooks/useDarkMode';
 import { useResponsive } from '@/hooks/useResponsive';
 import { createAccessibilityProps } from '@/utils/accessibility';
 import i18n from '@/i18n';
-import { trackPageView, trackEvent } from '@/services/analytics';
-import { loadUserPreferences, saveUserPreferences } from '@/services/personalization';
+import { trackPageView, trackEvent } from '@/services/analytics/analytics';
+import { loadUserPreferences, saveUserPreferences } from '@/services/system/personalization';
 import { usePreferences } from '@/contexts/PreferencesContext';
-import { supabase } from '@/services/supabase';
-import { requestPasswordChange } from '@/services/passwordChange';
+import { supabase } from '@/services/auth/supabase';
+import { requestPasswordChange } from '@/services/auth/passwordChange';
 import { analytics } from '@/analytics';
 import { Linking } from 'react-native';
 import { SmartNotificationsSettings } from '@/components/SmartNotificationsSettings';
@@ -43,19 +43,19 @@ export function Settings() {
   const theme = getTheme(user?.theme || 'default');
   const translation = useTranslation();
   const t = translation?.t || ((key: string) => key); // Fallback si t n'existe pas
-  
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   // const [notifications, setNotifications] = useState(true); // Désactivé
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const { starsEnabled, setStarsEnabled } = usePreferences();
+  const { starsEnabled, setStarsEnabled, preferences, updatePreferences } = usePreferences();
+  const spaceAudioEnabled = preferences.spaceAudioEnabled ?? true;
   const [selectedTheme, setSelectedTheme] = useState<'default' | 'ocean' | 'sunset' | 'forest' | 'royal' | 'galaxy' | 'minimal'>(user?.theme || 'default');
   const [selectedLanguage, setSelectedLanguage] = useState<'fr' | 'ar' | 'en'>(i18n.language as 'fr' | 'ar' | 'en' || 'fr');
   const { isDarkMode, preference: darkModePreference, setPreference: setDarkModePreference } = useDarkMode();
   const { isTablet } = useResponsive();
-  const { preferences, updatePreferences } = usePreferences();
   const [analyticsEnabled, setAnalyticsEnabled] = useState(preferences.analyticsConsent ?? false);
-  
+
   // Charger les préférences utilisateur au démarrage
   useEffect(() => {
     const loadPreferences = async () => {
@@ -84,7 +84,7 @@ export function Settings() {
       setSelectedLanguage(currentLang);
     }
   }, [i18n.language]);
-  
+
   // Animation pour le changement de thème
   const themeAnimationProgress = useSharedValue(0);
   const [previousThemeId, setPreviousThemeId] = useState(user?.theme || 'default');
@@ -107,7 +107,7 @@ export function Settings() {
   const animatedBackgroundStyle = useAnimatedStyle(() => {
     const oldTheme = themes[previousThemeId] || themes.default;
     const newTheme = themes[currentThemeId] || themes.default;
-    
+
     return {
       backgroundColor: interpolateColor(
         themeAnimationProgress.value,
@@ -120,7 +120,7 @@ export function Settings() {
   const animatedBackgroundSecondaryStyle = useAnimatedStyle(() => {
     const oldTheme = themes[previousThemeId] || themes.default;
     const newTheme = themes[currentThemeId] || themes.default;
-    
+
     return {
       backgroundColor: interpolateColor(
         themeAnimationProgress.value,
@@ -133,7 +133,7 @@ export function Settings() {
   const animatedTextStyle = useAnimatedStyle(() => {
     const oldTheme = themes[previousThemeId] || themes.default;
     const newTheme = themes[currentThemeId] || themes.default;
-    
+
     return {
       color: interpolateColor(
         themeAnimationProgress.value,
@@ -146,7 +146,7 @@ export function Settings() {
   const animatedAccentStyle = useAnimatedStyle(() => {
     const oldTheme = themes[previousThemeId] || themes.default;
     const newTheme = themes[currentThemeId] || themes.default;
-    
+
     return {
       color: interpolateColor(
         themeAnimationProgress.value,
@@ -157,8 +157,8 @@ export function Settings() {
   });
 
   const handleThemeChange = async (themeId: string) => {
-    setSelectedTheme(themeId as 'default' | 'ocean' | 'sunset' | 'forest' | 'royal' | 'galaxy' | 'minimal');
-    updateUser({ theme: themeId as 'default' | 'ocean' | 'sunset' | 'forest' | 'royal' | 'galaxy' | 'minimal' });
+    setSelectedTheme(themeId as any);
+    updateUser({ theme: themeId as any });
     await saveUserPreferences({ theme: themeId });
     trackEvent('theme_changed', { theme: themeId });
   };
@@ -181,18 +181,18 @@ export function Settings() {
 
   const handleAnalyticsToggle = async (enabled: boolean) => {
     setAnalyticsEnabled(enabled);
-    
+
     try {
       // Mettre à jour les préférences
       await saveUserPreferences({ analyticsConsent: enabled });
-      
+
       // Mettre à jour analytics
       if (enabled) {
         analytics.optIn();
       } else {
         await analytics.optOut();
       }
-      
+
       // Mettre à jour le contexte
       await updatePreferences({ analyticsConsent: enabled });
     } catch (error) {
@@ -241,7 +241,7 @@ export function Settings() {
       });
 
       const { latitude, longitude } = location.coords;
-      
+
       // Récupérer le nom de la ville via reverse geocoding
       let city = '';
       try {
@@ -275,19 +275,19 @@ export function Settings() {
             }
 
             const data = await response.json();
-            
+
             // Essayer plusieurs champs possibles pour le nom de la ville
             const address = data.address || {};
-            city = address.city || 
-                   address.town || 
-                   address.village || 
-                   address.municipality ||
-                   address.county ||
-                   address.state_district ||
-                   address.region ||
-                   address.state ||
-                   '';
-            
+            city = address.city ||
+              address.town ||
+              address.village ||
+              address.municipality ||
+              address.county ||
+              address.state_district ||
+              address.region ||
+              address.state ||
+              '';
+
             if (city) {
               break; // On a trouvé une ville, on peut arrêter
             }
@@ -309,18 +309,18 @@ export function Settings() {
                 },
               }
             );
-            
+
             if (response.ok) {
               const contentType = response.headers.get('content-type');
               if (contentType && contentType.includes('application/json')) {
                 const data = await response.json();
                 const address = data.address || {};
-                city = address.city || 
-                       address.town || 
-                       address.village || 
-                       address.municipality ||
-                       address.county ||
-                       '';
+                city = address.city ||
+                  address.town ||
+                  address.village ||
+                  address.municipality ||
+                  address.county ||
+                  '';
               }
             }
           } catch (finalError) {
@@ -329,7 +329,7 @@ export function Settings() {
         }
 
         updateUser({ location: { latitude, longitude, city } });
-        
+
         if (city) {
           Alert.alert(t('settings.success'), t('settings.locationUpdated', { city }));
         } else {
@@ -417,14 +417,14 @@ export function Settings() {
     try {
       console.log('[Settings] Demande de vérification email pour:', user.email);
       console.log('[Settings] User ID:', user?.id);
-      
+
       // Vérifier et rafraîchir la session si nécessaire
       let sessionValid = false;
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      
+
       if (sessionError || !sessionData?.session) {
         console.log('[Settings] Pas de session active, tentative de rafraîchissement');
-        
+
         // Si pas de session, essayer de se reconnecter silencieusement
         // ou demander à l'utilisateur de se reconnecter
         Alert.alert(
@@ -445,20 +445,20 @@ export function Settings() {
         );
         return;
       }
-      
+
       sessionValid = true;
       console.log('[Settings] Session valide trouvée');
-      
+
       // Utiliser le service dédié pour la vérification d'email
       console.log('[Settings] Import du service emailVerification...');
-      const { sendVerificationEmail } = await import('@/services/emailVerification');
+      const { sendVerificationEmail } = await import('@/services/auth/emailVerification');
       console.log('[Settings] Service importé, appel de sendVerificationEmail...');
       const result = await sendVerificationEmail(user.email, 'signup');
       console.log('[Settings] Résultat de sendVerificationEmail:', result);
 
       if (!result.success) {
         console.error('[Settings] Erreur envoi email:', result.error);
-        
+
         // Si l'erreur est liée à la session, proposer de se reconnecter
         if (result.error?.includes('session') || result.error?.includes('connecté')) {
           Alert.alert(
@@ -479,7 +479,7 @@ export function Settings() {
           );
           return;
         }
-        
+
         Alert.alert(
           t('common.error') || 'Erreur',
           result.error || t('settings.emailVerification.sendFailed') || 'Erreur lors de l\'envoi de l\'email'
@@ -493,7 +493,7 @@ export function Settings() {
         (t('settings.emailVerification.emailSentMessage') ||
           'Un email de vérification a été envoyé à {{email}}. Veuillez vérifier votre boîte mail et cliquer sur le lien de confirmation.').replace('{{email}}', user.email)
       );
-      
+
       trackEvent('email_verification_requested', { email: user.email });
     } catch (error: any) {
       console.error('[Settings] Erreur inattendue lors de l\'envoi de l\'email:', error);
@@ -514,7 +514,7 @@ export function Settings() {
         ]}
       />
       <GalaxyBackground starCount={100} minSize={1} maxSize={2} />
-      
+
       <SafeAreaView style={styles.container} edges={['top']}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -522,19 +522,57 @@ export function Settings() {
           nestedScrollEnabled={true}
         >
           {/* Header */}
-            <Animated.View style={styles.header}>
-              <Pressable
-                onPress={() => navigation.goBack()}
-                style={styles.backButton}
-              >
-                <View>
-                  <ArrowLeft size={24} color={theme.colors.text} />
-                </View>
-              </Pressable>
-              <Animated.Text style={[styles.title, animatedTextStyle]}>
-                {t('settings.title') || 'Paramètres'}
+          <Animated.View style={styles.header}>
+            <Pressable
+              onPress={() => navigation.goBack()}
+              style={styles.backButton}
+            >
+              <View>
+                <ArrowLeft size={24} color={theme.colors.text} />
+              </View>
+            </Pressable>
+            <Animated.Text style={[styles.title, animatedTextStyle]}>
+              {t('settings.title') || 'Paramètres'}
+            </Animated.Text>
+          </Animated.View>
+
+          {/* Gender Section */}
+          <View style={[styles.section, { backgroundColor: 'rgba(255, 255, 255, 0.05)' }]}>
+            <View style={styles.sectionHeader}>
+              <View>
+                <Smartphone size={24} color={theme.colors.accent} />
+              </View>
+              <Animated.Text style={[styles.sectionTitle, animatedTextStyle]}>
+                {t('auth.gender') || 'Genre'}
               </Animated.Text>
-            </Animated.View>
+            </View>
+            <View style={styles.languageSelector}>
+              {([
+                { id: 'male', label: t('auth.genderMale') || 'Homme' },
+                { id: 'female', label: t('auth.genderFemale') || 'Femme' }
+              ] as const).map((gender) => (
+                <Pressable
+                  key={gender.id}
+                  onPress={() => {
+                    updateUser({ gender: gender.id as any });
+                    trackEvent('gender_changed', { gender: gender.id });
+                  }}
+                  style={[
+                    styles.languageOption,
+                    user?.gender === gender.id && {
+                      borderColor: theme.colors.accent,
+                      borderWidth: 2,
+                      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                    },
+                  ]}
+                >
+                  <Animated.Text style={[styles.languageName, animatedTextStyle]}>
+                    {gender.label}
+                  </Animated.Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
 
           {/* Privacy Section */}
           <View style={[styles.section, { backgroundColor: 'rgba(255, 255, 255, 0.05)' }]}>
@@ -546,7 +584,7 @@ export function Settings() {
                 {t('settings.privacy') || 'Confidentialité'}
               </Animated.Text>
             </View>
-            
+
             {/* Analytics Toggle */}
             <View style={styles.toggleRow}>
               <View style={styles.toggleLabelContainer}>
@@ -619,7 +657,7 @@ export function Settings() {
               </View>
             </Pressable>
           </View>
-          
+
           {/* Theme Creator Section */}
           <View style={[styles.section, { backgroundColor: 'rgba(255, 255, 255, 0.05)' }]}>
             <Pressable
@@ -849,6 +887,19 @@ export function Settings() {
                 thumbColor="#fff"
               />
             </View>
+            <View style={styles.toggleRow}>
+              <Animated.Text style={[styles.toggleLabel, animatedTextStyle]}>
+                Space Audio
+              </Animated.Text>
+              <Switch
+                value={spaceAudioEnabled}
+                onValueChange={async (enabled) => {
+                  await updatePreferences({ spaceAudioEnabled: enabled });
+                }}
+                trackColor={{ false: 'rgba(255,255,255,0.12)', true: theme.colors.accent }}
+                thumbColor="#fff"
+              />
+            </View>
           </View>
 
           {/* Stars Background */}
@@ -973,7 +1024,7 @@ export function Settings() {
                 {user.email}
               </Animated.Text>
               <Animated.Text style={[styles.emailStatus, animatedTextStyle]}>
-                {user.emailVerified 
+                {user.emailVerified
                   ? t('settings.emailVerification.verified') || '✓ Email vérifié'
                   : t('settings.emailVerification.notVerified') || '⚠ Email non vérifié'}
               </Animated.Text>
@@ -1057,7 +1108,7 @@ export function Settings() {
           </View>
         </ScrollView>
       </SafeAreaView>
-      
+
       <ConfirmationModal
         visible={showLogoutModal}
         title={t('settings.logoutTitle')}
@@ -1278,6 +1329,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'System',
     lineHeight: 20,
+  },
+  sectionRowPressed: {
+    opacity: 0.7,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
 });
 

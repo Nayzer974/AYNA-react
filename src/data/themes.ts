@@ -7,12 +7,8 @@ export interface Theme {
     accent: string;
     background: string;
     backgroundSecondary: string;
-    backgroundTertiary?: string;
     text: string;
     textSecondary: string;
-    error?: string;
-    success?: string;
-    border?: string;
   };
 }
 
@@ -27,10 +23,7 @@ export const themes: Record<string, Theme> = {
       background: '#0A0F2C',
       backgroundSecondary: '#1E1E2F',
       text: '#FFFFFF',
-      textSecondary: 'rgba(255, 255, 255, 0.8)',
-      error: '#EF4444',
-      success: '#10B981',
-      border: 'rgba(255, 255, 255, 0.1)'
+      textSecondary: 'rgba(255, 255, 255, 0.8)'
     }
   },
   ocean: {

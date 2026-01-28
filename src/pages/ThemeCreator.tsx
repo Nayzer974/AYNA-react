@@ -10,7 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card, CardHeader, CardTitle, CardContent, Button } from '@/components/ui';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GalaxyBackground } from '@/components/GalaxyBackground';
-import { saveCustomTheme, generateThemeId, type CustomTheme } from '@/services/themeCreator';
+import { saveCustomTheme, generateThemeId, type CustomTheme } from '@/services/system/themeCreator';
 import { ArrowLeft, Save, Palette, Eye } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';

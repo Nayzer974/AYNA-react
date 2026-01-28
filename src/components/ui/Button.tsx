@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { LucideIcon, Check } from 'lucide-react-native';
 import { usePressScale } from '@/hooks/useScale';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
+import { useClickSound } from '@/hooks/useClickSound';
 import { ANIMATION_DURATION, ANIMATION_VALUES } from '@/utils/animations';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
@@ -70,10 +71,12 @@ export function Button({
   const theme = getTheme(user?.theme || 'default');
   const isDisabled = disabled || loading || success;
   const haptic = useHapticFeedback();
+  const { playClickSound } = useClickSound();
 
   const handlePress = () => {
     if (!isDisabled && onPress) {
       haptic.light();
+      playClickSound();
       onPress();
     }
   };

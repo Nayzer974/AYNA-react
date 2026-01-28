@@ -7,7 +7,7 @@
  */
 
 import { AnalyticsProvider, AnalyticsEvent } from '../types';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services/auth/supabase';
 import { APP_CONFIG } from '@/config';
 
 /**

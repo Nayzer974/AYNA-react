@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { logModuleVisit } from '@/services/moduleTracking';
+import { logModuleVisit } from '@/services/analytics/moduleTracking';
 
 /**
  * Types de modules à tracker

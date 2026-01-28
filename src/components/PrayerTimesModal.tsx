@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, ActivityIndicator, ScrollView, Alert } from 'react-native';
-import Animated, { FadeIn, FadeOut, SlideInDown, SlideInUp } from 'react-native-reanimated';
+import Animated, { FadeIn, SlideInDown, SlideInUp } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import { X, Check, Compass, Clock } from 'lucide-react-native';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
-import { getTodayPrayerTimes, initialize as initializePrayerTimes } from '@/services/PrayerTimeManager';
+import { getTodayPrayerTimes, initialize as initializePrayerTimes } from '@/services/content/PrayerTimeManager';
 import Svg, { Rect, Line } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -260,17 +260,7 @@ export function PrayerTimesModal({ visible, onClose }: PrayerTimesModalProps) {
     >
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onClose} />
-        <Animated.View
-          entering={FadeIn}
-          exiting={FadeOut}
-          style={[
-            styles.modalContent,
-            {
-              backgroundColor: theme.colors.backgroundSecondary,
-              borderColor: theme.colors.border || 'rgba(255, 255, 255, 0.1)',
-            },
-          ]}
-        >
+        <View style={[styles.modalContent, { backgroundColor: theme.colors.backgroundSecondary }]}>
           {/* Header */}
           <View style={styles.header}>
             <Text style={[styles.title, { color: theme.colors.text }]}>
@@ -603,7 +593,7 @@ export function PrayerTimesModal({ visible, onClose }: PrayerTimesModalProps) {
               ) : null}
             </ScrollView>
           </View>
-        </Animated.View>
+        </View>
       </View>
     </Modal>
   );
@@ -614,28 +604,27 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-    zIndex: 9999,
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
   },
   modalContent: {
-    width: '100%',
+    width: '90%',
     maxWidth: 500,
     height: '85%',
     maxHeight: 600,
-    borderRadius: 20,
+    borderRadius: 24,
     overflow: 'hidden',
     borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.5,
+    shadowRadius: 60,
+    elevation: 20,
     position: 'relative',
-    zIndex: 10000,
+    zIndex: 1000,
   },
   header: {
     flexDirection: 'row',

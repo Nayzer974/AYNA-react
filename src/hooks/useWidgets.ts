@@ -9,7 +9,7 @@ import {
   updateAllWidgetsData,
   getStoredWidgetsData,
   type AllWidgetsData,
-} from '@/services/widgetManager';
+} from '@/services/system/widgetManager';
 import i18n from '@/i18n';
 
 export function useWidgets() {

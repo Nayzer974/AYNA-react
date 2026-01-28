@@ -1,19 +1,20 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { surahs } from '@/data/quranData';
-import { getPrayerTimesByCoords } from '@/services/hijri';
+import { getPrayerTimesByCoords } from '@/services/content/prayerServices';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GalaxyBackground } from '@/components/GalaxyBackground';
 import { useModuleTracker } from '@/hooks/useModuleTracker';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
-import { trackPageView, trackEvent } from '@/services/analytics';
+import { trackPageView, trackEvent } from '@/services/analytics/analytics';
 import { logger } from '@/utils/logger';
 
 /**
@@ -48,18 +49,18 @@ export function Quran() {
           setLoadingLocation(false);
           return;
         }
-        
+
         setErrorMessage(null);
 
         const location = await Location.getCurrentPositionAsync({});
         logger.log('[Quran] Localisation obtenue:', location.coords.latitude, location.coords.longitude);
-        
+
         const response = await getPrayerTimesByCoords(
           location.coords.latitude,
           location.coords.longitude
         );
         logger.log('[Quran] Réponse API reçue');
-        
+
         if (response?.data?.timings) {
           // Parser les heures pour extraire uniquement HH:MM (l'API peut retourner "HH:MM (GMT+XX)")
           const parsedTimings: Record<string, string> = {};
@@ -124,7 +125,7 @@ export function Quran() {
                   style={styles.prayerTimeRow}
                 >
                   <View style={styles.prayerTimeLeft}>
-                    <Text 
+                    <Text
                       style={[styles.prayerTimeLabel, { color: theme.colors.text }]}
                       numberOfLines={2}
                       ellipsizeMode="tail"
@@ -133,7 +134,7 @@ export function Quran() {
                     </Text>
                   </View>
                   <View style={styles.prayerTimeRight}>
-                    <Text 
+                    <Text
                       style={[styles.prayerTimeValue, { color: theme.colors.accent }]}
                       numberOfLines={1}
                     >
@@ -164,7 +165,7 @@ export function Quran() {
     >
       <View style={styles.surahContent}>
         <View style={styles.surahLeft}>
-          <Animated.View 
+          <Animated.View
             entering={FadeIn.delay(index * 50).duration(400)}
             style={styles.surahNumberBadgeContainer}
           >
@@ -223,27 +224,19 @@ export function Quran() {
         style={StyleSheet.absoluteFill}
       />
       <GalaxyBackground starCount={100} minSize={1} maxSize={2} />
-      
-      <SafeAreaView 
+
+      <SafeAreaView
         style={styles.container}
         edges={['top']}
       >
-        <FlatList
+        <FlashList
           data={surahs}
           renderItem={renderSurah}
           keyExtractor={(item) => item.number.toString()}
           ListHeaderComponent={ListHeaderComponent}
           contentContainerStyle={styles.surahsList}
-          removeClippedSubviews={true}
-          initialNumToRender={15}
-          maxToRenderPerBatch={10}
-          windowSize={10}
-          updateCellsBatchingPeriod={50}
-          getItemLayout={(data, index) => ({
-            length: 112, // Hauteur approximative d'une carte (80 + 12 margin + 20 padding)
-            offset: 112 * index,
-            index,
-          })}
+          // @ts-ignore - False positive: estimatedItemSize exists on FlashList
+          estimatedItemSize={112}
           showsVerticalScrollIndicator={false}
         />
       </SafeAreaView>

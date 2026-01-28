@@ -11,10 +11,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { GalaxyBackground } from '@/components/GalaxyBackground';
 import { ArrowLeft } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { trackPageView, trackEvent } from '@/services/analytics';
+import { trackPageView, trackEvent } from '@/services/analytics/analytics';
 import { isValidEmail } from '@/utils/validation';
 import { useRateLimit, RATE_LIMIT_CONFIGS } from '@/utils/rateLimiter';
-import { logLoginAttempt, logRateLimitExceeded } from '@/services/securityLogger';
+import { logLoginAttempt, logRateLimitExceeded } from '@/services/analytics/securityLogger';
 
 /**
  * Page de connexion

@@ -32,10 +32,8 @@ export function Skeleton({
   const theme = getTheme(user?.theme || 'default');
   
   const opacity = useSharedValue(0.3);
-  const translateX = useSharedValue(-100);
 
   useEffect(() => {
-    // Animation d'opacité pulsante
     opacity.value = withRepeat(
       withTiming(0.7, {
         duration: 1500,
@@ -44,28 +42,11 @@ export function Skeleton({
       -1,
       true
     );
-    
-    // Animation shimmer (effet de brillance qui traverse)
-    translateX.value = withRepeat(
-      withTiming(300, {
-        duration: 2000,
-        easing: Easing.linear,
-      }),
-      -1,
-      false
-    );
-  }, [opacity, translateX]);
+  }, [opacity]);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
       opacity: opacity.value,
-    };
-  });
-
-  // Style pour l'effet shimmer
-  const shimmerStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ translateX: translateX.value }],
     };
   });
 
@@ -97,29 +78,15 @@ export function Skeleton({
       style={[
         styles.skeleton,
         {
-          width: typeof width === 'string' ? width : (width as number),
+          width,
           height: getDefaultHeight(),
           borderRadius: getDefaultBorderRadius(),
           backgroundColor: theme.colors.backgroundSecondary,
-          overflow: 'hidden',
         },
         style,
         animatedStyle,
       ]}
-    >
-      {/* Effet shimmer */}
-      <Animated.View
-        style={[
-          styles.shimmer,
-          {
-            width: '50%',
-            height: '100%',
-            backgroundColor: theme.colors.accent + '15',
-          },
-          shimmerStyle,
-        ]}
-      />
-    </Animated.View>
+    />
   );
 }
 
@@ -152,14 +119,6 @@ export function SkeletonText({ lines = 3, width = '100%', lineHeight = 16, spaci
 const styles = StyleSheet.create({
   skeleton: {
     overflow: 'hidden',
-    position: 'relative',
-  },
-  shimmer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    opacity: 0.3,
-    borderRadius: 999,
   },
 });
 

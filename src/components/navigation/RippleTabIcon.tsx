@@ -50,18 +50,18 @@ export const RippleTabIcon = forwardRef<RippleTabIconRef, RippleTabIconProps>(
     // Animation de l'icône quand elle devient focused (reste agrandie)
     useEffect(() => {
       if (focused) {
-        // Animation fluide pour grossir l'icône quand elle est active
+        // Animation optimisée pour meilleure performance
         scale.value = withSpring(1.2, {
-          damping: 12,      // Résistance (plus élevé = moins de rebond)
-          stiffness: 150,   // Rigidité (plus élevé = plus rapide)
-          mass: 1,          // Masse (affecte l'inertie)
+          damping: 20,      // Plus de résistance = moins de rebond = plus rapide
+          stiffness: 200,   // Plus rigide = plus rapide
+          mass: 0.8,        // Masse réduite = plus réactif
         });
       } else {
         // Retour à la taille normale quand non focused
         scale.value = withSpring(1, {
-          damping: 12,
-          stiffness: 150,
-          mass: 1,
+          damping: 20,
+          stiffness: 200,
+          mass: 0.8,
         });
       }
     }, [focused, scale]);
@@ -75,28 +75,28 @@ export const RippleTabIcon = forwardRef<RippleTabIconRef, RippleTabIconProps>(
       // Animation de l'icône au clic (pulsation rapide puis retour à la taille focused)
       const targetScale = focused ? 1.2 : 1; // Taille cible selon l'état focused
 
-      // Pulsation rapide au clic
-      scale.value = withSpring(1.4, {
-        damping: 7,       // Moins de résistance pour un effet plus dynamique
-        stiffness: 400,   // Animation très rapide
-        mass: 0.5,        // Masse légère pour réactivité
+      // Pulsation rapide au clic (optimisée)
+      scale.value = withSpring(1.3, {
+        damping: 15,       // Plus de résistance = plus rapide
+        stiffness: 300,   // Animation rapide
+        mass: 0.6,        // Masse légère pour réactivité
       }, () => {
         // Callback : retour à la taille cible après la pulsation
         scale.value = withSpring(targetScale, {
-          damping: 12,
-          stiffness: 150,
-          mass: 1,
+          damping: 20,
+          stiffness: 200,
+          mass: 0.8,
         });
       });
 
-      // Animation du ripple (cercle qui s'étend - plus visible)
+      // Animation du ripple (cercle qui s'étend - optimisée)
       rippleScale.value = withTiming(4.5, {
-        duration: 450, // Durée en millisecondes
+        duration: 300, // Durée réduite pour meilleure performance
       });
 
       // L'opacité diminue progressivement jusqu'à 0
       rippleOpacity.value = withTiming(0, {
-        duration: 450,
+        duration: 300, // Durée réduite
       });
     }, [focused, scale, rippleScale, rippleOpacity]);
 

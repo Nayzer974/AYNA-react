@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { PrayerTimesWidgetData } from '@/services/widgetManager';
+import { PrayerTimesWidgetData } from '@/services/system/widgetManager';
 import { getTheme } from '@/data/themes';
 import { Clock } from 'lucide-react-native';
 

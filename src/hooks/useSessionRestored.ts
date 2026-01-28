@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services/auth/supabase';
 import type { Session } from '@supabase/supabase-js';
 
 interface UseSessionRestoredResult {
@@ -44,13 +44,6 @@ export function useSessionRestored(): UseSessionRestoredResult {
         const supabaseAuthToken = await AsyncStorage.getItem('supabase.auth.token');
         console.log('[useSessionRestored] [DEBUG] AsyncStorage supabase.auth.token:', !!supabaseAuthToken);
         
-        if (!supabase) {
-          if (mounted) {
-            setError(new Error('Supabase n\'est pas configuré'));
-            setLoading(false);
-          }
-          return;
-        }
         const { data: { session: initialSession }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) {
@@ -70,7 +63,6 @@ export function useSessionRestored(): UseSessionRestoredResult {
         } else {
           console.warn('[useSessionRestored] ⚠️ No session found in AsyncStorage');
           // Essayer getUser() pour voir si l'utilisateur est connecté mais sans session
-          if (!supabase) return;
           const { data: userData } = await supabase.auth.getUser();
           if (userData?.user) {
             console.warn('[useSessionRestored] ⚠️ User exists but no session:', userData.user.id);

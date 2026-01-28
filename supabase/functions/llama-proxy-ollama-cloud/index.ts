@@ -200,6 +200,8 @@ serve(async (req) => {
         errorMessage = 'Erreur d\'authentification Ollama Cloud. Vérifiez que OLLAMA_API_KEY est correcte et active dans Supabase Secrets. La clé peut être invalide, expirée ou révoquée.';
       } else if (ollamaResponse.status === 403) {
         errorMessage = 'Accès refusé par Ollama Cloud. Vérifiez les permissions de votre clé API.';
+      } else if (ollamaResponse.status === 429) {
+        errorMessage = 'Erreur Ollama: 429';
       } else if (ollamaResponse.status === 404) {
         // Vérifier si c'est une erreur de modèle
         if (errorText.includes('model') && errorText.includes('not found')) {

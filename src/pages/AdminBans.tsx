@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, TextInput, Modal } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
@@ -8,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ban, X, Clock, AlertCircle, ArrowLeft } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GalaxyBackground } from '@/components/GalaxyBackground';
-import { supabase, isCurrentUserAdmin } from '@/services/supabase';
+import { supabase, isCurrentUserAdmin } from '@/services/auth/supabase';
 import { ConfirmationModal } from '@/components/ui';
 
 interface BanRecord {
@@ -1020,26 +1019,15 @@ export function AdminBans() {
         transparent
         animationType="fade"
         onRequestClose={() => setBanModal({ ...banModal, isOpen: false })}
-        statusBarTranslucent={true}
       >
         <Pressable
           style={styles.modalOverlay}
           onPress={() => setBanModal({ ...banModal, isOpen: false })}
         >
           <Pressable
-            onPress={(e) => e.stopPropagation()}
+            style={[styles.modalContent, { backgroundColor: theme.colors.backgroundSecondary }]}
+            onStartShouldSetResponder={() => true}
           >
-            <Animated.View
-              entering={FadeIn}
-              exiting={FadeOut}
-              style={[
-                styles.modalContent,
-                {
-                  backgroundColor: theme.colors.backgroundSecondary,
-                  borderColor: theme.colors.border || 'rgba(255, 255, 255, 0.1)',
-                },
-              ]}
-            >
             <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
               Bannir l'utilisateur
             </Text>
@@ -1156,8 +1144,7 @@ export function AdminBans() {
                   styles.modalButton,
                   styles.modalButtonCancel,
                   {
-                    backgroundColor: theme.colors.backgroundTertiary || 'rgba(255, 255, 255, 0.1)',
-                    borderColor: theme.colors.border || 'rgba(255, 255, 255, 0.2)',
+                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
                   },
                   pressed && styles.buttonPressed,
                 ]}
@@ -1173,8 +1160,7 @@ export function AdminBans() {
                   styles.modalButton,
                   styles.modalButtonConfirm,
                   {
-                    backgroundColor: 'rgba(220, 38, 38, 0.2)',
-                    borderColor: 'rgba(220, 38, 38, 0.4)',
+                    backgroundColor: '#ef4444',
                     opacity:
                       !banModal.banType ||
                       (banModal.banType === 'temporary' && banModal.durationMinutes < 1)
@@ -1184,12 +1170,11 @@ export function AdminBans() {
                   pressed && styles.buttonPressed,
                 ]}
               >
-                <Text style={[styles.modalButtonText, { color: '#fca5a5' }]}>
+                <Text style={[styles.modalButtonText, { color: '#ffffff' }]}>
                   {banModal.banType === 'permanent' ? 'Bannir définitivement' : 'Bannir temporairement'}
                 </Text>
               </Pressable>
             </View>
-            </Animated.View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1446,37 +1431,28 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-    zIndex: 9999,
+    padding: 16,
   },
   modalContent: {
     width: '100%',
     maxWidth: 400,
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 24,
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 10,
-    zIndex: 10000,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   modalTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '600',
-    marginBottom: 12,
-    textAlign: 'center',
+    marginBottom: 16,
     fontFamily: 'System',
   },
   modalText: {
-    fontSize: 16,
+    fontSize: 14,
     marginBottom: 24,
-    textAlign: 'center',
-    lineHeight: 24,
     fontFamily: 'System',
   },
   modalSection: {

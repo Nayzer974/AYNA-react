@@ -22,7 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Shield, Check, X } from 'lucide-react-native';
 import { analytics } from '@/analytics';
-import { saveUserPreferences } from '@/services/personalization';
+import { saveUserPreferences } from '@/services/system/personalization';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const CONSENT_KEY = '@ayna_analytics_consent';

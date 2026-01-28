@@ -8,14 +8,25 @@ import {
   Pressable,
   Alert,
   Modal,
+  ActivityIndicator,
+  AppState,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useDimensions } from '@/hooks/useDimensions';
-import { useAudioPlayer } from 'expo-audio';
+import { Audio } from 'expo-av';
 import { Asset } from 'expo-asset';
+import {
+  setupAudioMode,
+  loadAndPlayAudio,
+  pauseAudio,
+  resumeAudio,
+  stopAudio,
+  AudioMetadata,
+} from '@/services/audio/backgroundAudioService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
+  ArrowRight,
   Play,
   Pause,
   X,
@@ -25,6 +36,7 @@ import {
   Sun,
   VolumeX,
 } from 'lucide-react-native';
+import { StarAnimation } from '@/components/icons/StarAnimation';
 import Animated, {
   FadeIn,
   FadeOut,
@@ -42,12 +54,14 @@ import { GalaxyBackground } from '@/components/GalaxyBackground';
 import { BackButton } from '@/components/BackButton';
 import { AmbianceCard } from '@/components/AmbianceCard';
 import { KhalwaToast, useKhalwaToast } from '@/components/KhalwaToast';
+import { MeditationGuide } from '@/components/MeditationGuide';
 import { useUser } from '@/contexts/UserContext';
 import { getTheme } from '@/data/themes';
 import {
   divineNames,
   DivineName,
   suggestDivineName,
+  suggestDivineNames,
   getRandomDivineName,
   soundAmbiances,
   soundAmbianceFiles,
@@ -56,7 +70,50 @@ import {
   getAmbianceTheme,
   AmbianceTheme,
 } from '@/data/khalwaData';
-import { saveKhalwaSession } from '@/services/khalwaStorage';
+import { asmaUlHusna } from '@/data/asmaData';
+import { saveKhalwaSession } from '@/services/storage/khalwaStorage';
+import { hasActiveSubscription } from '@/services/system/subscription';
+import { analyzeIntentionForDivineName } from '@/services/ai/intentionAI';
+import { ModuleIntroductionModal } from '@/components/ModuleIntroductionModal';
+import { hasSeenModuleIntroduction, markModuleIntroductionAsSeen, MODULE_KEYS } from '@/utils/moduleIntroduction';
+import { MODULE_INTRODUCTIONS } from '@/data/moduleIntroductions';
+import { Sparkles } from 'lucide-react-native';
+
+/**
+ * Convertit un nom divin en forme d'invocation
+ * Transforme "Al-X" en "Ya X" pour l'invocation
+ * @param name - Le nom divin à convertir (ex: "Al-Rahman" ou "Ar-Rahim")
+ * @returns Le nom en forme d'invocation (ex: "Ya Rahman" ou "Ya Rahim")
+ */
+function convertToInvocationForm(name: string): string {
+  if (!name) return name;
+
+  // Remplacer les préfixes "Al-", "Ar-", "Az-", "As-" par "Ya "
+  const invocationForm = name.replace(/^(Al-|Ar-|Az-|As-)/i, 'Ya ');
+
+  // Si le nom n'avait pas de préfixe et ne commence pas déjà par "Ya ", ajouter "Ya "
+  if (invocationForm === name && !name.startsWith('Ya ')) {
+    return `Ya ${name}`;
+  }
+
+  return invocationForm;
+}
+
+// Fonction pour obtenir 3 noms au hasard parmi les 99 noms d'Allah (sans répétition)
+function getThreeRandomNames(): DivineName[] {
+  const shuffled = [...asmaUlHusna].sort(() => Math.random() - 0.5);
+  const selected = shuffled.slice(0, 3);
+
+  // Convertir AsmaName vers DivineName
+  return selected.map(name => ({
+    id: `asma-${name.number}`,
+    arabic: name.arabic,
+    transliteration: name.transliteration,
+    meaning: name.meaning,
+    meaningEn: '', // Pas disponible dans asmaData
+    description: name.description,
+  }));
+}
 
 type Screen =
   | 'welcome'
@@ -77,7 +134,10 @@ interface KhalwaSession {
   duration: number; // en minutes
   breathingType: BreathingType;
   guided: boolean;
-  suggestedDivineName?: DivineName;
+  guided: boolean;
+  suggestedDivineNames?: DivineName[]; // Array for new flow
+  suggestedDivineName?: DivineName; // Deprecated but kept for compatibility
+  selectedSuggestionExplanation?: string;
 }
 
 // Mapping des IDs d'ambiance vers les icônes Lucide React Native
@@ -99,20 +159,29 @@ export function BaytAnNur() {
   const route = useRoute();
   const { user, saveCompletedTasks } = useUser();
   const theme = getTheme(user?.theme || 'default');
-  
-  // Thème d'ambiance actuel - basé sur l'ambiance sélectionnée ou silence par défaut
-  // Utiliser l'ambiance sélectionnée même si elle n'est pas encore validée pour changer le thème immédiatement
-  const [selectedAmbianceForTheme, setSelectedAmbianceForTheme] = React.useState<string>('silence');
-  
 
-  // Paramètres depuis la navigation (pour les défis)
+  // Paramètres depuis la navigation (pour les défis et AsmaUlHusna)
   const routeParams = (route.params as any) || {};
   const fromChallenge = routeParams.fromChallenge === true;
+  const fromAsma = routeParams.fromAsma === true;
   const challengeId = routeParams.challengeId;
   const dayParam = routeParams.day;
   const taskIndexParam = routeParams.taskIndex;
   const divineNameId = routeParams.divineNameId;
   const khalwaName = routeParams.khalwaName; // Nom original du khalwa depuis la tâche
+  const khalwaArabic = routeParams.khalwaArabic; // Texte arabe depuis AsmaUlHusna
+  const khalwaMeaning = routeParams.khalwaMeaning; // Signification depuis AsmaUlHusna
+  const divineAttribute = routeParams.divineAttribute; // Attribut divin depuis la tâche (ex: 'Allah')
+  const selectedAmbiance = routeParams.selectedAmbiance; // Ambiance sonore sélectionnée depuis Challenge40Days
+
+  // Initialiser l'ambiance sonore si elle est passée depuis Challenge40Days
+  const initialSoundAmbiance = selectedAmbiance || undefined;
+
+  // Thème d'ambiance actuel - basé sur l'ambiance sélectionnée ou silence par défaut
+  // Utiliser l'ambiance sélectionnée même si elle n'est pas encore validée pour changer le thème immédiatement
+  const [selectedAmbianceForTheme, setSelectedAmbianceForTheme] = React.useState<string>(
+    initialSoundAmbiance || 'silence'
+  );
 
   // Initialiser l'écran et la session directement depuis les paramètres
   const getInitialScreen = (): Screen => {
@@ -127,7 +196,11 @@ export function BaytAnNur() {
     if (fromChallenge) {
       return 'intention';
     }
-    // Si on a un nom divin mais qu'on ne vient pas d'un défi
+    // Si on vient de AsmaUlHusna avec un nom divin, passer directement à la sélection du son
+    if (fromAsma && khalwaName && khalwaArabic) {
+      return 'sound';
+    }
+    // Si on a un nom divin existant dans la liste
     if (divineNameId) {
       const divineName = divineNames.find((n) => n.id === divineNameId);
       if (divineName) {
@@ -141,16 +214,46 @@ export function BaytAnNur() {
     if (divineNameId) {
       const baseDivineName = divineNames.find((n) => n.id === divineNameId);
       if (baseDivineName && khalwaName) {
+        // Extraire le nom divin du khalwaName (enlever "Kalwa", "—", emojis, etc.)
+        // Exemple: "🧘 Kalwa — Yâ Allah" -> "Yâ Allah"
+        let extractedName = khalwaName;
+        // Enlever les emojis
+        extractedName = extractedName.replace(/[\u{1F300}-\u{1F9FF}]/gu, '');
+        // Enlever "Kalwa" ou "Khalwa"
+        extractedName = extractedName.replace(/kalwa|khalwa/gi, '');
+        // Enlever les tirets et espaces multiples
+        extractedName = extractedName.replace(/[—–-]/g, '').replace(/\s+/g, ' ').trim();
+
         // Si on a un nom original de khalwa, créer une copie avec la transliteration du nom original
         // S'assurer que toutes les propriétés sont copiées, y compris meaning et meaningEn
         return {
           ...baseDivineName,
-          transliteration: khalwaName, // Utiliser le nom original pour l'affichage
+          transliteration: extractedName || baseDivineName.transliteration, // Utiliser le nom extrait ou le nom de base
           meaning: baseDivineName.meaning, // Conserver la traduction française
           meaningEn: baseDivineName.meaningEn, // Conserver la traduction anglaise
         };
       }
-      return baseDivineName;
+      if (baseDivineName) {
+        return baseDivineName;
+      }
+      // Si le nom divin n'existe pas dans khalwaData mais qu'on a les infos depuis AsmaUlHusna,
+      // créer un objet DivineName à partir de ces informations
+      if (fromAsma && khalwaName && khalwaArabic) {
+        // Extraire le nom divin du khalwaName
+        let extractedName = khalwaName;
+        extractedName = extractedName.replace(/[\u{1F300}-\u{1F9FF}]/gu, '');
+        extractedName = extractedName.replace(/kalwa|khalwa/gi, '');
+        extractedName = extractedName.replace(/[—–-]/g, '').replace(/\s+/g, ' ').trim();
+
+        return {
+          id: divineNameId,
+          arabic: khalwaArabic,
+          transliteration: extractedName || convertToInvocationForm(khalwaName),
+          meaning: khalwaMeaning || '',
+          meaningEn: '', // Pas disponible depuis AsmaUlHusna
+          description: `Méditation avec le nom divin ${extractedName || convertToInvocationForm(khalwaName)}`,
+        };
+      }
     }
     return undefined;
   };
@@ -163,12 +266,28 @@ export function BaytAnNur() {
       meaning: initialDivineName.meaning || '',
       meaningEn: initialDivineName.meaningEn || '',
     } : undefined,
+    soundAmbiance: initialSoundAmbiance,
   });
+
+  // Mettre à jour selectedAmbianceForTheme si une ambiance est passée depuis Challenge40Days
+  React.useEffect(() => {
+    if (selectedAmbiance && selectedAmbiance !== 'silence') {
+      setSelectedAmbianceForTheme(selectedAmbiance);
+      // Mettre à jour aussi la session si elle n'a pas encore d'ambiance
+      if (!session.soundAmbiance) {
+        setSession((prev) => ({ ...prev, soundAmbiance: selectedAmbiance }));
+      }
+    }
+  }, [selectedAmbiance]);
   const [timeRemaining, setTimeRemaining] = useState<number>(0); // en secondes
   const [isPaused, setIsPaused] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false);
   const [feeling, setFeeling] = useState('');
-  const [audioSource, setAudioSource] = useState<string | number | null>(null);
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isAudioLoaded, setIsAudioLoaded] = useState(false);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [isAnalyzingIntention, setIsAnalyzingIntention] = useState(false);
+  const [intentionExplanation, setIntentionExplanation] = useState<string>('');
 
   // Thème d'ambiance actuel - basé sur l'ambiance sélectionnée ou silence par défaut
   // Déplacé après la déclaration de session pour éviter l'erreur "used before declaration"
@@ -178,19 +297,58 @@ export function BaytAnNur() {
     return getAmbianceTheme(ambianceId);
   }, [session?.soundAmbiance, selectedAmbianceForTheme]);
 
-  // Utiliser useAudioPlayer au niveau du composant (hook React)
-  // On utilise une source vide initialement, puis on la met à jour via setAudioSource
-  const audioPlayer = useAudioPlayer(audioSource || '');
-
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const guidanceIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastGuidanceTimeRef = useRef<number>(0);
+  const sessionEndTimeRef = useRef<number | null>(null);
   const sessionStartedRef = useRef<boolean>(false);
   const isPausedRef = useRef<boolean>(false);
   const { currentMessage, showMessage, closeMessage } = useKhalwaToast();
   const [showStopModal, setShowStopModal] = useState(false);
+  const [showModuleIntroduction, setShowModuleIntroduction] = useState(false);
+  const [showIntroductionPage, setShowIntroductionPage] = useState(true);
 
   // Nettoyer les timers et l'audio au démontage
+  // Vérifier le statut d'abonnement au montage
+  useEffect(() => {
+    const checkSubscription = async () => {
+      if (user?.id) {
+        try {
+          const hasSubscription = await hasActiveSubscription();
+          // Les admins et utilisateurs spéciaux ont aussi accès à l'IA
+          setIsSubscribed(hasSubscription || user?.isAdmin === true || user?.isSpecial === true);
+        } catch (error) {
+          console.warn('[BaytAnNur] Erreur lors de la vérification de l\'abonnement:', error);
+          setIsSubscribed(false);
+        }
+      }
+    };
+    checkSubscription();
+  }, [user?.id, user?.isAdmin, user?.isSpecial]);
+
+  // Vérifier si l'introduction du module a été vue
+  useEffect(() => {
+    const checkIntroduction = async () => {
+      // Ne pas afficher l'introduction si on vient d'un défi ou d'AsmaUlHusna
+      if (fromChallenge || fromAsma) {
+        setShowIntroductionPage(false);
+        return;
+      }
+
+      // Toujours afficher la page de présentation
+      setShowIntroductionPage(true);
+    };
+    checkIntroduction();
+  }, [fromChallenge, fromAsma]);
+
+  // Initialiser le mode audio
+  useEffect(() => {
+    setupAudioMode();
+    return () => {
+      // Cleanup
+    };
+  }, []);
+
   useEffect(() => {
     return () => {
       if (timerIntervalRef.current) {
@@ -202,27 +360,38 @@ export function BaytAnNur() {
       // Mettre à jour les refs pour empêcher le gestionnaire ended de relancer l'audio
       sessionStartedRef.current = false;
       isPausedRef.current = false;
-      // Libérer l'audio en mettant la source à null
-      // useAudioPlayer gère automatiquement la libération du player
-      setAudioSource(null);
-    };
-  }, []);
 
-  // Gérer le player audio quand la source change
-  useEffect(() => {
-    if (audioPlayer && audioSource) {
-      try {
-        audioPlayer.loop = true;
-        audioPlayer.volume = 0.5;
-        if (sessionStarted && !isPaused) {
-          audioPlayer.play();
-        }
-      } catch (error) {
-        // Erreur silencieuse en production
-        // Le player peut être invalide si la source a changé
+      // Libérer l'audio
+      if (sound) {
+        sound.unloadAsync();
       }
-    }
-  }, [audioSource, audioPlayer, sessionStarted, isPaused]);
+    };
+  }, [sound]);
+
+  // Gérer le cycle de vie de l'app (Background audio)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'background' && sound && sessionStarted && !isPaused) {
+        // L'app passe en arrière-plan pendant une session
+        console.log('[BaytAnNur] App en arrière-plan, audio continue');
+      }
+      // Recalculer le temps au retour premier plan
+      if (nextAppState === 'active' && sessionStarted && !isPaused && sessionEndTimeRef.current) {
+        const now = Date.now();
+        const remaining = Math.ceil((sessionEndTimeRef.current - now) / 1000);
+        if (remaining <= 0) {
+          setTimeRemaining(0);
+          handleSessionEnd();
+        } else {
+          setTimeRemaining(remaining);
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [sound, sessionStarted, isPaused]);
 
   const saveSession = React.useCallback(async () => {
     if (!user?.id || !session?.divineName || !session?.duration) {
@@ -278,38 +447,69 @@ export function BaytAnNur() {
     }
   }, [user, session, feeling, timeRemaining, fromChallenge, challengeId, dayParam, taskIndexParam, saveCompletedTasks]);
 
-  const handleSessionEnd = React.useCallback(() => {
+  const handleSessionEnd = React.useCallback(async () => {
     setSessionStarted(false);
     sessionStartedRef.current = false;
     setIsPaused(false);
     isPausedRef.current = false;
-    // Arrêter l'audio en mettant la source à null
-    // useAudioPlayer gère automatiquement la libération du player
-    setAudioSource(null);
+
+    // Arrêter l'audio
+    if (sound) {
+      await stopAudio(sound);
+      setSound(null);
+      setIsAudioLoaded(false);
+    }
+
     setCurrentScreen('completion');
 
     // Sauvegarder la session
     saveSession();
-  }, [saveSession]);
+  }, [saveSession, sound]);
 
-  // Gérer le timer de session
+  // Gérer le timer de session avec support du mode veille/background
   useEffect(() => {
     if (currentScreen === 'session' && sessionStarted && !isPaused) {
-      timerIntervalRef.current = setInterval(() => {
-        setTimeRemaining((prev) => {
-          if (prev <= 1) {
-            // Fin de session
-            handleSessionEnd();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+      // Si on vient de reprendre ou démarrer, et qu'on n'a pas de date de fin (cas rare), on la recrée
+      if (!sessionEndTimeRef.current && timeRemaining > 0) {
+        sessionEndTimeRef.current = Date.now() + (timeRemaining * 1000);
+      }
+
+      // Si on reprend après une pause (isPaused passait de true à false)
+      // Il faut décaler la date de fin du temps passé en pause ?
+      // L'approche simple : quand on met en pause, on annule endTimeRef.
+      // Quand on reprend, on recrée endTimeRef basé sur timeRemaining actuel.
+      // C'est géré par le if ci-dessus (car isPaused change).
+
+      const updateTimer = () => {
+        if (!sessionEndTimeRef.current) return;
+
+        const now = Date.now();
+        const remaining = Math.ceil((sessionEndTimeRef.current - now) / 1000);
+
+        if (remaining <= 0) {
+          setTimeRemaining(0);
+          handleSessionEnd();
+          if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+        } else {
+          setTimeRemaining(remaining);
+        }
+      };
+
+      // Intervalle régulier pour la mise à jour UI
+      timerIntervalRef.current = setInterval(updateTimer, 1000);
+
+      // Update immédiat
+      updateTimer();
+
     } else {
+      // En pause ou arrêté
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = null;
       }
+      // On garde timeRemaining tel quel dans l'état
+      // On invalide endTimeRef pour qu'il soit recalculé à la reprise
+      sessionEndTimeRef.current = null;
     }
 
     return () => {
@@ -445,36 +645,108 @@ export function BaytAnNur() {
     }
   };
 
+  // Détecter si c'est le khalwa Ya Allah de Sabilat Nûr (jour 40)
+  const isYaAllahKhalwa = React.useMemo(() => {
+    // Vérifier d'abord si on vient d'un défi
+    if (!fromChallenge) return false;
+
+    // Normaliser le nom du khalwa pour la comparaison (enlever emojis, espaces multiples, etc.)
+    const normalizedKhalwaName = khalwaName ? khalwaName.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ') : '';
+
+    // Vérifier si le nom du khalwa contient "Ya Allah" / "Yâ Allah" (avec variations)
+    // Exclure "ya khalwa" pour éviter les faux positifs
+    const hasYaAllahInName = normalizedKhalwaName && (
+      (normalizedKhalwaName.includes('ya allah') && !normalizedKhalwaName.includes('ya khalwa')) ||
+      (normalizedKhalwaName.includes('yâ allah') && !normalizedKhalwaName.includes('yâ khalwa')) ||
+      (normalizedKhalwaName.includes('y allah') && !normalizedKhalwaName.includes('y khalwa'))
+    );
+
+    // Vérifier le divineAttribute
+    const hasAllahAttribute = divineAttribute && divineAttribute.toLowerCase().trim() === 'allah';
+
+    // Vérifier si c'est le jour 40
+    const isDay40 = dayParam === 40;
+
+    // Vérifier le nom divin dans la session
+    const divineNameTranslit = session?.divineName?.transliteration?.toLowerCase() || '';
+    const hasAllahInDivineName = divineNameTranslit.includes('allah') ||
+      divineNameTranslit === 'ya allah' ||
+      divineNameTranslit === 'yâ allah';
+
+    // Si c'est le jour 40 ET (le nom contient Ya Allah OU l'attribut est Allah)
+    if (isDay40 && (hasYaAllahInName || hasAllahAttribute || hasAllahInDivineName)) {
+      return true;
+    }
+
+    // Si le nom contient Ya Allah et qu'on vient d'un défi
+    if (hasYaAllahInName) {
+      return true;
+    }
+
+    // Si l'attribut est Allah et qu'on vient d'un défi
+    if (hasAllahAttribute) {
+      return true;
+    }
+
+    return false;
+  }, [fromChallenge, dayParam, khalwaName, session?.divineName, divineAttribute]);
+
   const handleStartSession = async () => {
     if (!session?.duration || !session?.divineName) return;
 
-    setTimeRemaining((session?.duration || 10) * 60);
+    // Pour le khalwa Ya Allah, forcer la durée à 5 minutes
+    const finalDuration = isYaAllahKhalwa ? 5 : (session?.duration || 10);
+    if (isYaAllahKhalwa && session) {
+      setSession((prev) => ({
+        ...prev,
+        duration: 5,
+        guided: true, // Le khalwa Ya Allah est toujours guidé
+      }));
+    }
+    setTimeRemaining(finalDuration * 60);
     setSessionStarted(true);
     sessionStartedRef.current = true;
     setIsPaused(false);
     isPausedRef.current = false;
     lastGuidanceTimeRef.current = 0;
+    sessionEndTimeRef.current = Date.now() + (finalDuration * 60 * 1000);
     setCurrentScreen('session');
 
     // Démarrer l'ambiance sonore si sélectionnée
     if (session?.soundAmbiance && session.soundAmbiance !== 'silence') {
-      const audioUri = await getAudioUri(session.soundAmbiance);
-      if (audioUri) {
-        try {
-          // Libérer l'ancien player en mettant la source à null
-          // useAudioPlayer gère automatiquement la libération
-          setAudioSource(null);
-          
+      try {
+        const audioUri = await getAudioUri(session.soundAmbiance);
+        if (audioUri) {
+          // Arrêter l'ancien son si existant
+          if (sound) {
+            await sound.unloadAsync();
+          }
+
           // Attendre un peu pour que le player soit libéré
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, 200));
 
           // Mettre à jour la source audio (le hook useAudioPlayer se mettra à jour automatiquement)
-          const source = typeof audioUri === 'number' ? audioUri : audioUri;
-          setAudioSource(source);
-        } catch (err) {
-          // Erreur silencieuse en production
-          // Continuer même si l'audio ne peut pas être chargé
+          // Charger et jouer le nouveau son
+          const newSound = await loadAndPlayAudio(
+            typeof audioUri === 'number' ? audioUri : audioUri,
+            {
+              title: `Méditation - ${session.divineName?.transliteration || 'Bayt An Nur'}`,
+              artist: 'AYNA',
+              album: 'Bayt An Nur',
+              duration: finalDuration * 60,
+            }
+          );
+
+          setSound(newSound);
+          setIsAudioLoaded(true);
+
+          // Le useEffect se chargera de démarrer la lecture automatiquement
+        } else {
+          console.warn('[BaytAnNur] URI audio non trouvée pour:', session.soundAmbiance);
         }
+      } catch (err) {
+        console.error('[BaytAnNur] Erreur lors du chargement de l\'audio:', err);
+        // Continuer même si l'audio ne peut pas être chargé
       }
     }
   };
@@ -483,17 +755,16 @@ export function BaytAnNur() {
     const newPausedState = !isPaused;
     setIsPaused(newPausedState);
     isPausedRef.current = newPausedState;
-    if (audioPlayer && audioSource) {
+
+    if (sound && isAudioLoaded) {
       try {
         if (newPausedState) {
-          // Mettre en pause
-          audioPlayer.pause();
+          await pauseAudio(sound);
         } else {
-          // Reprendre la lecture
-          audioPlayer.play();
+          await resumeAudio(sound);
         }
       } catch (err) {
-        // Erreur silencieuse en production
+        console.error('[BaytAnNur] Erreur pause/resume:', err);
       }
     }
   };
@@ -502,16 +773,21 @@ export function BaytAnNur() {
     setShowStopModal(true);
   };
 
-  const confirmStop = () => {
+  const confirmStop = async () => {
     setShowStopModal(false);
     setSessionStarted(false);
     sessionStartedRef.current = false;
     setIsPaused(false);
     isPausedRef.current = false;
     setTimeRemaining(0);
-    // Libérer l'audio en mettant la source à null
-    // useAudioPlayer gère automatiquement la libération du player
-    setAudioSource(null);
+
+    // Arrêter et nettoyer l'audio
+    if (sound) {
+      await stopAudio(sound);
+      setSound(null);
+      setIsAudioLoaded(false);
+    }
+
     setCurrentScreen('completion');
   };
 
@@ -525,12 +801,66 @@ export function BaytAnNur() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleIntentionSubmit = (intention: string) => {
+  const handleIntentionSubmit = async (intention: string) => {
     setSession((prev) => ({ ...prev, intention }));
-    // Suggérer un nom divin basé sur l'intention
-    const suggestedName = suggestDivineName(intention);
-    setSession((prev) => ({ ...prev, suggestedDivineName: suggestedName }));
-    setCurrentScreen('divine-name');
+
+    // Si l'utilisateur est abonné, utiliser l'IA pour analyser l'intention
+    if (isSubscribed) {
+      setIsAnalyzingIntention(true);
+      try {
+        const result = await analyzeIntentionForDivineName(intention);
+        // Le service retourne maintenant un tableau de noms { names: [...] }
+        if (result.names && result.names.length > 0) {
+          // Extraire les noms Divins
+          const names = result.names.map(n => n.name);
+          // Stocker aussi les explications pour plus tard
+          // Ici on stocke juste les noms dans la session
+          setSession((prev) => ({
+            ...prev,
+            suggestedDivineNames: names,
+            // Garder le premier comme defaut pour compatibilité
+            suggestedDivineName: names[0],
+          }));
+          // Si on a des explications IA, on prend la première pour l'instant ou on gérera dans le screen
+          if (result.names[0].explanation) {
+            setIntentionExplanation(result.names[0].explanation);
+          }
+        } else if ('name' in result) {
+          // Fallback ancien format (ne devrait plus arriver si le service est à jour)
+          setSession((prev) => ({
+            ...prev,
+            suggestedDivineNames: [(result as any).name],
+            suggestedDivineName: (result as any).name,
+          }));
+          setIntentionExplanation((result as any).explanation);
+        }
+
+        setCurrentScreen('divine-name');
+      } catch (error) {
+        console.error('[BaytAnNur] Erreur lors de l\'analyse IA:', error);
+        // Fallback vers la méthode locale
+        const suggestedNames = suggestDivineNames(intention, 3);
+        setSession((prev) => ({
+          ...prev,
+          suggestedDivineNames: suggestedNames,
+          suggestedDivineName: suggestedNames[0]
+        }));
+        setIntentionExplanation('');
+        setCurrentScreen('divine-name');
+      } finally {
+        setIsAnalyzingIntention(false);
+      }
+    } else {
+      // Utiliser la méthode locale pour les non-abonnés - Récupérer 3 noms
+      const suggestedNames = suggestDivineNames(intention, 3);
+      setSession((prev) => ({
+        ...prev,
+        suggestedDivineNames: suggestedNames,
+        suggestedDivineName: suggestedNames[0]
+      }));
+      setIntentionExplanation('');
+      setCurrentScreen('divine-name');
+    }
   };
 
   const handleDivineNameConfirm = (name: DivineName) => {
@@ -557,26 +887,30 @@ export function BaytAnNur() {
   };
 
   const handleDurationSelect = (duration: number) => {
-    setSession((prev) => ({ ...prev, duration }));
+    // Pour le khalwa Ya Allah, forcer la durée à 5 minutes
+    const finalDuration = isYaAllahKhalwa ? 5 : duration;
+    setSession((prev) => ({ ...prev, duration: finalDuration as 5 | 10 | 15, breathingType: 'libre' }));
     // Si on vient d'un défi, passer directement à la préparation
     if (fromChallenge && session?.divineName) {
-      const finalAmbiance = session?.soundAmbiance || 'silence';
+      // Utiliser l'ambiance de la session ou celle passée depuis Challenge40Days
+      const finalAmbiance = session?.soundAmbiance || selectedAmbiance || 'silence';
       setSession((prev) => ({
         ...prev,
-        duration,
+        duration: finalDuration as 5 | 10 | 15,
         soundAmbiance: finalAmbiance,
-        breathingType: prev.breathingType || 'libre',
-        guided: prev.guided ?? false,
+        breathingType: 'libre',
+        guided: prev.guided ?? true, // Le khalwa Ya Allah est toujours guidé
       }));
+      // Mettre à jour le thème d'ambiance aussi
+      if (finalAmbiance !== 'silence') {
+        setSelectedAmbianceForTheme(finalAmbiance);
+      }
+      setTimeRemaining(finalDuration * 60); // Initialiser le timer en secondes
       setCurrentScreen('preparation');
     } else {
-      setCurrentScreen('breathing');
+      // Sauter l'écran de respiration, aller directement à guidance
+      setCurrentScreen('guidance');
     }
-  };
-
-  const handleBreathingSelect = (breathing: BreathingType) => {
-    setSession((prev) => ({ ...prev, breathingType: breathing }));
-    setCurrentScreen('guidance');
   };
 
   const handleGuidanceSelect = (guided: boolean) => {
@@ -599,6 +933,8 @@ export function BaytAnNur() {
             onNext={handleIntentionSubmit}
             initialIntention={session.intention || ''}
             ambianceTheme={currentAmbianceTheme}
+            isAnalyzing={isAnalyzingIntention}
+            isSubscribed={isSubscribed}
           />
         );
       case 'divine-name':
@@ -608,13 +944,11 @@ export function BaytAnNur() {
         }
         return (
           <DivineNameScreen
-            suggestedName={session.suggestedDivineName || getRandomDivineName()}
+            suggestedNames={session.suggestedDivineNames || (session.suggestedDivineName ? [session.suggestedDivineName] : [])}
             onConfirm={handleDivineNameConfirm}
-            onRequestAnother={() => {
-              const newName = getRandomDivineName();
-              setSession((prev) => ({ ...prev, suggestedDivineName: newName }));
-            }}
             ambianceTheme={currentAmbianceTheme}
+            explanation={intentionExplanation}
+            isFromAI={isSubscribed && !!intentionExplanation}
           />
         );
       case 'sound':
@@ -634,16 +968,14 @@ export function BaytAnNur() {
             skipToSession={fromChallenge && !!session.divineName}
             divineName={session.divineName}
             ambianceTheme={currentAmbianceTheme}
+            isYaAllahKhalwa={isYaAllahKhalwa}
           />
         );
       case 'breathing':
-        return (
-          <BreathingScreen
-            selectedBreathing={session.breathingType}
-            onSelect={handleBreathingSelect}
-            ambianceTheme={currentAmbianceTheme}
-          />
-        );
+        // L'écran de respiration est supprimé - on utilise toujours le mode 'libre'
+        // On redirige automatiquement vers guidance
+        setCurrentScreen('guidance');
+        return null;
       case 'guidance':
         return (
           <GuidanceScreen
@@ -670,6 +1002,8 @@ export function BaytAnNur() {
             onStop={handleStop}
             breathingType={session.breathingType || 'libre'}
             guidanceMessage={currentMessage}
+            totalDuration={(session.duration || 10) * 60}
+            isYaAllahKhalwa={isYaAllahKhalwa}
           />
         );
       case 'completion':
@@ -708,7 +1042,7 @@ export function BaytAnNur() {
         {(currentScreen as Screen) !== 'session' && (
           <KhalwaToast message={currentMessage} onClose={closeMessage} />
         )}
-        
+
         {/* Modal personnalisé pour arrêter la session - doit être rendu même en session */}
         <Modal
           visible={showStopModal}
@@ -717,12 +1051,12 @@ export function BaytAnNur() {
           onRequestClose={cancelStop}
           statusBarTranslucent={true}
         >
-          <Pressable 
+          <Pressable
             style={styles.modalOverlay}
             onPress={cancelStop}
             activeOpacity={1}
           >
-            <Pressable 
+            <Pressable
               activeOpacity={1}
               onPress={(e) => e.stopPropagation()}
             >
@@ -797,6 +1131,208 @@ export function BaytAnNur() {
 
   const gradientColors = getGradientColors(currentAmbianceTheme.backgroundGradient);
 
+  // Page de présentation complète (avant le module)
+  if (showIntroductionPage) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <LinearGradient
+          colors={['#0A0F2C', '#1E1E2F']}
+          style={StyleSheet.absoluteFill}
+        />
+        <GalaxyBackground starCount={80} minSize={1} maxSize={2} />
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 100 }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={{ paddingHorizontal: 24, paddingTop: 20, paddingBottom: 32 }}>
+            {/* Header avec bouton retour */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 24 }}>
+              <Pressable onPress={() => navigation.goBack()} style={{ padding: 8 }}>
+                <ArrowLeft size={24} color={theme.colors.text} />
+              </Pressable>
+              <View style={{ flex: 1 }} />
+            </View>
+
+            {/* Icône centrale */}
+            <Animated.View
+              entering={FadeIn.duration(600).delay(100)}
+              style={{ alignItems: 'center', marginBottom: 32 }}
+            >
+              <View style={{
+                width: 80,
+                height: 80,
+                borderRadius: 40,
+                backgroundColor: '#8B5CF6' + '20',
+                borderWidth: 2,
+                borderColor: '#8B5CF6' + '40',
+                justifyContent: 'center',
+                alignItems: 'center',
+                marginBottom: 16,
+              }}>
+                <Sparkles size={40} color="#8B5CF6" />
+              </View>
+
+              <Text style={{
+                fontSize: 28,
+                fontWeight: '700',
+                color: '#8B5CF6',
+                textAlign: 'center',
+                marginBottom: 4,
+              }}>
+                🕊️ Bayt Nûr
+              </Text>
+              <Text style={{
+                fontSize: 18,
+                fontWeight: '500',
+                color: theme.colors.textSecondary,
+                textAlign: 'center',
+              }}>
+                Le refuge intérieur
+              </Text>
+            </Animated.View>
+
+            {/* Contenu de présentation */}
+            <Animated.View
+              entering={FadeIn.duration(600).delay(200)}
+              style={{
+                backgroundColor: theme.colors.backgroundSecondary,
+                borderRadius: 20,
+                padding: 24,
+                borderWidth: 1,
+                borderColor: 'rgba(255, 255, 255, 0.08)',
+              }}
+            >
+              {/* Section 1: Introduction */}
+              <Text style={{
+                fontSize: 16,
+                lineHeight: 26,
+                color: theme.colors.text,
+                marginBottom: 24,
+              }}>
+                Bayt Nûr est un lieu de retrait intérieur.{'\n'}
+                Un espace où tu choisis de t'arrêter, de te poser et de te tourner vers Allah avec présence.
+              </Text>
+
+              {/* Section 2: Khalwa */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{ fontSize: 18, fontWeight: '600', color: '#8B5CF6', marginBottom: 8 }}>
+                  🌙 La Khalwa
+                </Text>
+                <Text style={{ fontSize: 14, lineHeight: 22, color: theme.colors.textSecondary }}>
+                  Ce n'est pas une technique. Ce n'est pas une performance.{'\n'}
+                  C'est un moment de sincérité avec ton Seigneur.
+                </Text>
+              </View>
+
+              {/* Section 3: Intention */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{ fontSize: 18, fontWeight: '600', color: '#8B5CF6', marginBottom: 8 }}>
+                  💫 L'intention
+                </Text>
+                <Text style={{ fontSize: 14, lineHeight: 22, color: theme.colors.textSecondary }}>
+                  Tu peux y entrer avec une intention : un besoin, une demande, une gratitude, un appel.{'\n'}
+                  Et en fonction de cette intention, un Nom Divin te sera suggéré pour t'accompagner.
+                </Text>
+              </View>
+
+              {/* Section 4: Ambiance */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{ fontSize: 18, fontWeight: '600', color: '#8B5CF6', marginBottom: 8 }}>
+                  🌿 L'ambiance
+                </Text>
+                <Text style={{ fontSize: 14, lineHeight: 22, color: theme.colors.textSecondary }}>
+                  Tu pourras choisir une ambiance sonore, un rythme de souffle et une durée.{'\n'}
+                  Ces éléments sont là pour t'aider à entrer en présence, pas pour structurer ta prière.
+                </Text>
+              </View>
+
+              {/* Section 5: Guidage */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{ fontSize: 18, fontWeight: '600', color: '#8B5CF6', marginBottom: 8 }}>
+                  🕯️ Le guidage
+                </Text>
+                <Text style={{ fontSize: 14, lineHeight: 22, color: theme.colors.textSecondary }}>
+                  Un guidage doux peut t'accompagner, ou tu peux choisir le silence complet.{'\n'}
+                  Le but n'est pas de suivre un script, mais de revenir à l'essentiel.
+                </Text>
+              </View>
+
+              {/* Section 6: Conclusion */}
+              <View style={{
+                backgroundColor: '#8B5CF6' + '15',
+                borderRadius: 16,
+                padding: 20,
+                borderWidth: 1,
+                borderColor: '#8B5CF6' + '30',
+              }}>
+                <Text style={{
+                  fontSize: 16,
+                  lineHeight: 24,
+                  color: theme.colors.text,
+                  textAlign: 'center',
+                  fontStyle: 'italic',
+                }}>
+                  🤍 Ici, rien ne t'es imposé.{'\n'}
+                  Tout est proposition.{'\n\n'}
+                  Entre comme tu es.{'\n'}
+                  Et laisse la lumière faire son œuvre.
+                </Text>
+              </View>
+            </Animated.View>
+          </View>
+        </ScrollView>
+
+        {/* Bouton Continuer fixé en bas */}
+        <View style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          paddingHorizontal: 24,
+          paddingBottom: 24,
+          paddingTop: 16,
+          backgroundColor: theme.colors.background + 'F0',
+        }}>
+          <Pressable
+            onPress={() => {
+              setShowModuleIntroduction(false);
+              setShowIntroductionPage(false);
+            }}
+            style={({ pressed }) => ({
+              opacity: pressed ? 0.9 : 1,
+              transform: [{ scale: pressed ? 0.98 : 1 }],
+            })}
+          >
+            <LinearGradient
+              colors={['#8B5CF6', '#8B5CF6DD']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{
+                paddingVertical: 16,
+                paddingHorizontal: 32,
+                borderRadius: 16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+            >
+              <Text style={{
+                fontSize: 18,
+                fontWeight: '700',
+                color: '#FFFFFF',
+              }}>
+                Entrer
+              </Text>
+              <ArrowRight size={20} color="#FFFFFF" />
+            </LinearGradient>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <View style={styles.wrapper}>
       <LinearGradient
@@ -826,6 +1362,20 @@ export function BaytAnNur() {
         <KhalwaToast message={currentMessage} onClose={closeMessage} />
       )}
 
+      {/* Modal d'introduction du module Bayt Nûr */}
+      <ModuleIntroductionModal
+        visible={showModuleIntroduction}
+        onClose={async () => {
+          await markModuleIntroductionAsSeen(MODULE_KEYS.BAYT_NUR);
+          setShowModuleIntroduction(false);
+        }}
+        title="🕊️ Bienvenue dans Bayt Nûr"
+        icon={<Sparkles size={36} color="#8B5CF6" />}
+        color="#8B5CF6"
+        content={MODULE_INTRODUCTIONS.BAYT_NUR}
+        buttonText="Commencer"
+      />
+
       {/* Modal personnalisé pour arrêter la session */}
       <Modal
         visible={showStopModal}
@@ -834,12 +1384,12 @@ export function BaytAnNur() {
         onRequestClose={cancelStop}
         statusBarTranslucent={true}
       >
-        <Pressable 
+        <Pressable
           style={styles.modalOverlay}
           onPress={cancelStop}
           activeOpacity={1}
         >
-          <Pressable 
+          <Pressable
             activeOpacity={1}
             onPress={(e) => e.stopPropagation()}
           >
@@ -955,10 +1505,14 @@ function IntentionScreen({
   onNext,
   initialIntention,
   ambianceTheme,
+  isAnalyzing,
+  isSubscribed,
 }: {
   onNext: (intention: string) => void;
   initialIntention: string;
   ambianceTheme: AmbianceTheme;
+  isAnalyzing?: boolean;
+  isSubscribed?: boolean;
 }) {
   const { user } = useUser();
   const theme = getTheme(user?.theme || 'default');
@@ -999,41 +1553,63 @@ function IntentionScreen({
         />
       </View>
 
-          <Pressable
+      <Pressable
         onPress={() => intention.trim() && onNext(intention.trim())}
-        disabled={!intention.trim()}
+        disabled={!intention.trim() || isAnalyzing}
         style={({ pressed }) => [
           styles.primaryButton,
-          { backgroundColor: ambianceTheme.buttonBackground, opacity: intention.trim() ? 1 : 0.5 },
+          { backgroundColor: ambianceTheme.buttonBackground, opacity: (intention.trim() && !isAnalyzing) ? 1 : 0.5 },
           pressed && styles.buttonPressed,
         ]}
       >
-        <Text style={[styles.primaryButtonText, { color: ambianceTheme.buttonTextColor }]}>Valider l'intention</Text>
-          </Pressable>
+        {isAnalyzing ? (
+          <>
+            <ActivityIndicator size="small" color={ambianceTheme.buttonTextColor} style={{ marginRight: 8 }} />
+            <Text style={[styles.primaryButtonText, { color: ambianceTheme.buttonTextColor }]}>
+              Analyse de ton intention en cours...
+            </Text>
+          </>
+        ) : (
+          <Text style={[styles.primaryButtonText, { color: ambianceTheme.buttonTextColor }]}>
+            {isSubscribed ? 'Analyser ✨' : 'Valider l\'intention'}
+          </Text>
+        )}
+      </Pressable>
     </Animated.View>
   );
 }
 
 function DivineNameScreen({
-  suggestedName,
+  suggestedNames,
   onConfirm,
-  onRequestAnother,
   ambianceTheme,
+  explanation,
+  isFromAI,
 }: {
-  suggestedName: DivineName;
+  suggestedNames: DivineName[];
   onConfirm: (name: DivineName) => void;
-  onRequestAnother: () => void;
   ambianceTheme: AmbianceTheme;
+  explanation?: string;
+  isFromAI?: boolean;
 }) {
   const { user } = useUser();
   const theme = getTheme(user?.theme || 'default');
   const opacity = useSharedValue(0);
   const translateX = useSharedValue(20);
 
+  // État local pour le nom sélectionné (par défaut le premier)
+  const [selectedName, setSelectedName] = useState<DivineName>(suggestedNames[0] || getRandomDivineName());
+
+  useEffect(() => {
+    if (suggestedNames.length > 0) {
+      setSelectedName(suggestedNames[0]);
+    }
+  }, [suggestedNames]);
+
   useEffect(() => {
     opacity.value = withTiming(1, { duration: 500 });
     translateX.value = withSpring(0, { damping: 20 });
-  }, [suggestedName]);
+  }, []);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
@@ -1043,7 +1619,6 @@ function DivineNameScreen({
   // Convertir le gradient CSS en couleurs pour LinearGradient
   const getGradientColors = (gradientString: string): [string, string, ...string[]] => {
     const colors = gradientString.match(/#[0-9A-Fa-f]{6}/g) || [ambianceTheme.primaryColor, ambianceTheme.accentColor];
-    // S'assurer qu'on a au moins 2 couleurs pour LinearGradient
     if (colors.length < 2) {
       return [ambianceTheme.primaryColor, ambianceTheme.accentColor];
     }
@@ -1055,48 +1630,94 @@ function DivineNameScreen({
   return (
     <Animated.View style={[styles.screenContainer, animatedStyle]}>
       <Text style={[styles.screenTitle, { color: ambianceTheme.textColor }]}>
-        Pour ce moment, je te propose de t'accompagner avec :
+        Pour accompagner ton intention, je te propose ces Noms :
       </Text>
 
-      <LinearGradient
-        colors={gradientColors}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.divineNameCard, { backgroundColor: ambianceTheme.cardBackground }]}
-      >
-        <View style={styles.divineNameRow}>
-          <Text style={[styles.divineNameArabic, { color: ambianceTheme.textColor }]}>{suggestedName.arabic}</Text>
-          <Text style={[styles.divineNameSeparator, { color: ambianceTheme.accentColor }]}>–</Text>
-          <Text style={[styles.divineNameTransliteration, { color: ambianceTheme.accentColor }]}>{suggestedName.transliteration}</Text>
-        </View>
-        <Text style={[styles.divineNameMeaning, { color: ambianceTheme.textSecondaryColor }]}>{suggestedName.meaning}</Text>
-      </LinearGradient>
+      <Text style={[styles.screenSubtitle, { color: ambianceTheme.textSecondaryColor, marginBottom: 16 }]}>
+        Choisis celui qui résonne le plus en toi
+      </Text>
 
-      <View style={styles.buttonGroup}>
+      <View style={{ gap: 12, marginBottom: 24 }}>
+        {suggestedNames.map((name, index) => {
+          const isSelected = selectedName.id === name.id;
+
+          return (
+            <Pressable
+              key={name.id}
+              onPress={() => setSelectedName(name)}
+              style={({ pressed }) => ({
+                opacity: pressed ? 0.9 : 1,
+                transform: [{ scale: pressed ? 0.98 : 1 }],
+              })}
+            >
+              <Animated.View
+                entering={FadeIn.delay(index * 100).springify()}
+                style={{
+                  borderRadius: 16,
+                  padding: 16,
+                  borderWidth: isSelected ? 2 : 1,
+                  borderColor: isSelected ? ambianceTheme.accentColor : 'rgba(255, 255, 255, 0.1)',
+                  backgroundColor: isSelected ? ambianceTheme.buttonBackground : ambianceTheme.cardBackground,
+                }}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <Text style={{
+                    fontSize: 18,
+                    fontWeight: '700',
+                    color: isSelected ? ambianceTheme.accentColor : ambianceTheme.textColor
+                  }}>
+                    {name.transliteration}
+                  </Text>
+                  <Text style={{
+                    fontSize: 20,
+                    fontFamily: 'System',
+                    color: isSelected ? ambianceTheme.accentColor : ambianceTheme.textSecondaryColor
+                  }}>
+                    {name.arabic}
+                  </Text>
+                </View>
+                <Text style={{
+                  fontSize: 14,
+                  color: ambianceTheme.textSecondaryColor,
+                  fontStyle: 'italic'
+                }}>
+                  {name.meaning}
+                </Text>
+              </Animated.View>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* Explication de l'IA (si disponible, pour le premier nom ou global) */}
+      {explanation && isFromAI && (
+        <View style={[styles.explanationCard, { backgroundColor: ambianceTheme.cardBackground, marginTop: 0, marginBottom: 24 }]}>
+          <View style={styles.explanationHeader}>
+            <StarAnimation size={18} />
+            <Text style={[styles.explanationTitle, { color: ambianceTheme.textColor }]}>
+              Conseil Spirituel
+            </Text>
+          </View>
+          <Text style={[styles.explanationText, { color: ambianceTheme.textSecondaryColor }]}>
+            {explanation}
+          </Text>
+        </View>
+      )}
+
+      <Animated.View entering={FadeIn} style={{ width: '100%' }}>
         <Pressable
-          onPress={() => onConfirm(suggestedName)}
+          onPress={() => onConfirm(selectedName)}
           style={({ pressed }) => [
             styles.primaryButton,
             { backgroundColor: ambianceTheme.buttonBackground },
             pressed && styles.buttonPressed,
           ]}
         >
-          <Text style={[styles.primaryButtonText, { color: ambianceTheme.buttonTextColor }]}>Je confirme ce Nom</Text>
-        </Pressable>
-
-              <Pressable
-          onPress={onRequestAnother}
-                style={({ pressed }) => [
-            styles.secondaryButton,
-            { backgroundColor: ambianceTheme.cardBackground, borderColor: ambianceTheme.cardBorderColor },
-            pressed && styles.buttonPressed,
-          ]}
-        >
-          <Text style={[styles.secondaryButtonText, { color: ambianceTheme.textColor }]}>
-            Propose-moi un autre Nom
+          <Text style={[styles.primaryButtonText, { color: ambianceTheme.buttonTextColor }]}>
+            Je choisis {selectedName.transliteration}
           </Text>
         </Pressable>
-      </View>
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -1114,7 +1735,7 @@ function SoundScreen({
 }) {
   const { user } = useUser();
   const theme = getTheme(user?.theme || 'default');
-  
+
   // Filtrer les ambiances selon le rôle utilisateur
   // L'ambiance "Neige (ambiance Faïna)" est réservée aux admins et utilisateurs spéciaux
   const availableAmbiances = soundAmbiances.filter((a) => {
@@ -1122,7 +1743,7 @@ function SoundScreen({
     if (a.id === 'neige-faina') {
       return user?.isAdmin === true || user?.isSpecial === true;
     }
-    
+
     // Toutes les autres ambiances (y compris silence) : pour tous
     return true;
   });
@@ -1204,16 +1825,26 @@ function DurationScreen({
   skipToSession = false,
   divineName,
   ambianceTheme,
+  isYaAllahKhalwa = false,
 }: {
   selectedDuration?: number;
   onSelect: (duration: number) => void;
   skipToSession?: boolean;
   divineName?: DivineName;
   ambianceTheme: AmbianceTheme;
+  isYaAllahKhalwa?: boolean;
 }) {
   const { user } = useUser();
   const theme = getTheme(user?.theme || 'default');
-  
+
+  // Pour le khalwa Ya Allah, n'afficher que 5 minutes
+  const durationsToShow = React.useMemo(() => {
+    if (isYaAllahKhalwa) {
+      return [5];
+    }
+    return availableDurations;
+  }, [isYaAllahKhalwa]);
+
   // Convertir le gradient CSS en couleurs pour LinearGradient
   const getGradientColors = (gradientString: string): [string, string, ...string[]] => {
     const colors = gradientString.match(/#[0-9A-Fa-f]{6}/g) || [ambianceTheme.primaryColor, ambianceTheme.accentColor];
@@ -1235,6 +1866,13 @@ function DurationScreen({
     opacity: opacity.value,
     transform: [{ translateX: translateX.value }],
   }));
+
+  // Si c'est le khalwa Ya Allah, sélectionner automatiquement 5 minutes
+  useEffect(() => {
+    if (isYaAllahKhalwa && !selectedDuration) {
+      onSelect(5);
+    }
+  }, [isYaAllahKhalwa, selectedDuration, onSelect]);
 
   return (
     <Animated.View style={[styles.screenContainer, animatedStyle]}>
@@ -1266,14 +1904,14 @@ function DurationScreen({
       </Text>
 
       <View style={styles.durationGrid}>
-        {availableDurations.map((duration) => (
+        {durationsToShow.map((duration) => (
           <Pressable
             key={duration}
             onPress={() => onSelect(duration)}
             style={({ pressed }) => [
               styles.durationButton,
-                  {
-                    backgroundColor:
+              {
+                backgroundColor:
                   selectedDuration === duration
                     ? ambianceTheme.buttonBackground
                     : ambianceTheme.cardBackground,
@@ -1281,24 +1919,24 @@ function DurationScreen({
                   selectedDuration === duration
                     ? ambianceTheme.cardBorderColor
                     : ambianceTheme.cardBorderColor,
-                  },
-                  pressed && styles.buttonPressed,
-                ]}
-              >
-                <Text
-                  style={[
+              },
+              pressed && styles.buttonPressed,
+            ]}
+          >
+            <Text
+              style={[
                 styles.durationButtonText,
-                    {
-                      color:
+                {
+                  color:
                     selectedDuration === duration ? ambianceTheme.buttonTextColor : ambianceTheme.textColor,
-                    },
-                  ]}
-                >
+                },
+              ]}
+            >
               {duration} min
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+            </Text>
+          </Pressable>
+        ))}
+      </View>
 
       {selectedDuration && (
         <Animated.View entering={FadeIn} exiting={FadeOut}>
@@ -1393,16 +2031,16 @@ function BreathingScreen({
               <Text style={styles.breathingOptionIcon}>{option.icon}</Text>
               <View style={styles.breathingOptionText}>
                 <Text
-            style={[
+                  style={[
                     styles.breathingOptionTitle,
-              {
+                    {
                       color:
                         selectedBreathing === option.type ? ambianceTheme.buttonTextColor : ambianceTheme.textColor,
-              },
-            ]}
-          >
+                    },
+                  ]}
+                >
                   {option.title}
-            </Text>
+                </Text>
                 <Text
                   style={[
                     styles.breathingOptionDescription,
@@ -1429,9 +2067,9 @@ function BreathingScreen({
 
       {selectedBreathing && (
         <Animated.View entering={FadeIn} exiting={FadeOut}>
-            <Pressable
+          <Pressable
             onPress={() => onSelect(selectedBreathing)}
-              style={({ pressed }) => [
+            style={({ pressed }) => [
               styles.primaryButton,
               { backgroundColor: ambianceTheme.buttonBackground },
               pressed && styles.buttonPressed,
@@ -1483,10 +2121,10 @@ function GuidanceScreen({
             {
               backgroundColor: guided ? ambianceTheme.buttonBackground : ambianceTheme.cardBackground,
               borderColor: guided ? ambianceTheme.cardBorderColor : ambianceTheme.cardBorderColor,
-                },
-                pressed && styles.buttonPressed,
-              ]}
-            >
+            },
+            pressed && styles.buttonPressed,
+          ]}
+        >
           <View style={styles.guidanceOptionContent}>
             <Text style={styles.guidanceOptionIcon}>✅</Text>
             <View style={styles.guidanceOptionText}>
@@ -1497,7 +2135,7 @@ function GuidanceScreen({
                 ]}
               >
                 Oui, je veux un guidage d'Ayna.
-                  </Text>
+              </Text>
               <Text
                 style={[
                   styles.guidanceOptionDescription,
@@ -1509,7 +2147,7 @@ function GuidanceScreen({
                 ]}
               >
                 Ayna parle au début + rappels toutes les X minutes.
-                  </Text>
+              </Text>
             </View>
             {guided && (
               <View style={styles.guidanceOptionCheck}>
@@ -1534,7 +2172,7 @@ function GuidanceScreen({
             <Text style={styles.guidanceOptionIcon}>⭕</Text>
             <View style={styles.guidanceOptionText}>
               <Text
-            style={[
+                style={[
                   styles.guidanceOptionTitle,
                   { color: !guided ? ambianceTheme.buttonTextColor : ambianceTheme.textColor },
                 ]}
@@ -1548,9 +2186,9 @@ function GuidanceScreen({
                     color: !guided
                       ? ambianceTheme.textSecondaryColor
                       : ambianceTheme.textSecondaryColor,
-              },
-            ]}
-          >
+                  },
+                ]}
+              >
                 Seulement son d'ambiance + timer discret.
               </Text>
             </View>
@@ -1677,6 +2315,8 @@ function SessionScreen({
   onStop,
   breathingType,
   guidanceMessage,
+  totalDuration,
+  isYaAllahKhalwa = false,
 }: {
   session: KhalwaSession;
   timeRemaining: number;
@@ -1685,6 +2325,8 @@ function SessionScreen({
   onStop: () => void;
   breathingType: BreathingType;
   guidanceMessage: string | null;
+  totalDuration: number;
+  isYaAllahKhalwa?: boolean;
 }) {
   const { user } = useUser();
   const theme = getTheme(user?.theme || 'default');
@@ -1889,7 +2531,7 @@ function SessionScreen({
           const topPercent = 10 + (index * 20) % 70;
           const leftPx = (width * leftPercent) / 100;
           const topPx = (height * topPercent) / 100;
-          
+
           const iconStyle = useAnimatedStyle(() => ({
             transform: [
               { translateY: anim.translateY.value },
@@ -1914,7 +2556,7 @@ function SessionScreen({
             </Animated.View>
           );
         })}
-          </View>
+      </View>
 
       <SafeAreaView style={styles.sessionContainer} edges={['top', 'bottom']}>
         <View style={styles.sessionContent}>
@@ -1922,7 +2564,7 @@ function SessionScreen({
           {completeDivineName && (
             <View style={styles.divineNameSessionContainer}>
               <Text
-            style={[
+                style={[
                   styles.divineNameSessionLabel,
                   { color: ambianceTheme.textSecondaryColor },
                 ]}
@@ -1968,8 +2610,25 @@ function SessionScreen({
             </Text>
           </View>
 
-          {/* Visualisation selon l'ambiance et le nom divin */}
-          {session?.divineName?.visualizations && session?.soundAmbiance && (
+          {/* Textes de méditation guidée */}
+          <View style={{ flex: 1, width: '100%', maxWidth: 600 }}>
+            <MeditationGuide
+              duration={(session.duration || 10) as 5 | 10 | 15}
+              ambianceId={session.soundAmbiance || 'silence'}
+              timeRemaining={timeRemaining}
+              totalDuration={totalDuration}
+              isGuided={session.guided ?? true}
+              isPaused={isPaused}
+              textColor={ambianceTheme.textColor}
+              accentColor={ambianceTheme.accentColor}
+              cardBackground={ambianceTheme.cardBackground}
+              cardBorderColor={ambianceTheme.cardBorderColor}
+              isYaAllahKhalwa={isYaAllahKhalwa}
+            />
+          </View>
+
+          {/* Visualisation selon l'ambiance et le nom divin - Masquer pour le khalwa Ya Allah */}
+          {!isYaAllahKhalwa && session?.divineName?.visualizations && session?.soundAmbiance && (
             (() => {
               const visualization = session.divineName.visualizations[session.soundAmbiance];
               if (visualization) {
@@ -2023,21 +2682,21 @@ function SessionScreen({
                   {breathingPhase === 'inhale'
                     ? '🌬️'
                     : breathingPhase === 'exhale'
-                    ? '💨'
-                    : '⏸️'}
+                      ? '💨'
+                      : '⏸️'}
                 </Text>
               </Animated.View>
               {getBreathingText() && (
-              <Text
+                <Text
                   style={[
                     styles.breathingText,
                     { color: ambianceTheme.textSecondaryColor },
                   ]}
                 >
                   {getBreathingText()}
-              </Text>
+                </Text>
               )}
-          </View>
+            </View>
           )}
         </View>
 
@@ -2342,6 +3001,29 @@ const styles = StyleSheet.create({
     fontFamily: 'System',
     textAlign: 'center',
   },
+  explanationCard: {
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+  },
+  explanationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  explanationTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: 'System',
+  },
+  explanationText: {
+    fontSize: 15,
+    lineHeight: 22,
+    fontFamily: 'System',
+  },
   soundHeader: {
     alignItems: 'center',
     marginBottom: 32,
@@ -2557,6 +3239,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 20,
+    gap: 16,
   },
   decorativeIcon: {
     position: 'absolute',

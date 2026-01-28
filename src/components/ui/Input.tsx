@@ -52,12 +52,12 @@ export function Input({
         <TextInput
           style={[
             styles.input,
-            leftIcon ? styles.inputWithLeftIcon : undefined,
-            rightIcon ? styles.inputWithRightIcon : undefined,
-            error ? styles.inputError : undefined,
+            leftIcon && styles.inputWithLeftIcon,
+            rightIcon && styles.inputWithRightIcon,
+            error && styles.inputError,
             inputStyle,
             style,
-          ].filter(Boolean)}
+          ]}
           placeholderTextColor="rgba(255, 255, 255, 0.5)"
           {...textInputProps}
         />

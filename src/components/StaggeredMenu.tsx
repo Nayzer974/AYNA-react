@@ -199,6 +199,7 @@ export function StaggeredMenu({
       <AnimatedPressable
         style={[styles.overlay, overlayStyle]}
         onPress={onClose}
+        activeOpacity={1}
       />
 
       {/* Menu */}

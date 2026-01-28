@@ -17,8 +17,8 @@ import { SPRING_CONFIGS } from '@/utils/animations';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const TAB_BAR_WIDTH = SCREEN_WIDTH - 32; // Marges latérales de 16px
-const TAB_COUNT = 4;
-const TAB_WIDTH = TAB_BAR_WIDTH / TAB_COUNT; // 4 tabs
+const TAB_COUNT = 5;
+const TAB_WIDTH = TAB_BAR_WIDTH / TAB_COUNT; // 5 tabs
 
 export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { user } = useUser();
@@ -27,6 +27,8 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
 
   // Refs pour les icônes ripple
   const iconRefs = useRef<Map<string, React.RefObject<RippleTabIconRef>>>(new Map());
+  // Debouncing pour éviter les double-clics
+  const lastPressTime = useRef(0);
   
   // Positions réelles des tabs (mesurées avec onLayout)
   const [tabPositions, setTabPositions] = useState<number[]>([]);
@@ -56,7 +58,11 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
       // tabCenterX est le centre du tab, on soustrait la moitié de la largeur de la bulle
       const targetX = tabCenterX - bubbleWidth / 2;
       
-      bubbleTranslateX.value = withSpring(targetX, SPRING_CONFIGS.GENTLE);
+      bubbleTranslateX.value = withSpring(targetX, {
+        damping: 25,
+        stiffness: 120,
+        mass: 0.8,
+      });
     }
   }, [activeIndex, tabPositions, measuredTabWidth, bubbleTranslateX]);
 
@@ -135,8 +141,15 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
             const isFocused = state.index === index;
 
             const onPress = () => {
-              // Haptic feedback
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              const now = Date.now();
+              // Debouncing : ignorer les clics trop rapides (< 200ms)
+              if (now - lastPressTime.current < 200) {
+                return;
+              }
+              lastPressTime.current = now;
+              
+              // Haptic feedback (désactivé pour améliorer les performances)
+              // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               
               const event = navigation.emit({
                 type: 'tabPress',
@@ -172,7 +185,7 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
 
             const enhancedOnPress = () => {
               // Déclencher l'effet ripple
-              if (iconRef && iconRef.current) {
+              if (iconRef?.current) {
                 iconRef.current.triggerRipple();
               }
               onPress();
@@ -184,7 +197,7 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
                 accessibilityRole="button"
                 accessibilityState={isFocused ? { selected: true } : {}}
                 accessibilityLabel={options.tabBarAccessibilityLabel}
-                testID={(options as any).tabBarTestID}
+                testID={options.tabBarTestID}
                 onPress={enhancedOnPress}
                 onLongPress={onLongPress}
                 style={styles.tab}

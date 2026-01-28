@@ -41,8 +41,10 @@ export function ConfirmationModal({
       <Pressable 
         style={styles.modalOverlay}
         onPress={onCancel}
+        activeOpacity={1}
       >
         <Pressable 
+          activeOpacity={1}
           onPress={(e) => e.stopPropagation()}
         >
           <Animated.View
