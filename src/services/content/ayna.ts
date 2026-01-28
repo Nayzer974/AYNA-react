@@ -28,7 +28,15 @@ export interface AynaResponse {
  * GÃ©nÃ¨re le prompt systÃ¨me AYNA avec la langue de l'utilisateur
  */
 function getSystemPromptWithLanguage(language: string = 'fr'): string {
-  return '';
+  const languageInstructions: Record<string, string> = {
+    fr: 'IMPORTANT : Tu dois TOUJOURS rÃ©pondre en franÃ§ais. Toutes tes rÃ©ponses doivent Ãªtre en franÃ§ais, sans exception.',
+    ar: 'Ù…Ù‡Ù… Ø¬Ø¯Ø§Ù‹: ÙŠØ¬Ø¨ Ø£Ù† ØªØ±Ø¯ Ø¯Ø§Ø¦Ù…Ø§Ù‹ Ø¨Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©. Ø¬Ù…ÙŠØ¹ Ø±Ø¯ÙˆØ¯Ùƒ ÙŠØ¬Ø¨ Ø£Ù† ØªÙƒÙˆÙ† Ø¨Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©ØŒ Ø¨Ø¯ÙˆÙ† Ø§Ø³ØªØ«Ù†Ø§Ø¡.',
+    en: 'IMPORTANT: You must ALWAYS respond in English. All your responses must be in English, without exception.',
+  };
+
+  const languageInstruction = languageInstructions[language] || languageInstructions.fr;
+
+  return `${AYNA_SYSTEM_PROMPT}\n\n---------------------------------------------------------------------\n\nLANGUE DE RÃ‰PONSE (OBLIGATOIRE)\n\n${languageInstruction}\n\nTu dÃ©tectes automatiquement la langue de l'utilisateur et tu rÃ©ponds dans la mÃªme langue. Si l'utilisateur Ã©crit en franÃ§ais, tu rÃ©ponds en franÃ§ais. Si l'utilisateur Ã©crit en arabe, tu rÃ©ponds en arabe. Si l'utilisateur Ã©crit en anglais, tu rÃ©ponds en anglais.\n\nMais par dÃ©faut, si aucune instruction spÃ©cifique n'est donnÃ©e, tu rÃ©ponds dans la langue configurÃ©e ci-dessus.`;
 }
 
 /**
