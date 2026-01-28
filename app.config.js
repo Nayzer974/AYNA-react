@@ -115,7 +115,8 @@ export default {
       "expo-sensors",
       "expo-audio",
       "expo-asset",
-      "expo-image-picker"
+      "expo-image-picker",
+      "./src/plugins/withNativeWidgets"
       // Sentry temporarily disabled for production build
       // Re-enable after configuring auth token
       // [
